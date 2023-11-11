@@ -81,23 +81,22 @@ class SHMoofDataset(Dataset):
 
 
 class SHMoofModel(nn.Module):
-    def __init__(self, num_kmers, num_positions):
+    def __init__(self, dataset):
         super(SHMoofModel, self).__init__()
-        # These rates use the Embedding layer, which simply attaches one (in
-        # this case) parameter to each index.
-        self.kmer_rates = nn.Embedding(num_kmers, 1)
-        self.site_rates = nn.Embedding(num_positions, 1)
+        # Extract counts from the dataset
+        self.kmer_count = len(dataset.kmer_to_index)
+        self.site_count = dataset.max_length
+
+        # Initialize embedding layers
+        self.kmer_rates = nn.Embedding(self.kmer_count, 1)
+        self.site_rates = nn.Embedding(self.site_count, 1)
 
     def forward(self, encoded_parent):
-        kmer_rates = self.kmer_rates(encoded_parent)
-
+        # Get kmer rates and site rates, assuming both are 1D tensors
+        kmer_rates = self.kmer_rates(encoded_parent).squeeze()
         positions = torch.arange(encoded_parent.size(0), device=encoded_parent.device)
-        site_rates = self.site_rates(positions)
+        site_rates = self.site_rates(positions).squeeze()
 
         rates = kmer_rates + site_rates
 
-        # Flatten to get a vector of rates
-        rates = rates.view(-1)
-
         return rates
-

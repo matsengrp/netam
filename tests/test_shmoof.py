@@ -1,13 +1,21 @@
 import pandas as pd
+import pytest
 import torch
 
-from netam.shmoof import SHMoofDataset
+from netam.shmoof import SHMoofDataset, SHMoofModel 
 
-def test_make_dataset():
+@pytest.fixture
+def tiny_dataset():
     df = pd.DataFrame({"parent": ["ATGTA", "GTAC"], "child": ["ACGTA", "ATACG"]})
-    dataset = SHMoofDataset(df, max_length=6, kmer_length=3)
-    parent_seq, mask, mutation_vector = dataset[0]
+    return SHMoofDataset(df, max_length=6, kmer_length=3)
+
+def test_make_dataset(tiny_dataset):
+    parent_seq, mask, mutation_vector = tiny_dataset[0]
     assert (mask == torch.tensor([1, 1, 1, 1, 1, 0], dtype=torch.bool)).all()
-    # We have one N of padding at the start, so the first kmer is NAT
-    assert parent_seq[0].item() == dataset.kmer_to_index["NAT"]
+    # First kmer is NAT due to padding
+    assert parent_seq[0].item() == tiny_dataset.kmer_to_index["NAT"]
     assert (mutation_vector == torch.tensor([0, 1, 0, 0, 0, 0], dtype=torch.bool)).all()
+
+def test_make_model(tiny_dataset):
+    model = SHMoofModel(tiny_dataset)
+    assert tiny_dataset.max_length == model.site_count
