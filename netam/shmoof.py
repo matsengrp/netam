@@ -43,11 +43,11 @@ class SHMoofDataset(Dataset):
 
         for _, row in dataframe.iterrows():
             encoded_parent, mask = self.encode_sequence(row["parent"])
-            mutation_vector = self.create_mutation_vector(row["parent"], row["child"])
+            mutation_indicator = self.create_mutation_indicator(row["parent"], row["child"])
 
             encoded_parents.append(encoded_parent)
             masks.append(mask)
-            mutation_vectors.append(mutation_vector)
+            mutation_vectors.append(mutation_indicator)
 
         return (
             torch.stack(encoded_parents),
@@ -71,13 +71,13 @@ class SHMoofDataset(Dataset):
         return torch.tensor(kmer_indices, dtype=torch.int32), torch.tensor(mask, dtype=torch.bool)
 
 
-    def create_mutation_vector(self, parent, child):
-        mutation_vector = [
+    def create_mutation_indicator(self, parent, child):
+        mutation_indicator = [
             1 if parent[i] != child[i] and i < self.max_length else 0
             for i in range(len(parent))
         ]
-        mutation_vector += [0] * (self.max_length - len(mutation_vector))
-        return torch.tensor(mutation_vector, dtype=torch.bool)
+        mutation_indicator += [0] * (self.max_length - len(mutation_indicator))
+        return torch.tensor(mutation_indicator, dtype=torch.bool)
 
 
 class SHMoofModel(nn.Module):
