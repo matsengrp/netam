@@ -56,10 +56,12 @@ class SHMoofDataset(Dataset):
         )
 
     def encode_sequence(self, sequence):
-        # Pad sequence with overhang_length 'N's at the start and end
+        # Pad sequence with overhang_length 'N's at the start and end so that we
+        # can assign parameters to every site in the sequence.
         padded_sequence = (
             "N" * self.overhang_length + sequence + "N" * self.overhang_length
         )
+        # Truncate according to max_length; we'll handle the overhangs later.
         padded_sequence = padded_sequence[: self.max_length + 2 * self.overhang_length]
 
         kmer_indices = [
@@ -74,6 +76,7 @@ class SHMoofDataset(Dataset):
         )
 
     def create_mutation_indicator(self, parent, child):
+        assert len(parent) == len(child), f"{parent} and {child} are not the same length"
         mutation_indicator = [
             1 if parent[i] != child[i] else 0
             for i in range(min(len(parent), self.max_length))
@@ -101,7 +104,8 @@ class SHMoofModel(nn.Module):
         positions = torch.arange(encoded_parent.size(0), device=encoded_parent.device)
         log_site_rates = self.log_site_rates(positions).squeeze()
 
-        rates = torch.exp(log_kmer_rates) + torch.exp(log_site_rates)
+        # Rates are the product of kmer and site rates.
+        rates = torch.exp(log_kmer_rates + log_site_rates)
 
         return rates
 
@@ -141,7 +145,6 @@ class SHMoofBurrito:
 
             # Average loss for this epoch
             epoch_loss = running_loss / len(self.train_dataset)
-            print(f"Epoch [{epoch+1}/{epochs}], Loss: {epoch_loss:.4f}")
 
             # Validation phase
             self.model.eval()
@@ -153,7 +156,9 @@ class SHMoofBurrito:
                     )
                     validation_loss += loss.item()
             validation_loss /= len(self.val_dataset)
-            print(f"Validation Loss: {validation_loss:.4f}")
+            print(
+                f"Epoch [{epoch+1}/{epochs}]\t Loss: {epoch_loss:.8f}\t Val Loss: {validation_loss:.8f}"
+            )
 
     def _calculate_loss(self, encoded_parent, mask, mutation_indicator):
         rates = self.model(encoded_parent)
@@ -172,6 +177,9 @@ class SHMoofBurrito:
                 "Mutability": kmer_mutabilities,
             }
         )
+        motif_mutabilities = motif_mutabilities[
+            ~motif_mutabilities["Motif"].str.contains("N")
+        ]
         motif_mutabilities.to_csv(
             f"{out_dir}/motif_mutabilities.tsv", sep="\t", index=False
         )
