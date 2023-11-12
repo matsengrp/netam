@@ -8,6 +8,61 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
 
+import itertools
+
+
+def generate_kmers_with_padding(kmer_length, max_padding_length):
+    """
+    Generate all possible k-mers of a specified length composed of 'A', 'C', 'G', 'T',
+    with allowances for up to `max_padding_length` 'N's at either the beginning or end
+    of the k-mer.
+
+    Parameters
+    ----------
+    kmer_length : int
+        The length of the k-mers to be generated.
+    max_padding_length : int
+        The maximum number of 'N' nucleotides allowed as padding at the beginning or
+        end of the k-mer.
+
+    Returns
+    -------
+    list of str
+        A sorted list of unique k-mers. Each k-mer is a string of length `kmer_length`,
+        composed of 'A', 'C', 'G', 'T', and up to `max_padding_length` 'N's at either
+        the beginning or end of the k-mer. The list is sorted alphabetically.
+
+    Examples
+    --------
+    >>> generate_kmers_with_padding(3, 1)
+    ['AAN', 'ACN', 'AGN', 'ANN', 'ATN', 'CAA', 'CAC', 'CAG', 'CAN', 'CAT', 'CCA', ...]
+
+    >>> generate_kmers_with_padding(3, 2)
+    ['AAN', 'ACN', 'AGN', 'ANN', 'ATN', 'CAA', 'CAC', 'CAG', 'CAN', 'CAT', 'CCA', ...]
+
+    Notes
+    -----
+    The function generates k-mers that include all combinations of 'A', 'C', 'G', 'T',
+    and also considers k-mers with up to `max_padding_length` 'N's at the start or end.
+    K-mers with 'N's in positions other than the start or end, or with more than
+    `max_padding_length` 'N's, are not included.
+    """
+    bases = ["A", "C", "G", "T"]
+    all_kmers = set()
+
+    # Add all combinations of ACGT
+    all_kmers.update("".join(p) for p in itertools.product(bases, repeat=kmer_length))
+
+    # Add combinations with up to max_padding_length Ns at the beginning or end
+    for n in range(1, max_padding_length + 1):
+        for kmer in itertools.product(bases, repeat=kmer_length - n):
+            kmer_str = "".join(kmer)
+            all_kmers.add("N" * n + kmer_str)
+            all_kmers.add(kmer_str + "N" * n)
+
+    return sorted(all_kmers)
+
+
 class SHMoofDataset(Dataset):
     def __init__(self, dataframe, kmer_length, max_length):
         self.max_length = max_length
@@ -15,9 +70,7 @@ class SHMoofDataset(Dataset):
         self.overhang_length = (kmer_length - 1) // 2
         assert self.overhang_length > 0 and kmer_length % 2 == 1
 
-        self.all_kmers = [
-            "".join(p) for p in itertools.product("ACGTN", repeat=kmer_length)
-        ]
+        self.all_kmers = generate_kmers_with_padding(kmer_length, self.overhang_length)
         assert len(self.all_kmers) < torch.iinfo(torch.int32).max
 
         self.kmer_to_index = {kmer: idx for idx, kmer in enumerate(self.all_kmers)}
@@ -76,7 +129,9 @@ class SHMoofDataset(Dataset):
         )
 
     def create_mutation_indicator(self, parent, child):
-        assert len(parent) == len(child), f"{parent} and {child} are not the same length"
+        assert len(parent) == len(
+            child
+        ), f"{parent} and {child} are not the same length"
         mutation_indicator = [
             1 if parent[i] != child[i] else 0
             for i in range(min(len(parent), self.max_length))
