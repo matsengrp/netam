@@ -5,16 +5,11 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset
-
-
-import torch
-import itertools
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 
 class SHMoofDataset(Dataset):
-    def __init__(self, dataframe, max_length, kmer_length=5):
+    def __init__(self, dataframe, kmer_length, max_length):
         self.max_length = max_length
         self.kmer_length = kmer_length
         self.overhang_length = (kmer_length - 1) // 2
@@ -32,6 +27,9 @@ class SHMoofDataset(Dataset):
             self.masks,
             self.mutation_vectors,
         ) = self.encode_sequences(dataframe)
+
+    def __len__(self):
+        return len(self.encoded_parents)
 
     def __getitem__(self, idx):
         return self.encoded_parents[idx], self.masks[idx], self.mutation_vectors[idx]
@@ -70,13 +68,16 @@ class SHMoofDataset(Dataset):
 
         return torch.tensor(kmer_indices, dtype=torch.int32), torch.tensor(mask, dtype=torch.bool)
 
-
     def create_mutation_indicator(self, parent, child):
         mutation_indicator = [
-            1 if parent[i] != child[i] and i < self.max_length else 0
-            for i in range(len(parent))
+            1 if parent[i] != child[i] else 0
+            for i in range(min(len(parent), self.max_length))
         ]
-        mutation_indicator += [0] * (self.max_length - len(mutation_indicator))
+
+        # Pad the mutation indicator if necessary
+        if len(mutation_indicator) < self.max_length:
+            mutation_indicator += [0] * (self.max_length - len(mutation_indicator))
+
         return torch.tensor(mutation_indicator, dtype=torch.bool)
 
 
@@ -99,4 +100,72 @@ class SHMoofModel(nn.Module):
 
         rates = kmer_rates + site_rates
 
+        # Clamp rates to avoid negative values
+        rates = torch.clamp(rates, min=1e-8)
+
         return rates
+
+class SHMoofBurrito:
+    def __init__(self, train_dataframe, val_dataframe, kmer_length=5, max_length=300):
+        self.train_dataset = SHMoofDataset(train_dataframe, kmer_length, max_length)
+        self.val_dataset = SHMoofDataset(val_dataframe, kmer_length, max_length)
+
+        self.model = SHMoofModel(self.train_dataset)
+        self.criterion = nn.BCELoss()
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+
+    def train(self, epochs):
+        self.model.train()  # Set the model to training mode
+        for epoch in range(epochs):
+            running_loss = 0.0
+            for encoded_parent, mask, mutation_indicator in self.train_dataset:
+                loss = self._calculate_loss(encoded_parent, mask, mutation_indicator)
+
+                # Backward pass and optimize
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                running_loss += loss.item()
+
+            # Average loss for this epoch
+            epoch_loss = running_loss / len(self.train_dataset)
+            print(f'Epoch [{epoch+1}/{epochs}], Loss: {epoch_loss:.4f}')
+                
+            # Validation phase
+            self.model.eval() 
+            validation_loss = 0.0
+            with torch.no_grad():
+                for encoded_parent, mask, mutation_indicator in self.val_dataset:
+                    loss = self._calculate_loss(encoded_parent, mask, mutation_indicator)
+                    validation_loss += loss.item()
+            validation_loss /= len(self.val_dataset)
+            print(f'Validation Loss: {validation_loss:.4f}')
+
+    def _calculate_loss(self, encoded_parent, mask, mutation_indicator):
+        rates = self.model(encoded_parent)
+        mutation_freq = (mutation_indicator / mask.sum()).sum()
+        mut_prob = 1 - torch.exp(-rates * mutation_freq)
+        mut_prob_masked = mut_prob[mask]
+        mutation_indicator_masked = mutation_indicator[mask].float()
+        return self.criterion(mut_prob_masked, mutation_indicator_masked)
+
+    def write_shmoof_output(self, out_dir):
+        # Extract k-mer (motif) mutabilities
+        kmer_mutabilities = self.model.kmer_rates.weight.detach().numpy().flatten()
+        motif_mutabilities = pd.DataFrame({
+            'Motif': list(self.train_dataset.kmer_to_index.keys()),
+            'Mutability': kmer_mutabilities
+        })
+        motif_mutabilities.to_csv(f'{out_dir}/motif_mutabilities.tsv', sep='\t', index=False)
+
+        # Extract site mutabilities
+        site_mutabilities = self.model.site_rates.weight.detach().numpy().flatten()
+        site_mutabilities_df = pd.DataFrame({
+            'Position': range(1, len(site_mutabilities) + 1),
+            'Mutability': site_mutabilities
+        })
+        site_mutabilities_df.to_csv(f'{out_dir}/site_mutabilities.tsv', sep='\t', index=False)
+
+
+
