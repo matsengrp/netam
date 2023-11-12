@@ -84,26 +84,32 @@ class SHMoofDataset(Dataset):
 class SHMoofModel(nn.Module):
     def __init__(self, dataset):
         super(SHMoofModel, self).__init__()
-        # Extract counts from the dataset
         self.kmer_count = len(dataset.kmer_to_index)
         self.site_count = dataset.max_length
 
-        # Initialize embedding layers
-        self.kmer_rates = nn.Embedding(self.kmer_count, 1)
-        self.site_rates = nn.Embedding(self.site_count, 1)
+        # Initialize log rate embedding layers
+        self.log_kmer_rates = nn.Embedding(self.kmer_count, 1)
+        self.log_site_rates = nn.Embedding(self.site_count, 1)
 
     def forward(self, encoded_parent):
-        # Get kmer rates and site rates, assuming both are 1D tensors
-        kmer_rates = self.kmer_rates(encoded_parent).squeeze()
+        # TODO do I need squeeze?
+        log_kmer_rates = self.log_kmer_rates(encoded_parent).squeeze()
         positions = torch.arange(encoded_parent.size(0), device=encoded_parent.device)
-        site_rates = self.site_rates(positions).squeeze()
+        log_site_rates = self.log_site_rates(positions).squeeze()
 
-        rates = kmer_rates + site_rates
-
-        # Clamp rates to avoid negative values
-        rates = torch.clamp(rates, min=1e-8)
+        rates = torch.exp(log_kmer_rates) + torch.exp(log_site_rates)
 
         return rates
+
+    @property
+    def kmer_rates(self):
+        # Convert kmer log rates to linear space
+        return torch.exp(self.log_kmer_rates.weight).squeeze()
+
+    @property
+    def site_rates(self):
+        # Convert site log rates to linear space
+        return torch.exp(self.log_site_rates.weight).squeeze()
 
 class SHMoofBurrito:
     def __init__(self, train_dataframe, val_dataframe, kmer_length=5, max_length=300):
@@ -152,7 +158,7 @@ class SHMoofBurrito:
 
     def write_shmoof_output(self, out_dir):
         # Extract k-mer (motif) mutabilities
-        kmer_mutabilities = self.model.kmer_rates.weight.detach().numpy().flatten()
+        kmer_mutabilities = self.model.kmer_rates.detach().numpy().flatten()
         motif_mutabilities = pd.DataFrame({
             'Motif': list(self.train_dataset.kmer_to_index.keys()),
             'Mutability': kmer_mutabilities
@@ -160,7 +166,7 @@ class SHMoofBurrito:
         motif_mutabilities.to_csv(f'{out_dir}/motif_mutabilities.tsv', sep='\t', index=False)
 
         # Extract site mutabilities
-        site_mutabilities = self.model.site_rates.weight.detach().numpy().flatten()
+        site_mutabilities = self.model.site_rates.detach().numpy().flatten()
         site_mutabilities_df = pd.DataFrame({
             'Position': range(1, len(site_mutabilities) + 1),
             'Mutability': site_mutabilities
