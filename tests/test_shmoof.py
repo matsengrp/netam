@@ -21,18 +21,11 @@ def tiny_model(tiny_dataset):
 def test_make_dataset(tiny_dataset):
     encoded_parent, mask, mutation_indicator = tiny_dataset[0]
     assert (mask == torch.tensor([1, 1, 1, 1, 1, 0], dtype=torch.bool)).all()
-    # First kmer is NAT due to padding
-    assert encoded_parent[0].item() == tiny_dataset.kmer_to_index["NAT"]
+    # First kmer is NAT due to padding, but our encoding defaults this to "N".
+    assert encoded_parent[0].item() == tiny_dataset.kmer_to_index["N"]
     assert (
         mutation_indicator == torch.tensor([0, 1, 0, 0, 0, 0], dtype=torch.bool)
     ).all()
-
-
-def test_resolve_padded_kmer(tiny_model):
-    twomers = ["".join(l) for l in itertools.product(BASES, repeat=2)]
-    assert tiny_model.resolve_padded_kmer("NNT") == ["".join(s) + "T" for s in twomers]
-    assert tiny_model.resolve_padded_kmer("NAT") == [s + "AT" for s in BASES]
-    assert tiny_model.resolve_padded_kmer("ATN") == ["AT" + s for s in BASES]
 
 
 def test_run_model_forward(tiny_dataset, tiny_model):
