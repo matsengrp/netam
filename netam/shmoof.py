@@ -134,16 +134,31 @@ class SHMoofModel(nn.Module):
 
 
 class SHMoofBurrito:
-    def __init__(self, train_dataframe, val_dataframe, kmer_length=5, max_length=300):
+    def __init__(
+        self,
+        train_dataframe,
+        val_dataframe,
+        kmer_length=5,
+        max_length=300,
+        learning_rate=0.01,
+        l2_regularization_coeff=1e-6,
+    ):
         self.train_dataset = SHMoofDataset(train_dataframe, kmer_length, max_length)
         self.val_dataset = SHMoofDataset(val_dataframe, kmer_length, max_length)
 
         self.model = SHMoofModel(self.train_dataset, embedding_dim=1)
         self.criterion = nn.BCELoss()
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+        self.optimizer = torch.optim.Adam(
+            self.model.parameters(),
+            lr=learning_rate,
+            weight_decay=l2_regularization_coeff,
+        )
 
     def train(self, epochs):
         self.model.train()  # Set the model to training mode
+        training_losses = []
+        validation_losses = []
+
         for epoch in range(epochs):
             running_loss = 0.0
             for encoded_parent, mask, mutation_indicator in self.train_dataset:
@@ -158,20 +173,26 @@ class SHMoofBurrito:
 
             # Average loss for this epoch
             epoch_loss = running_loss / len(self.train_dataset)
+            training_losses.append(epoch_loss)
 
             # Validation phase
             self.model.eval()
             validation_loss = 0.0
             with torch.no_grad():
                 for encoded_parent, mask, mutation_indicator in self.val_dataset:
-                    loss = self._calculate_loss(
-                        encoded_parent, mask, mutation_indicator
-                    )
+                    loss = self._calculate_loss(encoded_parent, mask, mutation_indicator)
                     validation_loss += loss.item()
             validation_loss /= len(self.val_dataset)
+            validation_losses.append(validation_loss)
+
             print(
                 f"Epoch [{epoch+1}/{epochs}]\t Loss: {epoch_loss:.8f}\t Val Loss: {validation_loss:.8f}"
             )
+
+        return pd.DataFrame({
+            "training_losses": training_losses,
+            "validation_losses": validation_losses
+        })
 
     def _calculate_loss(self, encoded_parent, mask, mutation_indicator):
         rates = self.model(encoded_parent)
