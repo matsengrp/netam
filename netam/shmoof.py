@@ -120,21 +120,7 @@ class SHMoofModel(nn.Module):
         self.log_site_rates = nn.Embedding(self.site_count, 1)
 
 # full batch version
-#     def forward(self, encoded_parents):
-        # log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze()
-        # sequence_length = encoded_parents.size(1)
-        # positions = torch.arange(sequence_length, device=encoded_parents.device)
-        # # When we transpose we get a tensor of shape [sequence_length, 1], which will broadcast
-        # # to the shape of log_kmer_rates, repeating over the batch dimension.
-        # log_site_rates = self.log_site_rates(positions).T
-#         # Rates are the product of kmer and site rates.
-#         rates = torch.exp(log_kmer_rates + log_site_rates)
-#         return rates
-
-# fake batch version
-    def forward(self, encoded_parent):
-        # fake batch dimension
-        encoded_parents = encoded_parent.unsqueeze(0)
+    def forward(self, encoded_parents):
         log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze()
         sequence_length = encoded_parents.size(1)
         positions = torch.arange(sequence_length, device=encoded_parents.device)
@@ -143,8 +129,7 @@ class SHMoofModel(nn.Module):
         log_site_rates = self.log_site_rates(positions).T
         # Rates are the product of kmer and site rates.
         rates = torch.exp(log_kmer_rates + log_site_rates)
-        return rates.squeeze()
-
+        return rates
 
 # original version
 #     def forward(self, encoded_parent):
@@ -228,7 +213,7 @@ class SHMoofBurrito:
         )
 
     def _calculate_loss(self, encoded_parent, mask, mutation_indicator):
-        rates = self.model(encoded_parent)
+        rates = self.model(encoded_parent.unsqueeze(0)).squeeze()
         # Note that our mutation frequency has the number of non-N bases in the denominator.
         mutation_freq = (mutation_indicator / mask.sum()).sum()
         mut_prob = 1 - torch.exp(-rates * mutation_freq)
