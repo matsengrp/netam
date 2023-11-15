@@ -119,6 +119,14 @@ class SHMoofModel(nn.Module):
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
         self.log_site_rates = nn.Embedding(self.site_count, 1)
 
+#     def forward(self, encoded_parents):
+        # log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze()
+        # sequence_length = encoded_parents.size(1)
+        # positions = torch.arange(sequence_length, device=encoded_parents.device)
+        # # When we transpose we get a tensor of shape [sequence_length, 1], which will broadcast
+        # # to the shape of log_kmer_rates, repeating over the batch dimension.
+        # log_site_rates = self.log_site_rates(positions).T
+
     def forward(self, encoded_parent):
         log_kmer_rates = self.kmer_embedding(encoded_parent).squeeze()
         positions = torch.arange(encoded_parent.size(0), device=encoded_parent.device)
