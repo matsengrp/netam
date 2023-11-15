@@ -25,6 +25,7 @@ class NoofModel(nn.Module):
         self.embedding_dim = embedding_dim
         self.site_count = dataset.max_length
 
+        # self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
         self.kmer_embedding = nn.Embedding(self.kmer_count, self.embedding_dim)
         self.pos_encoder = PositionalEncoding(self.embedding_dim, dropout)
 
@@ -51,6 +52,7 @@ class NoofModel(nn.Module):
 
         encoded_parents is expected to be an integer tensor of [batch_size, sequence_length].
         """
+        # log_rates = self.kmer_embedding(encoded_parents).squeeze()
         kmer_embeddings = self.kmer_embedding(encoded_parents)
         kmer_embeddings = self.pos_encoder(kmer_embeddings)
 
@@ -72,7 +74,7 @@ class NoofBurrito:
         val_dataset,
         model,
         batch_size=1024,
-        learning_rate=0.01,
+        learning_rate=0.0001,
         l2_regularization_coeff=1e-6,
     ):
         self.train_loader = DataLoader(
@@ -103,7 +105,10 @@ class NoofBurrito:
                 loss.backward()
                 self.optimizer.step()
 
-                training_loss += loss.item()
+                # If we multiply the loss by the batch size, then the loss will be the sum of the
+                # losses for each example in the batch. Then, when we divide by the number of
+                # examples in the dataset below, we will get the average loss per example.
+                training_loss += loss.item() * encoded_parents.size(0)
 
             training_loss /= len(self.train_loader.dataset)
             training_losses.append(training_loss)
@@ -116,7 +121,7 @@ class NoofBurrito:
                     loss = self._calculate_loss(
                         encoded_parents, masks, mutation_indicators
                     )
-                    validation_loss += loss.item()
+                    validation_loss += loss.item() * encoded_parents.size(0)
             validation_loss /= len(self.val_loader.dataset)
             validation_losses.append(validation_loss)
 
