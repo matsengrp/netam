@@ -143,7 +143,6 @@ class SHMoofModel(nn.Module):
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
         self.log_site_rates = nn.Embedding(self.site_count, 1)
 
-# full batch version
     def forward(self, encoded_parents):
         log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze()
         sequence_length = encoded_parents.size(1)
@@ -154,16 +153,6 @@ class SHMoofModel(nn.Module):
         # Rates are the product of kmer and site rates.
         rates = torch.exp(log_kmer_rates + log_site_rates)
         return rates
-
-# original version
-#     def forward(self, encoded_parent):
-#         log_kmer_rates = self.kmer_embedding(encoded_parent).squeeze()
-#         positions = torch.arange(encoded_parent.size(0), device=encoded_parent.device)
-#         log_site_rates = self.log_site_rates(positions).squeeze()
-# 
-#         # Rates are the product of kmer and site rates.
-#         rates = torch.exp(log_kmer_rates + log_site_rates)
-#         return rates
 
     @property
     def kmer_rates(self):
