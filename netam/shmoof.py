@@ -32,19 +32,19 @@ class SHMoofDataset(Dataset):
         (
             self.encoded_parents,
             self.masks,
-            self.mutation_vectors,
+            self.mutation_indicators,
         ) = self.encode_sequences(dataframe)
 
     def __len__(self):
         return len(self.encoded_parents)
 
     def __getitem__(self, idx):
-        return self.encoded_parents[idx], self.masks[idx], self.mutation_vectors[idx]
+        return self.encoded_parents[idx], self.masks[idx], self.mutation_indicators[idx]
 
     def to(self, device):
         self.encoded_parents = self.encoded_parents.to(device)
         self.masks = self.masks.to(device)
-        self.mutation_vectors = self.mutation_vectors.to(device)
+        self.mutation_indicators = self.mutation_indicators.to(device)
 
     def encode_sequences(self, dataframe):
         encoded_parents = []
