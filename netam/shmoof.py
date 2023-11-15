@@ -9,6 +9,8 @@ from torch.utils.data import Dataset, DataLoader
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 from torch.utils.data import DataLoader
 
+from tensorboardX import SummaryWriter
+
 from epam.torch_common import PositionalEncoding
 
 BASES = ["A", "C", "G", "T"]
@@ -150,6 +152,113 @@ class SHMoofModel(nn.Module):
     def site_rates(self):
         # Convert site log rates to linear space
         return torch.exp(self.log_site_rates.weight).squeeze()
+
+
+class NoofBurrito:
+    def __init__(
+        self,
+        train_dataset,
+        val_dataset,
+        model,
+        batch_size=1024,
+        learning_rate=0.1,
+        l2_regularization_coeff=1e-6,
+    ):
+        self.train_loader = DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=True
+        )
+        self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+        self.model = model
+        self.criterion = nn.BCELoss()
+        self.optimizer = torch.optim.Adam(
+            self.model.parameters(),
+            lr=learning_rate,
+            weight_decay=l2_regularization_coeff,
+        )
+
+    def train(self, epochs):
+        writer = SummaryWriter(log_dir="./_logs")
+
+        self.model.train()
+        training_losses = []
+        validation_losses = []
+
+        for epoch in range(epochs):
+            training_loss = 0.0
+            for encoded_parents, masks, mutation_indicators in self.train_loader:
+                loss = self._calculate_loss(encoded_parents, masks, mutation_indicators)
+
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                # If we multiply the loss by the batch size, then the loss will be the sum of the
+                # losses for each example in the batch. Then, when we divide by the number of
+                # examples in the dataset below, we will get the average loss per example.
+                training_loss += loss.item() * encoded_parents.size(0)
+
+            training_loss /= len(self.train_loader.dataset)
+            training_losses.append(training_loss)
+
+            # Validation phase
+            self.model.eval()
+            validation_loss = 0.0
+            with torch.no_grad():
+                for encoded_parents, masks, mutation_indicators in self.val_loader:
+                    loss = self._calculate_loss(
+                        encoded_parents, masks, mutation_indicators
+                    )
+                    validation_loss += loss.item() * encoded_parents.size(0)
+            validation_loss /= len(self.val_loader.dataset)
+            validation_losses.append(validation_loss)
+
+            writer.add_scalar("Train loss", training_loss, epoch)
+            writer.add_scalar("Validation loss", validation_loss, epoch)
+
+            print(
+                f"Epoch [{epoch+1}/{epochs}]\t Loss: {training_loss:.8g}\t Val Loss: {validation_loss:.8g}"
+            )
+
+        return pd.DataFrame(
+            {"training_losses": training_losses, "validation_losses": validation_losses}
+        )
+
+    def _calculate_loss(self, encoded_parents, masks, mutation_indicators):
+        rates = self.model(encoded_parents)
+        mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(dim=1, keepdim=True)
+        mut_prob = 1 - torch.exp(-rates * mutation_freq)
+        mut_prob_masked = mut_prob[masks]
+        mutation_indicator_masked = mutation_indicators[masks].float()
+        loss = self.criterion(mut_prob_masked, mutation_indicator_masked)
+        return loss
+
+    def write_shmoof_output(self, out_dir):
+        # Extract k-mer (motif) mutabilities
+        kmer_rates = self.model.kmer_rates.detach().numpy().flatten()
+        motif_mutabilities = pd.DataFrame(
+            {
+                "Motif": self.train_loader.dataset.all_kmers,
+                "Mutability": kmer_rates,
+            }
+        )
+        motif_mutabilities.to_csv(
+            f"{out_dir}/motif_mutabilities.tsv", sep="\t", index=False
+        )
+
+        # Extract site mutabilities
+        site_mutabilities = self.model.site_rates.detach().numpy().flatten()
+        site_mutabilities_df = pd.DataFrame(
+            {
+                "Position": range(1, len(site_mutabilities) + 1),
+                "Mutability": site_mutabilities,
+            }
+        )
+        site_mutabilities_df.to_csv(
+            f"{out_dir}/site_mutabilities.tsv", sep="\t", index=False
+        )
+
+
+
 
 
 class SHMoofBurrito:
