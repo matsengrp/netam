@@ -16,6 +16,28 @@ from epam.torch_common import PositionalEncoding
 BASES = ["A", "C", "G", "T"]
 
 
+
+def load_shmoof_dataframes(csv_path, sample_count=None):
+    full_shmoof_df = pd.read_csv(csv_path, index_col=0).reset_index(drop=True)
+
+    # only keep rows where parent is different than child
+    full_shmoof_df = full_shmoof_df[full_shmoof_df["parent"] != full_shmoof_df["child"]]
+
+    if sample_count is not None:
+        full_shmoof_df = full_shmoof_df.sample(sample_count)
+
+    # train_df = full_shmoof_df.sample(frac=0.8)
+    # val_df = full_shmoof_df.drop(train_df.index)
+
+    # Hold out sample 326713
+    val_df = full_shmoof_df[full_shmoof_df["sample_id"] == 326713]
+    train_df = full_shmoof_df.drop(val_df.index)
+
+    return train_df, val_df
+
+
+
+
 class SHMoofDataset(Dataset):
     def __init__(self, dataframe, kmer_length, max_length):
         self.max_length = max_length
