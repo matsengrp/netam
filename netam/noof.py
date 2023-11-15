@@ -133,8 +133,9 @@ class NoofBurrito:
 
     def _calculate_loss(self, encoded_parents, masks, mutation_indicators):
         rates = self.model(encoded_parents)
-        mutation_freq = mutation_indicators / masks.sum(dim=1, keepdim=True)
+        mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(dim=1, keepdim=True)
         mut_prob = 1 - torch.exp(-rates * mutation_freq)
         mut_prob_masked = mut_prob[masks]
         mutation_indicator_masked = mutation_indicators[masks].float()
-        return self.criterion(mut_prob_masked, mutation_indicator_masked)
+        loss = self.criterion(mut_prob_masked, mutation_indicator_masked)
+        return loss
