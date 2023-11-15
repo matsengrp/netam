@@ -16,7 +16,6 @@ from epam.torch_common import PositionalEncoding
 BASES = ["A", "C", "G", "T"]
 
 
-
 def load_shmoof_dataframes(csv_path, sample_count=None):
     full_shmoof_df = pd.read_csv(csv_path, index_col=0).reset_index(drop=True)
 
@@ -34,8 +33,6 @@ def load_shmoof_dataframes(csv_path, sample_count=None):
     train_df = full_shmoof_df.drop(val_df.index)
 
     return train_df, val_df
-
-
 
 
 class SHMoofDataset(Dataset):
@@ -100,7 +97,7 @@ class SHMoofDataset(Dataset):
 
         # Note that we are using a default value of 0 here. So we use the
         # catch-all term for anything with an N in it for the sites on the
-        # boundary of the kmer. 
+        # boundary of the kmer.
         # Note that this line also effectively pads things out to max_length because
         # when i gets large the slice will be empty and we will get a 0.
         # These sites will get masked out by the mask below.
@@ -236,7 +233,9 @@ class NoofBurrito:
 
     def _calculate_loss(self, encoded_parents, masks, mutation_indicators):
         rates = self.model(encoded_parents)
-        mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(dim=1, keepdim=True)
+        mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
+            dim=1, keepdim=True
+        )
         mut_prob = 1 - torch.exp(-rates * mutation_freq)
         mut_prob_masked = mut_prob[masks]
         mutation_indicator_masked = mutation_indicators[masks].float()
@@ -249,104 +248,6 @@ class NoofBurrito:
         motif_mutabilities = pd.DataFrame(
             {
                 "Motif": self.train_loader.dataset.all_kmers,
-                "Mutability": kmer_rates,
-            }
-        )
-        motif_mutabilities.to_csv(
-            f"{out_dir}/motif_mutabilities.tsv", sep="\t", index=False
-        )
-
-        # Extract site mutabilities
-        site_mutabilities = self.model.site_rates.detach().numpy().flatten()
-        site_mutabilities_df = pd.DataFrame(
-            {
-                "Position": range(1, len(site_mutabilities) + 1),
-                "Mutability": site_mutabilities,
-            }
-        )
-        site_mutabilities_df.to_csv(
-            f"{out_dir}/site_mutabilities.tsv", sep="\t", index=False
-        )
-
-
-
-
-
-class SHMoofBurrito:
-    def __init__(
-        self,
-        train_dataset,
-        val_dataset,
-        model,
-        learning_rate=0.01,
-        l2_regularization_coeff=1e-6,
-    ):
-        self.train_dataset = train_dataset
-        self.val_dataset = val_dataset
-        self.model = model
-        self.criterion = nn.BCELoss()
-        self.optimizer = torch.optim.Adam(
-            self.model.parameters(),
-            lr=learning_rate,
-            weight_decay=l2_regularization_coeff,
-        )
-
-    def train(self, epochs):
-        self.model.train()  # Set the model to training mode
-        training_losses = []
-        validation_losses = []
-
-        for epoch in range(epochs):
-            running_loss = 0.0
-            for encoded_parent, mask, mutation_indicator in self.train_dataset:
-                loss = self._calculate_loss(encoded_parent, mask, mutation_indicator)
-
-                # Backward pass and optimize
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-
-                running_loss += loss.item()
-
-            # Average loss for this epoch
-            epoch_loss = running_loss / len(self.train_dataset)
-            training_losses.append(epoch_loss)
-
-            # Validation phase
-            self.model.eval()
-            validation_loss = 0.0
-            with torch.no_grad():
-                for encoded_parent, mask, mutation_indicator in self.val_dataset:
-                    loss = self._calculate_loss(
-                        encoded_parent, mask, mutation_indicator
-                    )
-                    validation_loss += loss.item()
-            validation_loss /= len(self.val_dataset)
-            validation_losses.append(validation_loss)
-
-            print(
-                f"Epoch [{epoch+1}/{epochs}]\t Loss: {epoch_loss:.8f}\t Val Loss: {validation_loss:.8f}"
-            )
-
-        return pd.DataFrame(
-            {"training_losses": training_losses, "validation_losses": validation_losses}
-        )
-
-    def _calculate_loss(self, encoded_parent, mask, mutation_indicator):
-        rates = self.model(encoded_parent.unsqueeze(0)).squeeze()
-        # Note that our mutation frequency has the number of non-N bases in the denominator.
-        mutation_freq = (mutation_indicator / mask.sum()).sum()
-        mut_prob = 1 - torch.exp(-rates * mutation_freq)
-        mut_prob_masked = mut_prob[mask]
-        mutation_indicator_masked = mutation_indicator[mask].float()
-        return self.criterion(mut_prob_masked, mutation_indicator_masked)
-
-    def write_shmoof_output(self, out_dir):
-        # Extract k-mer (motif) mutabilities
-        kmer_rates = self.model.kmer_rates.detach().numpy().flatten()
-        motif_mutabilities = pd.DataFrame(
-            {
-                "Motif": self.train_dataset.all_kmers,
                 "Mutability": kmer_rates,
             }
         )

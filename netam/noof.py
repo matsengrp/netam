@@ -52,7 +52,6 @@ class NoofModel(nn.Module):
 
         encoded_parents is expected to be an integer tensor of [batch_size, sequence_length].
         """
-        # log_rates = self.kmer_embedding(encoded_parents).squeeze()
         kmer_embeddings = self.kmer_embedding(encoded_parents)
         kmer_embeddings = self.pos_encoder(kmer_embeddings)
 
