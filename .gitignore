@@ -155,4 +155,4 @@ cython_debug/
 # Custom
 _ignore/
 .DS_Store
-
+_logs/

@@ -9,6 +9,8 @@ from torch.utils.data import Dataset, DataLoader
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 from torch.utils.data import DataLoader
 
+from tensorboardX import SummaryWriter
+
 from epam.torch_common import PositionalEncoding
 
 BASES = ["A", "C", "G", "T"]
@@ -19,7 +21,6 @@ class NoofModel(nn.Module):
         self, dataset, embedding_dim, nhead, dim_feedforward, layer_count, dropout=0.5
     ):
         super(NoofModel, self).__init__()
-        self.kmer_to_index = dataset.kmer_to_index
         self.kmer_count = len(dataset.kmer_to_index)
         self.embedding_dim = embedding_dim
         self.site_count = dataset.max_length
@@ -45,20 +46,22 @@ class NoofModel(nn.Module):
         self.linear.weight.data.uniform_(-initrange, initrange)
 
     def forward(self, encoded_parents):
-        # encoded_parents is expected to have dimensions [batch_size, sequence_length]
+        """
+        The forward method.
+
+        encoded_parents is expected to be an integer tensor of [batch_size, sequence_length].
+        """
         kmer_embeddings = self.kmer_embedding(encoded_parents)
         kmer_embeddings = self.pos_encoder(kmer_embeddings)
 
         # Pass through the transformer encoder
         transformer_output = self.encoder(kmer_embeddings)
 
-        # Apply the linear layer and squeeze out the last dimension
-        # After the linear layer, the dimensions will be [batch_size, sequence_length, 1]
-        # We squeeze out the last dimension to make it [batch_size, sequence_length]
+        # Apply the linear layer and squeeze out the last dimension.
+        # After the linear layer, the dimensions will be [batch_size, sequence_length, 1].
+        # We squeeze out the last dimension to make it [batch_size, sequence_length].
         log_rates = self.linear(transformer_output).squeeze(-1)
-
         rates = torch.exp(log_rates)
-
         return rates
 
 
@@ -68,7 +71,7 @@ class NoofBurrito:
         train_dataset,
         val_dataset,
         model,
-        batch_size=32,
+        batch_size=1024,
         learning_rate=0.01,
         l2_regularization_coeff=1e-6,
     ):
@@ -85,12 +88,14 @@ class NoofBurrito:
         )
 
     def train(self, epochs):
+        writer = SummaryWriter(log_dir="./_logs")
+
         self.model.train()
         training_losses = []
         validation_losses = []
 
         for epoch in range(epochs):
-            running_loss = 0.0
+            training_loss = 0.0
             for encoded_parents, masks, mutation_indicators in self.train_loader:
                 loss = self._calculate_loss(encoded_parents, masks, mutation_indicators)
 
@@ -98,10 +103,10 @@ class NoofBurrito:
                 loss.backward()
                 self.optimizer.step()
 
-                running_loss += loss.item()
+                training_loss += loss.item()
 
-            epoch_loss = running_loss / len(self.train_loader.dataset)
-            training_losses.append(epoch_loss)
+            training_loss /= len(self.train_loader.dataset)
+            training_losses.append(training_loss)
 
             # Validation phase
             self.model.eval()
@@ -115,8 +120,11 @@ class NoofBurrito:
             validation_loss /= len(self.val_loader.dataset)
             validation_losses.append(validation_loss)
 
+            writer.add_scalar("Train loss", training_loss, epoch)
+            writer.add_scalar("Validation loss", validation_loss, epoch)
+
             print(
-                f"Epoch [{epoch+1}/{epochs}]\t Loss: {epoch_loss:.8f}\t Val Loss: {validation_loss:.8f}"
+                f"Epoch [{epoch+1}/{epochs}]\t Loss: {training_loss:.8g}\t Val Loss: {validation_loss:.8g}"
             )
 
         return pd.DataFrame(

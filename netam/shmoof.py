@@ -6,9 +6,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+from torch.nn import TransformerEncoder, TransformerEncoderLayer
+from torch.utils.data import DataLoader
 
-
-import itertools
+from epam.torch_common import PositionalEncoding
 
 BASES = ["A", "C", "G", "T"]
 
@@ -40,6 +41,11 @@ class SHMoofDataset(Dataset):
     def __getitem__(self, idx):
         return self.encoded_parents[idx], self.masks[idx], self.mutation_vectors[idx]
 
+    def to(self, device):
+        self.encoded_parents = self.encoded_parents.to(device)
+        self.masks = self.masks.to(device)
+        self.mutation_vectors = self.mutation_vectors.to(device)
+
     def encode_sequences(self, dataframe):
         encoded_parents = []
         masks = []
@@ -67,11 +73,13 @@ class SHMoofDataset(Dataset):
         padded_sequence = (
             "N" * self.overhang_length + sequence + "N" * self.overhang_length
         )
-        # Truncate according to max_length; we'll handle the overhangs later.
-        padded_sequence = padded_sequence[: self.max_length + 2 * self.overhang_length]
 
-        # Note that we are using a default value of 0 here. So we have a
-        # catch-all term for anything with an N in it.
+        # Note that we are using a default value of 0 here. So we use the
+        # catch-all term for anything with an N in it for the sites on the
+        # boundary of the kmer. 
+        # Note that this line also effectively pads things out to max_length because
+        # when i gets large the slice will be empty and we will get a 0.
+        # These sites will get masked out by the mask below.
         kmer_indices = [
             self.kmer_to_index.get(padded_sequence[i : i + self.kmer_length], 0)
             for i in range(self.max_length)
@@ -103,14 +111,12 @@ class SHMoofDataset(Dataset):
 
 
 class SHMoofModel(nn.Module):
-    def __init__(self, dataset, embedding_dim):
+    def __init__(self, dataset):
         super(SHMoofModel, self).__init__()
-        self.kmer_to_index = dataset.kmer_to_index
         self.kmer_count = len(dataset.kmer_to_index)
-        self.embedding_dim = embedding_dim
         self.site_count = dataset.max_length
 
-        self.kmer_embedding = nn.Embedding(self.kmer_count, self.embedding_dim)
+        self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
         self.log_site_rates = nn.Embedding(self.site_count, 1)
 
     def forward(self, encoded_parent):
@@ -136,17 +142,15 @@ class SHMoofModel(nn.Module):
 class SHMoofBurrito:
     def __init__(
         self,
-        train_dataframe,
-        val_dataframe,
-        kmer_length=5,
-        max_length=300,
+        train_dataset,
+        val_dataset,
+        model,
         learning_rate=0.01,
         l2_regularization_coeff=1e-6,
     ):
-        self.train_dataset = SHMoofDataset(train_dataframe, kmer_length, max_length)
-        self.val_dataset = SHMoofDataset(val_dataframe, kmer_length, max_length)
-
-        self.model = SHMoofModel(self.train_dataset, embedding_dim=1)
+        self.train_dataset = train_dataset
+        self.val_dataset = val_dataset
+        self.model = model
         self.criterion = nn.BCELoss()
         self.optimizer = torch.optim.Adam(
             self.model.parameters(),
@@ -180,7 +184,9 @@ class SHMoofBurrito:
             validation_loss = 0.0
             with torch.no_grad():
                 for encoded_parent, mask, mutation_indicator in self.val_dataset:
-                    loss = self._calculate_loss(encoded_parent, mask, mutation_indicator)
+                    loss = self._calculate_loss(
+                        encoded_parent, mask, mutation_indicator
+                    )
                     validation_loss += loss.item()
             validation_loss /= len(self.val_dataset)
             validation_losses.append(validation_loss)
@@ -189,10 +195,9 @@ class SHMoofBurrito:
                 f"Epoch [{epoch+1}/{epochs}]\t Loss: {epoch_loss:.8f}\t Val Loss: {validation_loss:.8f}"
             )
 
-        return pd.DataFrame({
-            "training_losses": training_losses,
-            "validation_losses": validation_losses
-        })
+        return pd.DataFrame(
+            {"training_losses": training_losses, "validation_losses": validation_losses}
+        )
 
     def _calculate_loss(self, encoded_parent, mask, mutation_indicator):
         rates = self.model(encoded_parent)
