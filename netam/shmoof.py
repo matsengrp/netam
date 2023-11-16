@@ -141,7 +141,7 @@ class SHMoofModel(nn.Module):
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
         self.log_site_rates = nn.Embedding(self.site_count, 1)
 
-    def forward(self, encoded_parents):
+    def forward(self, encoded_parents, masks):
         log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze()
         sequence_length = encoded_parents.size(1)
         positions = torch.arange(sequence_length, device=encoded_parents.device)
@@ -237,7 +237,7 @@ class NoofBurrito:
         )
 
     def _calculate_loss(self, encoded_parents, masks, mutation_indicators):
-        rates = self.model(encoded_parents)
+        rates = self.model(encoded_parents, masks)
         mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
             dim=1, keepdim=True
         )
