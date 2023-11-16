@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from tensorboardX import SummaryWriter
 
@@ -183,6 +184,8 @@ class NoofBurrito:
             lr=learning_rate,
             weight_decay=l2_regularization_coeff,
         )
+        self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.2, patience=4, verbose=True)
+
 
     def train(self, epochs):
         writer = SummaryWriter(log_dir="./_logs")
@@ -226,6 +229,8 @@ class NoofBurrito:
             print(
                 f"Epoch [{epoch+1}/{epochs}]\t Loss: {training_loss:.8g}\t Val Loss: {validation_loss:.8g}"
             )
+            self.scheduler.step(validation_loss)
+
 
         return pd.DataFrame(
             {"training_losses": training_losses, "validation_losses": validation_losses}
