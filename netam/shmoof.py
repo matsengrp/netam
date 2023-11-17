@@ -36,6 +36,19 @@ def load_shmoof_dataframes(csv_path, sample_count=None):
     return train_df, val_df
 
 
+def create_mutation_indicator(parent, child, max_length):
+    assert len(parent) == len(child), f"{parent} and {child} are not the same length"
+    mutation_indicator = [
+        1 if parent[i] != child[i] else 0 for i in range(min(len(parent), max_length))
+    ]
+
+    # Pad the mutation indicator if necessary
+    if len(mutation_indicator) < max_length:
+        mutation_indicator += [0] * (max_length - len(mutation_indicator))
+
+    return torch.tensor(mutation_indicator, dtype=torch.bool)
+
+
 class SHMoofDataset(Dataset):
     def __init__(self, dataframe, kmer_length, max_length):
         self.max_length = max_length
@@ -75,8 +88,8 @@ class SHMoofDataset(Dataset):
 
         for _, row in dataframe.iterrows():
             encoded_parent, mask = self.encode_sequence(row["parent"])
-            mutation_indicator = self.create_mutation_indicator(
-                row["parent"], row["child"]
+            mutation_indicator = create_mutation_indicator(
+                row["parent"], row["child"], self.max_length
             )
 
             encoded_parents.append(encoded_parent)
@@ -115,21 +128,6 @@ class SHMoofDataset(Dataset):
         return torch.tensor(kmer_indices, dtype=torch.int32), torch.tensor(
             mask, dtype=torch.bool
         )
-
-    def create_mutation_indicator(self, parent, child):
-        assert len(parent) == len(
-            child
-        ), f"{parent} and {child} are not the same length"
-        mutation_indicator = [
-            1 if parent[i] != child[i] else 0
-            for i in range(min(len(parent), self.max_length))
-        ]
-
-        # Pad the mutation indicator if necessary
-        if len(mutation_indicator) < self.max_length:
-            mutation_indicator += [0] * (self.max_length - len(mutation_indicator))
-
-        return torch.tensor(mutation_indicator, dtype=torch.bool)
 
 
 class SHMoofModel(nn.Module):
@@ -184,8 +182,9 @@ class NoofBurrito:
             lr=learning_rate,
             weight_decay=l2_regularization_coeff,
         )
-        self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.2, patience=4, verbose=True)
-
+        self.scheduler = ReduceLROnPlateau(
+            self.optimizer, mode="min", factor=0.2, patience=4, verbose=True
+        )
 
     def train(self, epochs):
         writer = SummaryWriter(log_dir="./_logs")
@@ -198,6 +197,10 @@ class NoofBurrito:
             training_loss = 0.0
             for encoded_parents, masks, mutation_indicators in self.train_loader:
                 loss = self._calculate_loss(encoded_parents, masks, mutation_indicators)
+
+                if hasattr(self.model, "regularization_loss"):
+                    reg_loss = self.model.regularization_loss()
+                    loss += reg_loss
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -230,7 +233,6 @@ class NoofBurrito:
                 f"Epoch [{epoch+1}/{epochs}]\t Loss: {training_loss:.8g}\t Val Loss: {validation_loss:.8g}"
             )
             self.scheduler.step(validation_loss)
-
 
         return pd.DataFrame(
             {"training_losses": training_losses, "validation_losses": validation_losses}
