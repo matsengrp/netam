@@ -82,7 +82,6 @@ class NoofModel(nn.Module):
         self.embedding_dim = embedding_dim
         self.site_count = dataset.max_length
 
-        # self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
         self.kmer_embedding = nn.Embedding(self.kmer_count, self.embedding_dim)
         self.pos_encoder = PositionalEncoding(self.embedding_dim, dropout)
 
