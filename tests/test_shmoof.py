@@ -4,8 +4,8 @@ import pandas as pd
 import pytest
 import torch
 
-from netam.shmoof import SHMoofDataset, SHMoofModel, NoofBurrito, BASES
-from netam.noof import NoofModel
+from netam.framework import SHMoofDataset, Burrito, BASES
+from netam.models import SHMoofModel, NoofModel
 
 
 @pytest.fixture
@@ -37,14 +37,13 @@ def test_make_dataset(tiny_dataset):
 
 def test_run_model_forward(tiny_dataset, tiny_model):
     assert tiny_dataset.max_length == tiny_model.site_count
-    encoded_parents = tiny_dataset.encoded_parents
-    tiny_model.forward(encoded_parents)
+    tiny_model.forward(tiny_dataset.encoded_parents, tiny_dataset.masks)
 
 
 def test_run_shmoof(tiny_dataset, tiny_val_dataset, tiny_model):
-    burrito = NoofBurrito(tiny_dataset, tiny_val_dataset, tiny_model)
+    burrito = Burrito(tiny_dataset, tiny_val_dataset, tiny_model)
     burrito.train(epochs=5)
-    burrito.write_shmoof_output("_ignore")
+    tiny_model.write_shmoof_output("_ignore")
 
 
 def test_run_noof(tiny_dataset, tiny_val_dataset, tiny_model):
@@ -56,5 +55,5 @@ def test_run_noof(tiny_dataset, tiny_val_dataset, tiny_model):
         layer_count=3,
         dropout=0.5,
     )
-    burrito = NoofBurrito(tiny_dataset, tiny_val_dataset, model)
+    burrito = Burrito(tiny_dataset, tiny_val_dataset, model)
     burrito.train(epochs=5)
