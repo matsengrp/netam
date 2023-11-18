@@ -130,38 +130,7 @@ class SHMoofDataset(Dataset):
         )
 
 
-class SHMoofModel(nn.Module):
-    def __init__(self, dataset):
-        super(SHMoofModel, self).__init__()
-        self.kmer_count = len(dataset.kmer_to_index)
-        self.site_count = dataset.max_length
-
-        self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
-        self.log_site_rates = nn.Embedding(self.site_count, 1)
-
-    def forward(self, encoded_parents, masks):
-        log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze()
-        sequence_length = encoded_parents.size(1)
-        positions = torch.arange(sequence_length, device=encoded_parents.device)
-        # When we transpose we get a tensor of shape [sequence_length, 1], which will broadcast
-        # to the shape of log_kmer_rates, repeating over the batch dimension.
-        log_site_rates = self.log_site_rates(positions).T
-        # Rates are the product of kmer and site rates.
-        rates = torch.exp(log_kmer_rates + log_site_rates)
-        return rates
-
-    @property
-    def kmer_rates(self):
-        # Convert kmer log rates to linear space
-        return torch.exp(self.kmer_embedding.weight).squeeze()
-
-    @property
-    def site_rates(self):
-        # Convert site log rates to linear space
-        return torch.exp(self.log_site_rates.weight).squeeze()
-
-
-class NoofBurrito:
+class Burrito:
     def __init__(
         self,
         train_dataset,
@@ -248,28 +217,3 @@ class NoofBurrito:
         mutation_indicator_masked = mutation_indicators[masks].float()
         loss = self.criterion(mut_prob_masked, mutation_indicator_masked)
         return loss
-
-    def write_shmoof_output(self, out_dir):
-        # Extract k-mer (motif) mutabilities
-        kmer_rates = self.model.kmer_rates.detach().numpy().flatten()
-        motif_mutabilities = pd.DataFrame(
-            {
-                "Motif": self.train_loader.dataset.all_kmers,
-                "Mutability": kmer_rates,
-            }
-        )
-        motif_mutabilities.to_csv(
-            f"{out_dir}/motif_mutabilities.tsv", sep="\t", index=False
-        )
-
-        # Extract site mutabilities
-        site_mutabilities = self.model.site_rates.detach().numpy().flatten()
-        site_mutabilities_df = pd.DataFrame(
-            {
-                "Position": range(1, len(site_mutabilities) + 1),
-                "Mutability": site_mutabilities,
-            }
-        )
-        site_mutabilities_df.to_csv(
-            f"{out_dir}/site_mutabilities.tsv", sep="\t", index=False
-        )
