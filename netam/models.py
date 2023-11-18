@@ -73,9 +73,6 @@ class SHMoofModel(nn.Module):
         )
 
 
-
-
-
 class NoofModel(nn.Module):
     def __init__(
         self, dataset, embedding_dim, nhead, dim_feedforward, layer_count, dropout=0.5
@@ -106,7 +103,7 @@ class NoofModel(nn.Module):
         self.linear.bias.data.zero_()
         self.linear.weight.data.uniform_(-initrange, initrange)
 
-    def forward(self, encoded_parents):
+    def forward(self, encoded_parents, masks):
         """
         The forward method.
 
@@ -124,5 +121,3 @@ class NoofModel(nn.Module):
         log_rates = self.linear(transformer_output).squeeze(-1)
         rates = torch.exp(log_rates)
         return rates
-
-
