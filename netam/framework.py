@@ -1,3 +1,4 @@
+import inspect
 import itertools
 
 import pandas as pd
@@ -9,6 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+import optuna
 
 from tensorboardX import SummaryWriter
 
@@ -77,6 +79,18 @@ def create_mutation_indicator(parent, child, max_length):
         mutation_indicator += [0] * (max_length - len(mutation_indicator))
 
     return torch.tensor(mutation_indicator, dtype=torch.bool)
+
+
+def filter_kwargs(func, kwargs):
+    """
+    Filter kwargs to only those that the function accepts.
+    """
+    # Get the parameters of the function
+    sig = inspect.signature(func)
+    func_params = sig.parameters
+
+    # Filter kwargs to only those that the function accepts
+    return {k: v for k, v in kwargs.items() if k in func_params}
 
 
 class SHMoofDataset(Dataset):
@@ -242,7 +256,7 @@ class Burrito:
         return average_loss
 
 
-    def train(self, epochs):
+    def train(self, epochs, quiet=False):
         writer = SummaryWriter(log_dir="./_logs")
         train_losses = []
         val_losses = []
@@ -254,9 +268,10 @@ class Burrito:
             writer.add_scalar("Train loss", train_loss, epoch)
             writer.add_scalar("Validation loss", val_loss, epoch)
 
-            print(
-                f"Epoch [{epoch}/{epochs}]\t Loss: {train_loss:.8g}\t Val Loss: {val_loss:.8g}"
-            )
+            if not quiet:
+                print(
+                    f"Epoch [{epoch}/{epochs}]\t Loss: {train_loss:.8g}\t Val Loss: {val_loss:.8g}"
+                )
 
         train_loss = self.process_data_loader(self.train_loader, train_mode=False)
         val_loss = self.process_data_loader(self.val_loader, train_mode=False)
@@ -289,3 +304,93 @@ class Burrito:
         mutation_indicator_masked = mutation_indicators[masks].float()
         loss = self.criterion(mut_prob_masked, mutation_indicator_masked)
         return loss
+
+
+class HyperBurrito:
+    """
+    A burrito that can be used to optimize hyperparameters.
+    """
+    def __init__(
+        self,
+        device,
+        train_dataset,
+        val_dataset,
+        model_class,
+        batch_size=1024,
+        learning_rate=0.1,
+        min_learning_rate=1e-4,
+        l2_regularization_coeff=1e-6,
+        epochs=100,
+    ):
+        self.device = device
+        self.train_dataset = train_dataset
+        self.val_dataset = val_dataset
+        train_dataset.to(self.device)
+        val_dataset.to(self.device)
+        self.model_class = model_class
+        self.batch_size = batch_size
+        self.learning_rate = learning_rate
+        self.min_learning_rate = min_learning_rate
+        self.l2_regularization_coeff = l2_regularization_coeff
+        self.epochs = epochs
+        
+    def burrito_of_model(self, model):
+        burrito = Burrito(
+            self.train_dataset,
+            self.val_dataset,
+            model,
+            self.batch_size,
+            self.learning_rate,
+            self.min_learning_rate,
+            self.l2_regularization_coeff,
+        )
+        return burrito
+
+    def optuna_objective(self, trial, int_params, cat_params, log_float_params, fixed_hyperparams=None):
+        """ Optuna objective function.
+        
+        Args:
+            trial (optuna.Trial): Optuna trial object.
+            int_params (dict): Dictionary of integer parameters to optimize.
+            cat_params (dict): Dictionary of categorical parameters to optimize.
+            log_float_params (dict): Dictionary of float parameters to optimize on a log scale.
+            fixed_hyperparams (dict, optional): Dictionary of fixed hyperparameters. Defaults to None.
+            
+        Returns:
+            float: Validation loss.
+        """
+        hyperparams = fixed_hyperparams or {}
+
+        for param_name, (low, high) in int_params.items():
+            hyperparams[param_name] = trial.suggest_int(param_name, low, high)
+
+        for param_name, choices in cat_params.items():
+            hyperparams[param_name] = trial.suggest_categorical(param_name, choices)
+
+        for param_name, (low, high) in log_float_params.items():
+            hyperparams[param_name] = trial.suggest_float(param_name, low, high, log=True)
+
+        model_hyperparams = filter_kwargs(self.model_class, hyperparams)
+        model = self.model_class(self.train_dataset, **model_hyperparams)
+        model.to(self.device)
+
+        burrito_hyperparams = filter_kwargs(self.burrito_of_model, hyperparams)
+        burrito = self.burrito_of_model(model, **burrito_hyperparams)
+
+        losses = burrito.train(epochs=self.epochs, quiet=True)
+
+        return losses["validation_losses"].min()
+
+
+    def optuna_optimize(self, n_trials, int_params, cat_params, log_float_params, fixed_hyperparams=None):
+        study = optuna.create_study(direction="minimize")
+        study.optimize(lambda trial: self.optuna_objective(trial, int_params, cat_params, log_float_params, fixed_hyperparams), n_trials=n_trials)
+        best_hyperparams = study.best_params
+        best_score = study.best_value
+        print(f"Best Hyperparameters: {best_hyperparams}")
+        print(f"Best Validation Loss: {best_score}")
+
+        output_path = f"_ignore/optuna_{self.model_class.__name__}_{pd.Timestamp.now()}.csv"
+        trial_data = study.trials_dataframe()
+        trial_data.to_csv(output_path, index=False)
+ 
