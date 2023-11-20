@@ -197,61 +197,86 @@ class Burrito:
             self.optimizer, mode="min", factor=0.2, patience=4, verbose=True
         )
 
-    def train(self, epochs):
-        writer = SummaryWriter(log_dir="./_logs")
-
-        self.model.train()
-        training_losses = []
-        validation_losses = []
-
-        for epoch in range(epochs):
-            current_lr = self.optimizer.param_groups[0]['lr']
-            if current_lr < self.min_learning_rate:
-                print(f"Stopping training early: learning rate below {self.min_learning_rate}")
-                break
+    def process_data_loader(self, data_loader, train_mode=True):
+        """
+        Process data through the model using the given data loader.
+        If train_mode is True, performs optimization steps.
+        
+        Args:
+            data_loader (DataLoader): DataLoader to use.
+            train_mode (bool, optional): Whether to do optimization as part of
+                the forward pass. Defaults to True.
+                Note that this also applies the regularization loss if set to True.
             
-            training_loss = 0.0
-            for encoded_parents, masks, mutation_indicators in self.train_loader:
+        Returns:
+            float: Average loss.
+        """
+        total_loss = 0.0
+        total_samples = 0
+
+        if train_mode:
+            self.model.train()
+        else:
+            self.model.eval()
+
+        with torch.set_grad_enabled(train_mode):
+            for encoded_parents, masks, mutation_indicators in data_loader:
                 rates = self.model(encoded_parents, masks)
                 loss = calculate_loss(rates, masks, mutation_indicators)
 
-                if hasattr(self.model, "regularization_loss"):
-                    reg_loss = self.model.regularization_loss()
-                    loss += reg_loss
-
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
+                if train_mode:
+                    if hasattr(self.model, "regularization_loss"):
+                        reg_loss = self.model.regularization_loss()
+                        loss += reg_loss
+                    self.optimizer.zero_grad()
+                    loss.backward()
+                    self.optimizer.step()
 
                 # If we multiply the loss by the batch size, then the loss will be the sum of the
                 # losses for each example in the batch. Then, when we divide by the number of
                 # examples in the dataset below, we will get the average loss per example.
-                training_loss += loss.item() * encoded_parents.size(0)
+                total_loss += loss.item() * encoded_parents.size(0)
+                total_samples += encoded_parents.size(0)
 
-            training_loss /= len(self.train_loader.dataset)
-            training_losses.append(training_loss)
+        average_loss = total_loss / total_samples
+        return average_loss
 
-            # Validation phase
-            self.model.eval()
-            val_loss = 0.0
-            with torch.no_grad():
-                for encoded_parents, masks, mutation_indicators in self.val_loader:
-                    rates = self.model(encoded_parents, masks)
-                    loss = calculate_loss(rates, masks, mutation_indicators)
-                    val_loss += loss.item() * encoded_parents.size(0)
-            val_loss /= len(self.val_loader.dataset)
-            validation_losses.append(val_loss)
 
-            writer.add_scalar("Train loss", training_loss, epoch)
+    def train(self, epochs):
+        writer = SummaryWriter(log_dir="./_logs")
+        train_losses = []
+        val_losses = []
+
+        def record_losses(epoch, train_loss, val_loss):
+            train_losses.append(train_loss)
+            val_losses.append(val_loss)
+
+            writer.add_scalar("Train loss", train_loss, epoch)
             writer.add_scalar("Validation loss", val_loss, epoch)
 
             print(
-                f"Epoch [{epoch+1}/{epochs}]\t Loss: {training_loss:.8g}\t Val Loss: {val_loss:.8g}"
+                f"Epoch [{epoch}/{epochs}]\t Loss: {train_loss:.8g}\t Val Loss: {val_loss:.8g}"
             )
+
+        train_loss = self.process_data_loader(self.train_loader, train_mode=False)
+        val_loss = self.process_data_loader(self.val_loader, train_mode=False)
+
+        record_losses(0, train_loss, val_loss)
+
+        for epoch in range(1, epochs+1):
+            current_lr = self.optimizer.param_groups[0]['lr']
+            if current_lr < self.min_learning_rate:
+                print(f"Stopping training early: learning rate below {self.min_learning_rate}")
+                break
+
+            train_loss = self.process_data_loader(self.train_loader, train_mode=True)
+            val_loss = self.process_data_loader(self.val_loader, train_mode=False)
+            record_losses(epoch, train_loss, val_loss)
+
             self.scheduler.step(val_loss)
 
         return pd.DataFrame(
-            {"training_losses": training_losses, "validation_losses": validation_losses}
+            {"training_losses": train_losses, "validation_losses": val_losses}
         )
 
     def _calculate_loss(self, encoded_parents, masks, mutation_indicators):
