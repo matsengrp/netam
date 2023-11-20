@@ -16,8 +16,32 @@ from epam.torch_common import PositionalEncoding
 
 BASES = ["A", "C", "G", "T"]
 
+bce_loss = nn.BCELoss()
 
-def load_shmoof_dataframes(csv_path, sample_count=None):
+def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
+    """Load the shmoof dataframes from the csv_path and return train and validation dataframes.
+    
+    Args:
+        csv_path (str): Path to the csv file containing the shmoof data.
+        sample_count (int, optional): Number of samples to use. Defaults to None.
+        val_nickname (str, optional): Nickname of the sample to use for validation. Defaults to "13".
+    
+    Returns:
+        tuple: Tuple of train and validation dataframes.
+    
+    Notes:
+    
+    The sample nicknames are: `51` is the biggest one, `13` is the second biggest,
+    and `small` is the rest of the repertoires merged together.
+
+    If the nickname is `split`, then we do a random 80/20 split of the data.
+
+    Here are the value_counts: 
+    51       38174
+    small    24208
+    13       21940
+
+    """
     full_shmoof_df = pd.read_csv(csv_path, index_col=0).reset_index(drop=True)
 
     # only keep rows where parent is different than child
@@ -26,11 +50,17 @@ def load_shmoof_dataframes(csv_path, sample_count=None):
     if sample_count is not None:
         full_shmoof_df = full_shmoof_df.sample(sample_count)
 
-    # train_df = full_shmoof_df.sample(frac=0.8)
-    # val_df = full_shmoof_df.drop(train_df.index)
+    if val_nickname == "split":
+        train_df = full_shmoof_df.sample(frac=0.8)
+        val_df = full_shmoof_df.drop(train_df.index)
+        return train_df, val_df
+    
+    # else
+    full_shmoof_df["nickname"] = "small"
+    full_shmoof_df.loc[full_shmoof_df["sample_id"] == 326651, "nickname"] = "51"
+    full_shmoof_df.loc[full_shmoof_df["sample_id"] == 326713, "nickname"] = "13"
 
-    # Hold out sample 326713
-    val_df = full_shmoof_df[full_shmoof_df["sample_id"] == 326713]
+    val_df = full_shmoof_df[full_shmoof_df["nickname"] == val_nickname]
     train_df = full_shmoof_df.drop(val_df.index)
 
     return train_df, val_df
@@ -130,6 +160,17 @@ class SHMoofDataset(Dataset):
         )
 
 
+def calculate_loss(rates, masks, mutation_indicators):
+    mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
+        dim=1, keepdim=True
+    )
+    mut_prob = 1 - torch.exp(-rates * mutation_freq)
+    mut_prob_masked = mut_prob[masks]
+    mutation_indicator_masked = mutation_indicators[masks].float()
+    loss = bce_loss(mut_prob_masked, mutation_indicator_masked)
+    return loss
+
+
 class Burrito:
     def __init__(
         self,
@@ -138,6 +179,7 @@ class Burrito:
         model,
         batch_size=1024,
         learning_rate=0.1,
+        min_learning_rate=1e-4,
         l2_regularization_coeff=1e-6,
     ):
         self.train_loader = DataLoader(
@@ -145,12 +187,12 @@ class Burrito:
         )
         self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
         self.model = model
-        self.criterion = nn.BCELoss()
         self.optimizer = torch.optim.Adam(
             self.model.parameters(),
             lr=learning_rate,
             weight_decay=l2_regularization_coeff,
         )
+        self.min_learning_rate = min_learning_rate
         self.scheduler = ReduceLROnPlateau(
             self.optimizer, mode="min", factor=0.2, patience=4, verbose=True
         )
@@ -163,9 +205,15 @@ class Burrito:
         validation_losses = []
 
         for epoch in range(epochs):
+            current_lr = self.optimizer.param_groups[0]['lr']
+            if current_lr < self.min_learning_rate:
+                print(f"Stopping training early: learning rate below {self.min_learning_rate}")
+                break
+            
             training_loss = 0.0
             for encoded_parents, masks, mutation_indicators in self.train_loader:
-                loss = self._calculate_loss(encoded_parents, masks, mutation_indicators)
+                rates = self.model(encoded_parents, masks)
+                loss = calculate_loss(rates, masks, mutation_indicators)
 
                 if hasattr(self.model, "regularization_loss"):
                     reg_loss = self.model.regularization_loss()
@@ -185,23 +233,22 @@ class Burrito:
 
             # Validation phase
             self.model.eval()
-            validation_loss = 0.0
+            val_loss = 0.0
             with torch.no_grad():
                 for encoded_parents, masks, mutation_indicators in self.val_loader:
-                    loss = self._calculate_loss(
-                        encoded_parents, masks, mutation_indicators
-                    )
-                    validation_loss += loss.item() * encoded_parents.size(0)
-            validation_loss /= len(self.val_loader.dataset)
-            validation_losses.append(validation_loss)
+                    rates = self.model(encoded_parents, masks)
+                    loss = calculate_loss(rates, masks, mutation_indicators)
+                    val_loss += loss.item() * encoded_parents.size(0)
+            val_loss /= len(self.val_loader.dataset)
+            validation_losses.append(val_loss)
 
             writer.add_scalar("Train loss", training_loss, epoch)
-            writer.add_scalar("Validation loss", validation_loss, epoch)
+            writer.add_scalar("Validation loss", val_loss, epoch)
 
             print(
-                f"Epoch [{epoch+1}/{epochs}]\t Loss: {training_loss:.8g}\t Val Loss: {validation_loss:.8g}"
+                f"Epoch [{epoch+1}/{epochs}]\t Loss: {training_loss:.8g}\t Val Loss: {val_loss:.8g}"
             )
-            self.scheduler.step(validation_loss)
+            self.scheduler.step(val_loss)
 
         return pd.DataFrame(
             {"training_losses": training_losses, "validation_losses": validation_losses}

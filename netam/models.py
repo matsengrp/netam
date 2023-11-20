@@ -16,6 +16,25 @@ from epam.torch_common import PositionalEncoding
 BASES = ["A", "C", "G", "T"]
 
 
+class FivemerModel(nn.Module):
+    def __init__(self, dataset):
+        super(FivemerModel, self).__init__()
+        self.all_kmers = dataset.all_kmers
+        self.kmer_count = len(dataset.kmer_to_index)
+
+        self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
+
+    def forward(self, encoded_parents, masks):
+        log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze()
+        rates = torch.exp(log_kmer_rates)
+        return rates
+
+    @property
+    def kmer_rates(self):
+        # Convert kmer log rates to linear space
+        return torch.exp(self.kmer_embedding.weight).squeeze()
+
+
 class SHMoofModel(nn.Module):
     def __init__(self, dataset):
         super(SHMoofModel, self).__init__()
