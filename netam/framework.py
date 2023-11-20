@@ -1,3 +1,4 @@
+from datetime import datetime
 import inspect
 import itertools
 
@@ -335,13 +336,14 @@ class HyperBurrito:
         )
         return burrito
 
-    def optuna_objective(self, trial, int_params, cat_params, log_float_params, fixed_hyperparams=None):
+    def optuna_objective(self, trial, int_params, cat_params, float_params, log_float_params, fixed_hyperparams=None):
         """ Optuna objective function.
         
         Args:
             trial (optuna.Trial): Optuna trial object.
             int_params (dict): Dictionary of integer parameters to optimize.
             cat_params (dict): Dictionary of categorical parameters to optimize.
+            float_params (dict): Dictionary of float parameters to optimize on a linear scale.
             log_float_params (dict): Dictionary of float parameters to optimize on a log scale.
             fixed_hyperparams (dict, optional): Dictionary of fixed hyperparameters. Defaults to None.
             
@@ -350,11 +352,14 @@ class HyperBurrito:
         """
         hyperparams = fixed_hyperparams or {}
 
+        for param_name, choices in cat_params.items():
+            hyperparams[param_name] = trial.suggest_categorical(param_name, choices)
+
         for param_name, (low, high) in int_params.items():
             hyperparams[param_name] = trial.suggest_int(param_name, low, high)
 
-        for param_name, choices in cat_params.items():
-            hyperparams[param_name] = trial.suggest_categorical(param_name, choices)
+        for param_name, (low, high) in float_params.items():
+            hyperparams[param_name] = trial.suggest_float(param_name, low, high)
 
         for param_name, (low, high) in log_float_params.items():
             hyperparams[param_name] = trial.suggest_float(param_name, low, high, log=True)
@@ -371,14 +376,15 @@ class HyperBurrito:
         return losses["validation_losses"].min()
 
 
-    def optuna_optimize(self, n_trials, int_params, cat_params, log_float_params, fixed_hyperparams=None):
+    def optuna_optimize(self, n_trials, cat_params, int_params, float_params, log_float_params, fixed_hyperparams=None):
         study = optuna.create_study(direction="minimize")
-        study.optimize(lambda trial: self.optuna_objective(trial, int_params, cat_params, log_float_params, fixed_hyperparams), n_trials=n_trials)
+        study.optimize(lambda trial: self.optuna_objective(trial, int_params, cat_params, float_params, log_float_params, fixed_hyperparams), n_trials=n_trials)
         best_hyperparams = study.best_params
         best_score = study.best_value
         print(f"Best Hyperparameters: {best_hyperparams}")
         print(f"Best Validation Loss: {best_score}")
 
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_path = f"_ignore/optuna_{self.model_class.__name__}_{pd.Timestamp.now()}.csv"
         trial_data = study.trials_dataframe()
         trial_data.to_csv(output_path, index=False)
