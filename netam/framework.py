@@ -316,10 +316,6 @@ class HyperBurrito:
         train_dataset,
         val_dataset,
         model_class,
-        batch_size=1024,
-        learning_rate=0.1,
-        min_learning_rate=1e-4,
-        l2_regularization_coeff=1e-6,
         epochs=100,
     ):
         self.device = device
@@ -328,21 +324,14 @@ class HyperBurrito:
         train_dataset.to(self.device)
         val_dataset.to(self.device)
         self.model_class = model_class
-        self.batch_size = batch_size
-        self.learning_rate = learning_rate
-        self.min_learning_rate = min_learning_rate
-        self.l2_regularization_coeff = l2_regularization_coeff
         self.epochs = epochs
         
-    def burrito_of_model(self, model):
+    def burrito_of_model(self, model, **kwargs):
         burrito = Burrito(
             self.train_dataset,
             self.val_dataset,
             model,
-            self.batch_size,
-            self.learning_rate,
-            self.min_learning_rate,
-            self.l2_regularization_coeff,
+            **kwargs
         )
         return burrito
 
