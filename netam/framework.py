@@ -197,7 +197,7 @@ class Burrito:
             self.optimizer, mode="min", factor=0.2, patience=4, verbose=True
         )
 
-    def process_data_loader(self, data_loader, train_mode=True):
+    def process_data_loader(self, data_loader, train_mode=False):
         """
         Process data through the model using the given data loader.
         If train_mode is True, performs optimization steps.
@@ -205,7 +205,7 @@ class Burrito:
         Args:
             data_loader (DataLoader): DataLoader to use.
             train_mode (bool, optional): Whether to do optimization as part of
-                the forward pass. Defaults to True.
+                the forward pass. Defaults to False.
                 Note that this also applies the regularization loss if set to True.
             
         Returns:
