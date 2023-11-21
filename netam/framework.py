@@ -66,6 +66,8 @@ def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
     val_df = full_shmoof_df[full_shmoof_df["nickname"] == val_nickname]
     train_df = full_shmoof_df.drop(val_df.index)
 
+    assert len(val_df) > 0, f"No validation samples found with nickname {val_nickname}"
+
     return train_df, val_df
 
 
@@ -196,6 +198,7 @@ class Burrito:
         learning_rate=0.1,
         min_learning_rate=1e-4,
         l2_regularization_coeff=1e-6,
+        verbose=True,
     ):
         self.train_loader = DataLoader(
             train_dataset, batch_size=batch_size, shuffle=True
@@ -209,8 +212,9 @@ class Burrito:
         )
         self.min_learning_rate = min_learning_rate
         self.scheduler = ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.2, patience=4, verbose=True
+            self.optimizer, mode="min", factor=0.2, patience=4, verbose=verbose
         )
+        self.verbose = verbose
 
     def process_data_loader(self, data_loader, train_mode=False):
         """
@@ -257,7 +261,7 @@ class Burrito:
         return average_loss
 
 
-    def train(self, epochs, quiet=False):
+    def train(self, epochs):
         writer = SummaryWriter(log_dir="./_logs")
         train_losses = []
         val_losses = []
@@ -269,7 +273,7 @@ class Burrito:
             writer.add_scalar("Train loss", train_loss, epoch)
             writer.add_scalar("Validation loss", val_loss, epoch)
 
-            if not quiet:
+            if self.verbose:
                 print(
                     f"Epoch [{epoch}/{epochs}]\t Loss: {train_loss:.8g}\t Val Loss: {val_loss:.8g}"
                 )
@@ -282,7 +286,8 @@ class Burrito:
         for epoch in range(1, epochs+1):
             current_lr = self.optimizer.param_groups[0]['lr']
             if current_lr < self.min_learning_rate:
-                print(f"Stopping training early: learning rate below {self.min_learning_rate}")
+                if self.verbose:
+                    print(f"Stopping training early: learning rate below {self.min_learning_rate}")
                 break
 
             train_loss = self.process_data_loader(self.train_loader, train_mode=True)
@@ -292,7 +297,7 @@ class Burrito:
             self.scheduler.step(val_loss)
 
         return pd.DataFrame(
-            {"training_losses": train_losses, "validation_losses": val_losses}
+            {"train_loss": train_losses, "val_loss": val_losses}
         )
 
     def _calculate_loss(self, encoded_parents, masks, mutation_indicators):
@@ -332,6 +337,7 @@ class HyperBurrito:
             self.train_dataset,
             self.val_dataset,
             model,
+            verbose=False,
             **kwargs
         )
         return burrito
@@ -371,7 +377,7 @@ class HyperBurrito:
         burrito_hyperparams = filter_kwargs(self.burrito_of_model, hyperparams)
         burrito = self.burrito_of_model(model, **burrito_hyperparams)
 
-        losses = burrito.train(epochs=self.epochs, quiet=True)
+        losses = burrito.train(epochs=self.epochs)
 
         return losses["validation_losses"].min()
 
@@ -385,7 +391,7 @@ class HyperBurrito:
         print(f"Best Validation Loss: {best_score}")
 
         timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = f"_ignore/optuna_{self.model_class.__name__}_{pd.Timestamp.now()}.csv"
+        output_path = f"_ignore/optuna_{self.model_class.__name__}_{timestamp_str}.csv"
         trial_data = study.trials_dataframe()
         trial_data.to_csv(output_path, index=False)
  
