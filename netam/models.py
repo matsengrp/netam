@@ -139,3 +139,23 @@ class NoofModel(nn.Module):
         log_rates = self.linear(transformer_output).squeeze(-1)
         rates = torch.exp(log_rates)
         return rates
+
+
+class CNNModel(nn.Module):
+    def __init__(self, dataset, embedding_dim, num_filters, kernel_size, dropout_rate=0.1):
+        super(CNNModel, self).__init__()
+        self.kmer_count = len(dataset.kmer_to_index)
+        self.kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
+        self.conv = nn.Conv1d(in_channels=embedding_dim, out_channels=num_filters, kernel_size=kernel_size, padding='same')
+        self.dropout = nn.Dropout(dropout_rate)
+        self.linear = nn.Linear(in_features=num_filters, out_features=1)
+
+    def forward(self, encoded_parents, masks):
+        kmer_embeds = self.kmer_embedding(encoded_parents)
+        kmer_embeds = kmer_embeds.permute(0, 2, 1)  # Transpose for Conv1D
+        conv_out = F.relu(self.conv(kmer_embeds))
+        conv_out = self.dropout(conv_out)
+        conv_out = conv_out.permute(0, 2, 1)  # Transpose back for Linear layer
+        log_rates = self.linear(conv_out).squeeze(-1)
+        rates = torch.exp(log_rates * masks)
+        return rates
