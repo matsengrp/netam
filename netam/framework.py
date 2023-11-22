@@ -40,10 +40,12 @@ def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
     If the nickname is `split`, then we do a random 80/20 split of the data.
 
     Here are the value_counts: 
-    51       38174
-    small    24208
-    13       21940
-
+    51       22424
+    13       13186
+    59        4686
+    88        3067
+    97        3028
+    small     2625
     """
     full_shmoof_df = pd.read_csv(csv_path, index_col=0).reset_index(drop=True)
 
@@ -59,9 +61,9 @@ def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
         return train_df, val_df
     
     # else
-    full_shmoof_df["nickname"] = "small"
-    full_shmoof_df.loc[full_shmoof_df["sample_id"] == 326651, "nickname"] = "51"
-    full_shmoof_df.loc[full_shmoof_df["sample_id"] == 326713, "nickname"] = "13"
+    full_shmoof_df["nickname"] = full_shmoof_df["sample_id"].astype(str).str[-2:]
+    for small_nickname in ["80", "37", "50", "07"]:
+        full_shmoof_df.loc[full_shmoof_df["nickname"] == small_nickname, "nickname"] = "small"
 
     val_df = full_shmoof_df[full_shmoof_df["nickname"] == val_nickname]
     train_df = full_shmoof_df.drop(val_df.index)
@@ -379,7 +381,7 @@ class HyperBurrito:
 
         losses = burrito.train(epochs=self.epochs)
 
-        return losses["validation_losses"].min()
+        return losses["val_loss"].min()
 
 
     def optuna_optimize(self, n_trials, cat_params, int_params, float_params, log_float_params, fixed_hyperparams=None):
