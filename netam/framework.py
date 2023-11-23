@@ -3,6 +3,7 @@ import inspect
 import itertools
 
 import pandas as pd
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
@@ -96,6 +97,10 @@ def filter_kwargs(func, kwargs):
 
     # Filter kwargs to only those that the function accepts
     return {k: v for k, v in kwargs.items() if k in func_params}
+                      
+
+def timestamp_str():
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 class SHMoofDataset(Dataset):
@@ -200,23 +205,28 @@ class Burrito:
         learning_rate=0.1,
         min_learning_rate=1e-4,
         l2_regularization_coeff=1e-6,
-        verbose=True,
+        verbose=False,
     ):
         self.train_loader = DataLoader(
             train_dataset, batch_size=batch_size, shuffle=True
         )
         self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
         self.model = model
-        self.optimizer = torch.optim.Adam(
-            self.model.parameters(),
-            lr=learning_rate,
-            weight_decay=l2_regularization_coeff,
-        )
+        self.learning_rate = learning_rate
         self.min_learning_rate = min_learning_rate
+        self.l2_regularization_coeff = l2_regularization_coeff
+        self.reset_optimizer()
         self.scheduler = ReduceLROnPlateau(
             self.optimizer, mode="min", factor=0.2, patience=4, verbose=verbose
         )
         self.verbose = verbose
+
+    def reset_optimizer(self):
+        self.optimizer = torch.optim.Adam(
+            self.model.parameters(),
+            lr=self.learning_rate,
+            weight_decay=self.l2_regularization_coeff,
+        )
 
     def process_data_loader(self, data_loader, train_mode=False):
         """
@@ -285,18 +295,24 @@ class Burrito:
 
         record_losses(0, train_loss, val_loss)
 
-        for epoch in range(1, epochs+1):
-            current_lr = self.optimizer.param_groups[0]['lr']
-            if current_lr < self.min_learning_rate:
-                if self.verbose:
-                    print(f"Stopping training early: learning rate below {self.min_learning_rate}")
-                break
+        with tqdm(range(1, epochs + 1), desc='Epoch') as pbar:
+            for epoch in pbar:
+                current_lr = self.optimizer.param_groups[0]['lr']
+                if current_lr < self.min_learning_rate:
+                    if self.verbose:
+                        print(f"Stopping training early: learning rate below {self.min_learning_rate}")
+                    break
 
-            train_loss = self.process_data_loader(self.train_loader, train_mode=True)
-            val_loss = self.process_data_loader(self.val_loader, train_mode=False)
-            record_losses(epoch, train_loss, val_loss)
+                train_loss = self.process_data_loader(self.train_loader, train_mode=True)
+                val_loss = self.process_data_loader(self.val_loader, train_mode=False)
+                self.scheduler.step(val_loss)
 
-            self.scheduler.step(val_loss)
+                record_losses(epoch, train_loss, val_loss)
+
+                current_lr = self.optimizer.param_groups[0]['lr']
+                if len(val_losses) > 1:
+                    loss_diff = val_losses[-1] - val_losses[-2]
+                    pbar.set_postfix(loss_diff=f'{loss_diff:.4g}', lr=current_lr, refresh=True)
 
         return pd.DataFrame(
             {"train_loss": train_losses, "val_loss": val_losses}
@@ -392,8 +408,7 @@ class HyperBurrito:
         print(f"Best Hyperparameters: {best_hyperparams}")
         print(f"Best Validation Loss: {best_score}")
 
-        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = f"_ignore/optuna_{self.model_class.__name__}_{timestamp_str}.csv"
+        output_path = f"_ignore/optuna_{self.model_class.__name__}_{timestamp_str()}.csv"
         trial_data = study.trials_dataframe()
         trial_data.to_csv(output_path, index=False)
  
