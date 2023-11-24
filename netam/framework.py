@@ -16,7 +16,7 @@ import optuna
 
 from tensorboardX import SummaryWriter
 
-from epam.torch_common import PositionalEncoding
+from epam.torch_common import parameter_count_of_model
 
 BASES = ["A", "C", "G", "T"]
 
@@ -362,6 +362,13 @@ class HyperBurrito:
 
     def optuna_objective(self, trial, int_params, cat_params, float_params, log_float_params, fixed_hyperparams=None):
         """ Optuna objective function.
+
+        Return validation loss unless the model has more parameters than allowed
+        in fixed_hyperparams["max_parameter_count"], in which case return 1e9.
+
+        Note that if a parameter appears in one of the xxx_params dictionaries
+        used for sampling as well as the fixed_hyperparams dictionary, the
+        sampled value will be used.
         
         Args:
             trial (optuna.Trial): Optuna trial object.
@@ -372,7 +379,7 @@ class HyperBurrito:
             fixed_hyperparams (dict, optional): Dictionary of fixed hyperparameters. Defaults to None.
             
         Returns:
-            float: Validation loss.
+            float: Validation loss or 1e9 if the model has too many parameters.
         """
         hyperparams = fixed_hyperparams or {}
 
@@ -391,6 +398,12 @@ class HyperBurrito:
         model_hyperparams = filter_kwargs(self.model_class, hyperparams)
         model = self.model_class(self.train_dataset, **model_hyperparams)
         model.to(self.device)
+
+        if hyperparams is not None and "max_parameter_count" in hyperparams:
+            parameter_count = parameter_count_of_model(model)
+            if parameter_count > hyperparams["max_parameter_count"]:
+                print(f"Trial rejected because model has {parameter_count} > {hyperparams['max_parameter_count']} parameters.")
+                return 1e9
 
         burrito_hyperparams = filter_kwargs(self.burrito_of_model, hyperparams)
         burrito = self.burrito_of_model(model, **burrito_hyperparams)
