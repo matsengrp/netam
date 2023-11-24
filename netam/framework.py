@@ -20,8 +20,6 @@ from epam.torch_common import parameter_count_of_model
 
 BASES = ["A", "C", "G", "T"]
 
-bce_loss = nn.BCELoss()
-
 def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
     """Load the shmoof dataframes from the csv_path and return train and validation dataframes.
     
@@ -184,17 +182,6 @@ class SHMoofDataset(Dataset):
         )
 
 
-def calculate_loss(rates, masks, mutation_indicators):
-    mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
-        dim=1, keepdim=True
-    )
-    mut_prob = 1 - torch.exp(-rates * mutation_freq)
-    mut_prob_masked = mut_prob[masks]
-    mutation_indicator_masked = mutation_indicators[masks].float()
-    loss = bce_loss(mut_prob_masked, mutation_indicator_masked)
-    return loss
-
-
 class Burrito:
     def __init__(
         self,
@@ -220,6 +207,8 @@ class Burrito:
             self.optimizer, mode="min", factor=0.2, patience=4, verbose=verbose
         )
         self.verbose = verbose
+        self.bce_loss = nn.BCELoss()
+
 
     def reset_optimizer(self):
         self.optimizer = torch.optim.Adam(
@@ -252,8 +241,7 @@ class Burrito:
 
         with torch.set_grad_enabled(train_mode):
             for encoded_parents, masks, mutation_indicators in data_loader:
-                rates = self.model(encoded_parents, masks)
-                loss = calculate_loss(rates, masks, mutation_indicators)
+                loss = self._calculate_loss(encoded_parents, masks, mutation_indicators)
 
                 if train_mode:
                     if hasattr(self.model, "regularization_loss"):
@@ -326,7 +314,7 @@ class Burrito:
         mut_prob = 1 - torch.exp(-rates * mutation_freq)
         mut_prob_masked = mut_prob[masks]
         mutation_indicator_masked = mutation_indicators[masks].float()
-        loss = self.criterion(mut_prob_masked, mutation_indicator_masked)
+        loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
         return loss
 
 
