@@ -142,6 +142,9 @@ class NoofModel(nn.Module):
 
 
 class CNNModel(nn.Module):
+    """
+    This is a CNN model that uses k-mers as input and trains an embedding layer.
+    """
     def __init__(self, dataset, embedding_dim, num_filters, kernel_size, dropout_rate=0.1):
         super(CNNModel, self).__init__()
         self.kmer_count = len(dataset.kmer_to_index)
@@ -159,3 +162,39 @@ class CNNModel(nn.Module):
         log_rates = self.linear(conv_out).squeeze(-1)
         rates = torch.exp(log_rates * masks)
         return rates
+
+class CNN1merModel(CNNModel):
+    """
+    This is a CNN model that uses individual bases as input and does not train an
+    embedding layer.
+    """
+    def __init__(self, dataset, num_filters, kernel_size, dropout_rate=0.1):
+        embedding_dim = 5
+        super(CNN1merModel, self).__init__(dataset, embedding_dim, num_filters, kernel_size, dropout_rate)
+        assert dataset.kmer_length == 1
+        identity_matrix = torch.eye(embedding_dim)
+        self.kmer_embedding.weight = nn.Parameter(identity_matrix, requires_grad=False)
+
+
+class PersiteWrapper(nn.Module):
+    """
+    This wraps another model, but adds a per-site rate component.
+    """
+    def __init__(self, base_model, dataset):
+        super(PersiteWrapper, self).__init__()
+        self.base_model = base_model
+        self.site_count = dataset.max_length
+        self.log_site_rates = nn.Embedding(self.site_count, 1)
+
+    def forward(self, encoded_parents, masks):
+        base_model_rates = self.base_model(encoded_parents, masks)
+        sequence_length = encoded_parents.size(1)
+        positions = torch.arange(sequence_length, device=encoded_parents.device)
+        log_site_rates = self.log_site_rates(positions).T
+        rates = base_model_rates * torch.exp(log_site_rates)
+        return rates
+    
+    @property
+    def site_rates(self):
+        # Convert site log rates to linear space
+        return torch.exp(self.log_site_rates.weight).squeeze()
