@@ -1,12 +1,21 @@
 # netam
+
 Neural networks to model BCR affinity maturation
 
-## TODOs?
+## TODOs
 
-* try adding annotation to the sequences and training on it
+* compare models using the shmple framework
+* make a per-NT model
 * think about boundary cases of beginning and end of sequence
+    * you know, for BCR sequences, we could probably guess what the beginning and end is
 * rerun everything with 500 long bases
-* rename `CNNPP` model to `CNPE` model
+* rename `CNNPP` model to `CNNPE` model
+* train a mouse model
+    * compare models predicting on the replay experiment?
+* make a nice python interface for people who just want to use the model
+* write an R interface for people who want to use the model
+* set up CI
+* make model releases
 
 ## Goals
 
@@ -35,3 +44,4 @@ Neural networks to model BCR affinity maturation
 ## Conclusions
 * CNN using kmer embeddings work, and can be parameter-sparse
 * transformers aren't good for this problem, and positional encoding appears to hurt
+* this doesn't really give credence to the idea that position along the sequence matters
