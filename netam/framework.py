@@ -106,7 +106,7 @@ class SHMoofDataset(Dataset):
         self.max_length = max_length
         self.kmer_length = kmer_length
         self.overhang_length = (kmer_length - 1) // 2
-        assert self.overhang_length > 0 and kmer_length % 2 == 1
+        assert kmer_length % 2 == 1
 
         # Our strategy to kmers is to have a single representation for any kmer that isn't in ACGT.
         # This is the first one so is the default value below.
