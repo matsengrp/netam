@@ -10,8 +10,8 @@ Neural networks to model BCR affinity maturation
 
 ## Goals
 
-* want to do a comprehensive survey, and provide useful software with rigorous metrics
 * modern techniques such as regularization and transformers
+* a comprehensive survey, and provide useful software with rigorous metrics
 * comparison to oracle
 
 
@@ -20,7 +20,7 @@ Neural networks to model BCR affinity maturation
 * `cnn.ipynb`: Hyperparameter optimization for CNN model
 * `cnn_1mer.ipynb`: Hyperparameter optimization for CNN1Mer model
 * `cnnmlp.ipynb`: Adding a hidden layer in the final layer is bad
-* `cnnpp.ipynb`: Adding a positional encoding to the CNN might be good
+* `cnnpp.ipynb`: Adding a positional encoding to the CNN
 * `cnnxformer.ipynb`: Adding a transformer to the CNN makes it worse
 * `data-description.ipynb`: Exploration of SHMoof data sets
 * `fivemer.ipynb`: L2 regularizing the 5mer model doesn't help
@@ -34,4 +34,4 @@ Neural networks to model BCR affinity maturation
 
 ## Conclusions
 * CNN using kmer embeddings work, and can be parameter-sparse
-* transformers don't help
+* transformers aren't good for this problem, and positional encoding appears to hurt
