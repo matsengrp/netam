@@ -114,9 +114,9 @@ class CNNModel(nn.Module):
         return rates
 
 
-class CNNPPModel(nn.Module):
+class CNNPEModel(nn.Module):
     def __init__(self, dataset, embedding_dim, num_filters, kernel_size, dropout_rate):
-        super(CNNPPModel, self).__init__()
+        super(CNNPEModel, self).__init__()
         self.kmer_count = len(dataset.kmer_to_index)
         self.kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
         self.pos_encoder = PositionalEncoding(embedding_dim, dropout=dropout_rate)

@@ -1,4 +1,5 @@
 from datetime import datetime
+import copy
 import inspect
 import itertools
 
@@ -266,6 +267,8 @@ class Burrito:
         writer = SummaryWriter(log_dir="./_logs")
         train_losses = []
         val_losses = []
+        best_val_loss = float('inf')
+        best_model_state = None
 
         def record_losses(epoch, train_loss, val_loss):
             train_losses.append(train_loss)
@@ -302,12 +305,19 @@ class Burrito:
 
                 record_losses(epoch, train_loss, val_loss)
 
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    best_model_state = copy.deepcopy(self.model.state_dict())
+
                 current_lr = self.optimizer.param_groups[0]["lr"]
                 if len(val_losses) > 1:
                     loss_diff = val_losses[-1] - val_losses[-2]
                     pbar.set_postfix(
                         loss_diff=f"{loss_diff:.4g}", lr=current_lr, refresh=True
                     )
+
+        if best_model_state is not None:
+            self.model.load_state_dict(best_model_state)
 
         return pd.DataFrame({"train_loss": train_losses, "val_loss": val_losses})
 
@@ -321,6 +331,12 @@ class Burrito:
         mutation_indicator_masked = mutation_indicators[masks].float()
         loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
         return loss
+
+    def evaluate(self):
+        """
+        Evaluate the model on the validation set.
+        """
+        return self.process_data_loader(self.val_loader, train_mode=False)
 
 
 class HyperBurrito:
