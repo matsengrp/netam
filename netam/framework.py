@@ -20,25 +20,26 @@ from epam.torch_common import parameter_count_of_model
 
 BASES = ["A", "C", "G", "T"]
 
+
 def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
     """Load the shmoof dataframes from the csv_path and return train and validation dataframes.
-    
+
     Args:
         csv_path (str): Path to the csv file containing the shmoof data.
         sample_count (int, optional): Number of samples to use. Defaults to None.
         val_nickname (str, optional): Nickname of the sample to use for validation. Defaults to "13".
-    
+
     Returns:
         tuple: Tuple of train and validation dataframes.
-    
+
     Notes:
-    
+
     The sample nicknames are: `51` is the biggest one, `13` is the second biggest,
     and `small` is the rest of the repertoires merged together.
 
     If the nickname is `split`, then we do a random 80/20 split of the data.
 
-    Here are the value_counts: 
+    Here are the value_counts:
     51       22424
     13       13186
     59        4686
@@ -58,11 +59,13 @@ def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
         train_df = full_shmoof_df.sample(frac=0.8)
         val_df = full_shmoof_df.drop(train_df.index)
         return train_df, val_df
-    
+
     # else
     full_shmoof_df["nickname"] = full_shmoof_df["sample_id"].astype(str).str[-2:]
     for small_nickname in ["80", "37", "50", "07"]:
-        full_shmoof_df.loc[full_shmoof_df["nickname"] == small_nickname, "nickname"] = "small"
+        full_shmoof_df.loc[
+            full_shmoof_df["nickname"] == small_nickname, "nickname"
+        ] = "small"
 
     val_df = full_shmoof_df[full_shmoof_df["nickname"] == val_nickname]
     train_df = full_shmoof_df.drop(val_df.index)
@@ -95,7 +98,7 @@ def filter_kwargs(func, kwargs):
 
     # Filter kwargs to only those that the function accepts
     return {k: v for k, v in kwargs.items() if k in func_params}
-                      
+
 
 def timestamp_str():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -209,7 +212,6 @@ class Burrito:
         self.verbose = verbose
         self.bce_loss = nn.BCELoss()
 
-
     def reset_optimizer(self):
         self.optimizer = torch.optim.Adam(
             self.model.parameters(),
@@ -221,13 +223,13 @@ class Burrito:
         """
         Process data through the model using the given data loader.
         If train_mode is True, performs optimization steps.
-        
+
         Args:
             data_loader (DataLoader): DataLoader to use.
             train_mode (bool, optional): Whether to do optimization as part of
                 the forward pass. Defaults to False.
                 Note that this also applies the regularization loss if set to True.
-            
+
         Returns:
             float: Average loss.
         """
@@ -260,7 +262,6 @@ class Burrito:
         average_loss = total_loss / total_samples
         return average_loss
 
-
     def train(self, epochs):
         writer = SummaryWriter(log_dir="./_logs")
         train_losses = []
@@ -283,28 +284,32 @@ class Burrito:
 
         record_losses(0, train_loss, val_loss)
 
-        with tqdm(range(1, epochs + 1), desc='Epoch') as pbar:
+        with tqdm(range(1, epochs + 1), desc="Epoch") as pbar:
             for epoch in pbar:
-                current_lr = self.optimizer.param_groups[0]['lr']
+                current_lr = self.optimizer.param_groups[0]["lr"]
                 if current_lr < self.min_learning_rate:
                     if self.verbose:
-                        print(f"Stopping training early: learning rate below {self.min_learning_rate}")
+                        print(
+                            f"Stopping training early: learning rate below {self.min_learning_rate}"
+                        )
                     break
 
-                train_loss = self.process_data_loader(self.train_loader, train_mode=True)
+                train_loss = self.process_data_loader(
+                    self.train_loader, train_mode=True
+                )
                 val_loss = self.process_data_loader(self.val_loader, train_mode=False)
                 self.scheduler.step(val_loss)
 
                 record_losses(epoch, train_loss, val_loss)
 
-                current_lr = self.optimizer.param_groups[0]['lr']
+                current_lr = self.optimizer.param_groups[0]["lr"]
                 if len(val_losses) > 1:
                     loss_diff = val_losses[-1] - val_losses[-2]
-                    pbar.set_postfix(loss_diff=f'{loss_diff:.4g}', lr=current_lr, refresh=True)
+                    pbar.set_postfix(
+                        loss_diff=f"{loss_diff:.4g}", lr=current_lr, refresh=True
+                    )
 
-        return pd.DataFrame(
-            {"train_loss": train_losses, "val_loss": val_losses}
-        )
+        return pd.DataFrame({"train_loss": train_losses, "val_loss": val_losses})
 
     def _calculate_loss(self, encoded_parents, masks, mutation_indicators):
         rates = self.model(encoded_parents, masks)
@@ -322,6 +327,7 @@ class HyperBurrito:
     """
     A burrito that can be used to optimize hyperparameters.
     """
+
     def __init__(
         self,
         device,
@@ -337,19 +343,23 @@ class HyperBurrito:
         val_dataset.to(self.device)
         self.model_class = model_class
         self.epochs = epochs
-        
+
     def burrito_of_model(self, model, **kwargs):
         burrito = Burrito(
-            self.train_dataset,
-            self.val_dataset,
-            model,
-            verbose=False,
-            **kwargs
+            self.train_dataset, self.val_dataset, model, verbose=False, **kwargs
         )
         return burrito
 
-    def optuna_objective(self, trial, int_params, cat_params, float_params, log_float_params, fixed_hyperparams=None):
-        """ Optuna objective function.
+    def optuna_objective(
+        self,
+        trial,
+        int_params,
+        cat_params,
+        float_params,
+        log_float_params,
+        fixed_hyperparams=None,
+    ):
+        """Optuna objective function.
 
         Return validation loss unless the model has more parameters than allowed
         in fixed_hyperparams["max_parameter_count"], in which case return 1e9.
@@ -357,7 +367,7 @@ class HyperBurrito:
         Note that if a parameter appears in one of the xxx_params dictionaries
         used for sampling as well as the fixed_hyperparams dictionary, the
         sampled value will be used.
-        
+
         Args:
             trial (optuna.Trial): Optuna trial object.
             int_params (dict): Dictionary of integer parameters to optimize.
@@ -365,7 +375,7 @@ class HyperBurrito:
             float_params (dict): Dictionary of float parameters to optimize on a linear scale.
             log_float_params (dict): Dictionary of float parameters to optimize on a log scale.
             fixed_hyperparams (dict, optional): Dictionary of fixed hyperparameters. Defaults to None.
-            
+
         Returns:
             float: Validation loss or 1e9 if the model has too many parameters.
         """
@@ -381,7 +391,9 @@ class HyperBurrito:
             hyperparams[param_name] = trial.suggest_float(param_name, low, high)
 
         for param_name, (low, high) in log_float_params.items():
-            hyperparams[param_name] = trial.suggest_float(param_name, low, high, log=True)
+            hyperparams[param_name] = trial.suggest_float(
+                param_name, low, high, log=True
+            )
 
         model_hyperparams = filter_kwargs(self.model_class, hyperparams)
         model = self.model_class(self.train_dataset, **model_hyperparams)
@@ -390,7 +402,9 @@ class HyperBurrito:
         if hyperparams is not None and "max_parameter_count" in hyperparams:
             parameter_count = parameter_count_of_model(model)
             if parameter_count > hyperparams["max_parameter_count"]:
-                print(f"Trial rejected because model has {parameter_count} > {hyperparams['max_parameter_count']} parameters.")
+                print(
+                    f"Trial rejected because model has {parameter_count} > {hyperparams['max_parameter_count']} parameters."
+                )
                 return 1e9
 
         burrito_hyperparams = filter_kwargs(self.burrito_of_model, hyperparams)
@@ -400,16 +414,34 @@ class HyperBurrito:
 
         return losses["val_loss"].min()
 
-
-    def optuna_optimize(self, n_trials, cat_params, int_params, float_params, log_float_params, fixed_hyperparams=None):
+    def optuna_optimize(
+        self,
+        n_trials,
+        cat_params,
+        int_params,
+        float_params,
+        log_float_params,
+        fixed_hyperparams=None,
+    ):
         study = optuna.create_study(direction="minimize")
-        study.optimize(lambda trial: self.optuna_objective(trial, int_params, cat_params, float_params, log_float_params, fixed_hyperparams), n_trials=n_trials)
+        study.optimize(
+            lambda trial: self.optuna_objective(
+                trial,
+                int_params,
+                cat_params,
+                float_params,
+                log_float_params,
+                fixed_hyperparams,
+            ),
+            n_trials=n_trials,
+        )
         best_hyperparams = study.best_params
         best_score = study.best_value
         print(f"Best Hyperparameters: {best_hyperparams}")
         print(f"Best Validation Loss: {best_score}")
 
-        output_path = f"_ignore/optuna_{self.model_class.__name__}_{timestamp_str()}.csv"
+        output_path = (
+            f"_ignore/optuna_{self.model_class.__name__}_{timestamp_str()}.csv"
+        )
         trial_data = study.trials_dataframe()
         trial_data.to_csv(output_path, index=False)
- 
