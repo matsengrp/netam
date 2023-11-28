@@ -267,7 +267,7 @@ class Burrito:
         writer = SummaryWriter(log_dir="./_logs")
         train_losses = []
         val_losses = []
-        best_val_loss = float('inf')
+        best_val_loss = float("inf")
         best_model_state = None
 
         def record_losses(epoch, train_loss, val_loss):
@@ -417,9 +417,14 @@ class HyperBurrito:
 
         if hyperparams is not None and "max_parameter_count" in hyperparams:
             parameter_count = parameter_count_of_model(model)
-            if parameter_count > hyperparams["max_parameter_count"]:
+            # if parameter_count is not in the range between hyperparams["min_parameter_count"] and hyperparams["max_parameter_count"]:
+            if parameter_count not in range(
+                hyperparams["min_parameter_count"],
+                hyperparams["max_parameter_count"] + 1,
+            ):
+                range_str = f"[{hyperparams['min_parameter_count']}, {hyperparams['max_parameter_count']}]"
                 print(
-                    f"Trial rejected because model has {parameter_count} > {hyperparams['max_parameter_count']} parameters."
+                    f"Trial rejected. Model has {parameter_count} parameters, not in {range_str}]."
                 )
                 return 1e9
 
