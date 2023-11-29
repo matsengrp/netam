@@ -156,3 +156,4 @@ cython_debug/
 _ignore/
 .DS_Store
 _logs/
+_checkpoints
