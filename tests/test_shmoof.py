@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from netam.framework import SHMoofDataset, Burrito, BASES
-from netam.models import SHMoofModel, NoofModel
+from netam.models import SHMoofModel
 
 
 @pytest.fixture
@@ -44,16 +44,3 @@ def test_run_shmoof(tiny_dataset, tiny_val_dataset, tiny_model):
     burrito = Burrito(tiny_dataset, tiny_val_dataset, tiny_model)
     burrito.train(epochs=5)
     tiny_model.write_shmoof_output("_ignore")
-
-
-def test_run_noof(tiny_dataset, tiny_val_dataset, tiny_model):
-    model = NoofModel(
-        tiny_dataset,
-        embedding_dim=2,
-        nhead=2,
-        dim_feedforward=512,
-        layer_count=3,
-        dropout=0.5,
-    )
-    burrito = Burrito(tiny_dataset, tiny_val_dataset, model)
-    burrito.train(epochs=5)

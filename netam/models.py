@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from epam.torch_common import PositionalEncoding
+from netam.common import PositionalEncoding
 
 
 class FivemerModel(nn.Module):

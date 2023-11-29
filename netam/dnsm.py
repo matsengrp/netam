@@ -24,7 +24,8 @@ import numpy as np
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
-from epam.torch_common import clamp_probability, stack_heterogeneous, pick_device, PositionalEncoding, optimize_branch_length
+from netam.common import clamp_probability, stack_heterogeneous, pick_device, PositionalEncoding
+from epam.torch_common import optimize_branch_length
 import epam.molevol as molevol
 import epam.sequences as sequences
 from epam.sequences import translate_sequence, translate_sequences

@@ -17,7 +17,7 @@ import optuna
 
 from tensorboardX import SummaryWriter
 
-from epam.torch_common import parameter_count_of_model
+from netam.common import parameter_count_of_model
 
 BASES = ["A", "C", "G", "T"]
 
