@@ -142,8 +142,8 @@ class CNNPEModel(CNNModel):
     def __init__(
         self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_rate
     ):
-        super(CNNModel, self).__init__(
-            self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_rate
+        super(CNNPEModel, self).__init__(
+            kmer_length, embedding_dim, filter_count, kernel_size, dropout_rate
         )
         self.pos_encoder = PositionalEncoding(embedding_dim, dropout=dropout_rate)
 
