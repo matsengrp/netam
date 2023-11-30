@@ -4,25 +4,34 @@ import pandas as pd
 import pytest
 import torch
 
-from netam.framework import SHMoofDataset, Burrito, BASES
+import netam.framework as framework
+from netam.common import BASES
+from netam.framework import SHMoofDataset, Burrito
 from netam.models import SHMoofModel
 
 
 @pytest.fixture
 def tiny_dataset():
     df = pd.DataFrame({"parent": ["ATGTA", "GTAC"], "child": ["ACGTA", "ATAC"]})
-    return SHMoofDataset(df, max_length=6, kmer_length=3)
+    return SHMoofDataset(df, site_count=6, kmer_length=3)
 
 
 @pytest.fixture
 def tiny_val_dataset():
     df = pd.DataFrame({"parent": ["ATGTA", "GTAA"], "child": ["ACGTA", "TACG"]})
-    return SHMoofDataset(df, max_length=6, kmer_length=3)
+    return SHMoofDataset(df, site_count=6, kmer_length=3)
 
 
 @pytest.fixture
-def tiny_model(tiny_dataset):
-    return SHMoofModel(tiny_dataset)
+def tiny_model():
+    return SHMoofModel(site_count=6, kmer_length=3)
+
+
+@pytest.fixture
+def tiny_burrito(tiny_dataset, tiny_val_dataset, tiny_model):
+    burrito = Burrito(tiny_dataset, tiny_val_dataset, tiny_model)
+    burrito.train(epochs=5)
+    return burrito
 
 
 def test_make_dataset(tiny_dataset):
@@ -36,11 +45,19 @@ def test_make_dataset(tiny_dataset):
 
 
 def test_run_model_forward(tiny_dataset, tiny_model):
-    assert tiny_dataset.max_length == tiny_model.site_count
+    assert tiny_dataset.site_count == tiny_model.site_count
     tiny_model.forward(tiny_dataset.encoded_parents, tiny_dataset.masks)
 
 
-def test_run_shmoof(tiny_dataset, tiny_val_dataset, tiny_model):
-    burrito = Burrito(tiny_dataset, tiny_val_dataset, tiny_model)
-    burrito.train(epochs=5)
-    tiny_model.write_shmoof_output("_ignore")
+def test_write_output(tiny_burrito):
+    tiny_burrito.model.write_shmoof_output("_ignore")
+
+
+def test_crepe_roundtrip(tiny_burrito):
+    tiny_burrito.save_crepe("_ignore/tiny_crepe")
+    crepe = framework.load_crepe("_ignore/tiny_crepe")
+    assert crepe.site_count == tiny_burrito.model.site_count
+    assert crepe.kmer_length == tiny_burrito.model.kmer_length
+    assert torch.isclose(crepe.model.kmer_rates, tiny_burrito.model.kmer_rates).all()
+    assert torch.isclose(crepe.model.site_rates, tiny_burrito.model.site_rates).all()
+
