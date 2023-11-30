@@ -9,6 +9,7 @@ from torch import nn, Tensor
 SMALL_PROB = 1e-8
 BASES = ["A", "C", "G", "T"]
 
+
 def generate_kmers(kmer_length):
     # Our strategy for kmers is to have a single representation for any kmer that isn't in ACGT.
     # This is the first one so is the default value below.

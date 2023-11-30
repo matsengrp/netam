@@ -113,7 +113,7 @@ class SequenceEncodingBase:
         self.overhang_length = (kmer_length - 1) // 2
         self.all_kmers = generate_kmers(kmer_length)
         self.kmer_to_index = kmer_to_index_of(self.all_kmers)
- 
+
     def encode_sequence(self, sequence):
         # Pad sequence with overhang_length 'N's at the start and end so that we
         # can assign parameters to every site in the sequence.
@@ -140,6 +140,7 @@ class SequenceEncodingBase:
         return torch.tensor(kmer_indices, dtype=torch.int32), torch.tensor(
             mask, dtype=torch.bool
         )
+
 
 class SHMoofDataset(SequenceEncodingBase, Dataset):
     def __init__(self, dataframe, kmer_length, site_count):
@@ -188,28 +189,31 @@ class Crepe(SequenceEncodingBase):
     A lightweight wrapper around a model that can be used for prediction but not training.
     It handles serialization.
     """
+
     SERIALIZATION_VERSION = 0
 
     def __init__(self, model, site_count):
         super().__init__(model.kmer_length, site_count)
         self.model = model
         self.device = None
-    
+
     def to(self, device):
         self.device = device
         self.model.to(device)
-    
+
     def encode_sequences(self, sequences):
-        encoded_parents, masks = zip(*[self.encode_sequence(sequence) for sequence in sequences])
+        encoded_parents, masks = zip(
+            *[self.encode_sequence(sequence) for sequence in sequences]
+        )
         return torch.stack(encoded_parents), torch.stack(masks)
-    
+
     def __call__(self, sequences):
         encoded_parents, masks = self.encode_sequences(sequences)
         if self.device is not None:
             encoded_parents = encoded_parents.to(self.device)
             masks = masks.to(self.device)
         return self.model(encoded_parents, masks)
-    
+
     def save(self, prefix):
         torch.save(self.model.state_dict(), f"{prefix}.pth")
         with open(f"{prefix}.yml", "w") as f:
@@ -222,21 +226,25 @@ class Crepe(SequenceEncodingBase):
                 },
                 f,
             )
-        
-        
+
+
 def load_crepe(prefix, device=None):
     with open(f"{prefix}.yml", "r") as f:
         config = yaml.safe_load(f)
 
     if config["serialization_version"] != Crepe.SERIALIZATION_VERSION:
-        raise ValueError(f"Unsupported serialization version: {config['serialization_version']}")
+        raise ValueError(
+            f"Unsupported serialization version: {config['serialization_version']}"
+        )
 
     model_class_name = config["model_class"]
 
     try:
         model_class = getattr(models, model_class_name)
     except AttributeError:
-        raise ValueError(f"Model class '{model_class_name}' not found in 'models' module.")
+        raise ValueError(
+            f"Model class '{model_class_name}' not found in 'models' module."
+        )
 
     model = model_class(**config["model_hyperparameters"])
 
@@ -405,10 +413,10 @@ class Burrito:
         Evaluate the model on the validation set.
         """
         return self.process_data_loader(self.val_loader, train_mode=False)
-    
+
     def to_crepe(self):
         return Crepe(self.model, self.train_loader.dataset.site_count)
-    
+
     def save_crepe(self, prefix):
         self.to_crepe().save(prefix)
 
