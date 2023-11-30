@@ -76,15 +76,15 @@ def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
     return train_df, val_df
 
 
-def create_mutation_indicator(parent, child, max_length):
+def create_mutation_indicator(parent, child, site_count):
     assert len(parent) == len(child), f"{parent} and {child} are not the same length"
     mutation_indicator = [
-        1 if parent[i] != child[i] else 0 for i in range(min(len(parent), max_length))
+        1 if parent[i] != child[i] else 0 for i in range(min(len(parent), site_count))
     ]
 
     # Pad the mutation indicator if necessary
-    if len(mutation_indicator) < max_length:
-        mutation_indicator += [0] * (max_length - len(mutation_indicator))
+    if len(mutation_indicator) < site_count:
+        mutation_indicator += [0] * (site_count - len(mutation_indicator))
 
     return torch.tensor(mutation_indicator, dtype=torch.bool)
 
@@ -106,9 +106,9 @@ def timestamp_str():
 
 
 class SequenceEncodingBase:
-    def __init__(self, kmer_length, max_length):
+    def __init__(self, kmer_length, site_count):
         self.kmer_length = kmer_length
-        self.max_length = max_length
+        self.site_count = site_count
         assert kmer_length % 2 == 1
         self.overhang_length = (kmer_length - 1) // 2
         self.all_kmers = generate_kmers(kmer_length)
@@ -124,17 +124,17 @@ class SequenceEncodingBase:
         # Note that we are using a default value of 0 here. So we use the
         # catch-all term for anything with an N in it for the sites on the
         # boundary of the kmer.
-        # Note that this line also effectively pads things out to max_length because
+        # Note that this line also effectively pads things out to site_count because
         # when i gets large the slice will be empty and we will get a 0.
         # These sites will get masked out by the mask below.
         kmer_indices = [
             self.kmer_to_index.get(padded_sequence[i : i + self.kmer_length], 0)
-            for i in range(self.max_length)
+            for i in range(self.site_count)
         ]
 
         mask = [
             1 if i < len(sequence) and sequence[i] != "N" else 0
-            for i in range(self.max_length)
+            for i in range(self.site_count)
         ]
 
         return torch.tensor(kmer_indices, dtype=torch.int32), torch.tensor(
@@ -142,8 +142,8 @@ class SequenceEncodingBase:
         )
 
 class SHMoofDataset(SequenceEncodingBase, Dataset):
-    def __init__(self, dataframe, kmer_length, max_length):
-        super().__init__(kmer_length, max_length)
+    def __init__(self, dataframe, kmer_length, site_count):
+        super().__init__(kmer_length, site_count)
         (
             self.encoded_parents,
             self.masks,
@@ -169,7 +169,7 @@ class SHMoofDataset(SequenceEncodingBase, Dataset):
         for _, row in dataframe.iterrows():
             encoded_parent, mask = self.encode_sequence(row["parent"])
             mutation_indicator = create_mutation_indicator(
-                row["parent"], row["child"], self.max_length
+                row["parent"], row["child"], self.site_count
             )
 
             encoded_parents.append(encoded_parent)
@@ -190,8 +190,8 @@ class Crepe(SequenceEncodingBase):
     """
     SERIALIZATION_VERSION = 0
 
-    def __init__(self, model, max_length):
-        super().__init__(model.kmer_length, max_length)
+    def __init__(self, model, site_count):
+        super().__init__(model.kmer_length, site_count)
         self.model = model
         self.device = None
     
@@ -217,7 +217,7 @@ class Crepe(SequenceEncodingBase):
                 {
                     "serialization_version": self.SERIALIZATION_VERSION,
                     "model_class": self.model.__class__.__name__,
-                    "max_length": self.max_length,
+                    "site_count": self.site_count,
                     "model_hyperparameters": self.model.hyperparameters,
                 },
                 f,
@@ -243,7 +243,7 @@ def load_crepe_from_files(prefix, device=None):
     model_state_path = f"{prefix}.pth"
     model.load_state_dict(torch.load(model_state_path, map_location=device))
 
-    crepe_instance = Crepe(model, config["max_length"])
+    crepe_instance = Crepe(model, config["site_count"])
     if device:
         crepe_instance.to(device)
 
@@ -407,7 +407,7 @@ class Burrito:
         return self.process_data_loader(self.val_loader, train_mode=False)
     
     def to_crepe(self):
-        return Crepe(self.model, self.train_loader.dataset.max_length)
+        return Crepe(self.model, self.train_loader.dataset.site_count)
     
     def save_crepe(self, prefix):
         self.to_crepe().save(prefix)
