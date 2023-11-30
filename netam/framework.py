@@ -224,7 +224,7 @@ class Crepe(SequenceEncodingBase):
             )
         
         
-def load_crepe_from_files(prefix, device=None):
+def load_crepe(prefix, device=None):
     with open(f"{prefix}.yml", "r") as f:
         config = yaml.safe_load(f)
 
