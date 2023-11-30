@@ -1,9 +1,10 @@
 from datetime import datetime
 import copy
 import inspect
-import itertools
+import os
 
 import pandas as pd
+import yaml
 from tqdm import tqdm
 
 import torch
@@ -17,9 +18,8 @@ import optuna
 
 from tensorboardX import SummaryWriter
 
-from netam.common import parameter_count_of_model
-
-BASES = ["A", "C", "G", "T"]
+from netam.common import parameter_count_of_model, generate_kmers, kmer_to_index_of
+from netam import models
 
 
 def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
@@ -105,59 +105,15 @@ def timestamp_str():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
-class SHMoofDataset(Dataset):
-    def __init__(self, dataframe, kmer_length, max_length):
-        self.max_length = max_length
+class SequenceEncodingBase:
+    def __init__(self, kmer_length, max_length):
         self.kmer_length = kmer_length
-        self.overhang_length = (kmer_length - 1) // 2
+        self.max_length = max_length
         assert kmer_length % 2 == 1
-
-        # Our strategy to kmers is to have a single representation for any kmer that isn't in ACGT.
-        # This is the first one so is the default value below.
-        self.all_kmers = ["N"] + [
-            "".join(p) for p in itertools.product(BASES, repeat=kmer_length)
-        ]
-        assert len(self.all_kmers) < torch.iinfo(torch.int32).max
-        self.kmer_to_index = {kmer: idx for idx, kmer in enumerate(self.all_kmers)}
-
-        (
-            self.encoded_parents,
-            self.masks,
-            self.mutation_indicators,
-        ) = self.encode_sequences(dataframe)
-
-    def __len__(self):
-        return len(self.encoded_parents)
-
-    def __getitem__(self, idx):
-        return self.encoded_parents[idx], self.masks[idx], self.mutation_indicators[idx]
-
-    def to(self, device):
-        self.encoded_parents = self.encoded_parents.to(device)
-        self.masks = self.masks.to(device)
-        self.mutation_indicators = self.mutation_indicators.to(device)
-
-    def encode_sequences(self, dataframe):
-        encoded_parents = []
-        masks = []
-        mutation_vectors = []
-
-        for _, row in dataframe.iterrows():
-            encoded_parent, mask = self.encode_sequence(row["parent"])
-            mutation_indicator = create_mutation_indicator(
-                row["parent"], row["child"], self.max_length
-            )
-
-            encoded_parents.append(encoded_parent)
-            masks.append(mask)
-            mutation_vectors.append(mutation_indicator)
-
-        return (
-            torch.stack(encoded_parents),
-            torch.stack(masks),
-            torch.stack(mutation_vectors),
-        )
-
+        self.overhang_length = (kmer_length - 1) // 2
+        self.all_kmers = generate_kmers(kmer_length)
+        self.kmer_to_index = kmer_to_index_of(self.all_kmers)
+ 
     def encode_sequence(self, sequence):
         # Pad sequence with overhang_length 'N's at the start and end so that we
         # can assign parameters to every site in the sequence.
@@ -184,6 +140,118 @@ class SHMoofDataset(Dataset):
         return torch.tensor(kmer_indices, dtype=torch.int32), torch.tensor(
             mask, dtype=torch.bool
         )
+
+class SHMoofDataset(SequenceEncodingBase, Dataset):
+    def __init__(self, dataframe, kmer_length, max_length):
+        super().__init__(kmer_length, max_length)
+        (
+            self.encoded_parents,
+            self.masks,
+            self.mutation_indicators,
+        ) = self.encode_pcps(dataframe)
+
+    def __len__(self):
+        return len(self.encoded_parents)
+
+    def __getitem__(self, idx):
+        return self.encoded_parents[idx], self.masks[idx], self.mutation_indicators[idx]
+
+    def to(self, device):
+        self.encoded_parents = self.encoded_parents.to(device)
+        self.masks = self.masks.to(device)
+        self.mutation_indicators = self.mutation_indicators.to(device)
+
+    def encode_pcps(self, dataframe):
+        encoded_parents = []
+        masks = []
+        mutation_vectors = []
+
+        for _, row in dataframe.iterrows():
+            encoded_parent, mask = self.encode_sequence(row["parent"])
+            mutation_indicator = create_mutation_indicator(
+                row["parent"], row["child"], self.max_length
+            )
+
+            encoded_parents.append(encoded_parent)
+            masks.append(mask)
+            mutation_vectors.append(mutation_indicator)
+
+        return (
+            torch.stack(encoded_parents),
+            torch.stack(masks),
+            torch.stack(mutation_vectors),
+        )
+
+
+class Crepe(SequenceEncodingBase):
+    """
+    A lightweight wrapper around a model that can be used for prediction but not training.
+    It handles serialization.
+    """
+    SERIALIZATION_VERSION = 0
+
+    def __init__(self, model, max_length):
+        super().__init__(model.kmer_length, max_length)
+        self.model = model
+        self.device = None
+    
+    def to(self, device):
+        self.device = device
+        self.model.to(device)
+    
+    def encode_sequences(self, sequences):
+        encoded_parents, masks = zip(*[self.encode_sequence(sequence) for sequence in sequences])
+        return torch.stack(encoded_parents), torch.stack(masks)
+    
+    def __call__(self, sequences):
+        encoded_parents, masks = self.encode_sequences(sequences)
+        if self.device is not None:
+            encoded_parents = encoded_parents.to(self.device)
+            masks = masks.to(self.device)
+        return self.model(encoded_parents, masks)
+    
+    def save(self, prefix):
+        torch.save(self.model.state_dict(), f"{prefix}.pth")
+        with open(f"{prefix}.yml", "w") as f:
+            yaml.dump(
+                {
+                    "serialization_version": self.SERIALIZATION_VERSION,
+                    "model_class": self.model.__class__.__name__,
+                    "max_length": self.max_length,
+                    "model_hyperparameters": self.model.hyperparameters,
+                },
+                f,
+            )
+        
+        
+def load_crepe_from_files(prefix, device=None):
+    with open(f"{prefix}.yml", "r") as f:
+        config = yaml.safe_load(f)
+
+    if config["serialization_version"] != Crepe.SERIALIZATION_VERSION:
+        raise ValueError(f"Unsupported serialization version: {config['serialization_version']}")
+
+    model_class_name = config["model_class"]
+
+    try:
+        model_class = getattr(models, model_class_name)
+    except AttributeError:
+        raise ValueError(f"Model class '{model_class_name}' not found in 'models' module.")
+
+    model = model_class(**config["model_hyperparameters"])
+
+    model_state_path = f"{prefix}.pth"
+    model.load_state_dict(torch.load(model_state_path, map_location=device))
+
+    crepe_instance = Crepe(model, config["max_length"])
+    if device:
+        crepe_instance.to(device)
+
+    return crepe_instance
+
+
+def does_crepe_exist(prefix):
+    return os.path.exists(f"{prefix}.yml") and os.path.exists(f"{prefix}.pth")
 
 
 class Burrito:
@@ -337,6 +405,12 @@ class Burrito:
         Evaluate the model on the validation set.
         """
         return self.process_data_loader(self.val_loader, train_mode=False)
+    
+    def to_crepe(self):
+        return Crepe(self.model, self.train_loader.dataset.max_length)
+    
+    def save_crepe(self, prefix):
+        self.to_crepe().save(prefix)
 
 
 class HyperBurrito:

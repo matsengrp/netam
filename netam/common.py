@@ -1,4 +1,5 @@
 import math
+import itertools
 
 import numpy as np
 import torch
@@ -6,6 +7,20 @@ import torch.optim as optim
 from torch import nn, Tensor
 
 SMALL_PROB = 1e-8
+BASES = ["A", "C", "G", "T"]
+
+def generate_kmers(kmer_length):
+    # Our strategy for kmers is to have a single representation for any kmer that isn't in ACGT.
+    # This is the first one so is the default value below.
+    all_kmers = ["N"] + [
+        "".join(p) for p in itertools.product(BASES, repeat=kmer_length)
+    ]
+    assert len(all_kmers) < torch.iinfo(torch.int32).max
+    return all_kmers
+
+
+def kmer_to_index_of(all_kmers):
+    return {kmer: idx for idx, kmer in enumerate(all_kmers)}
 
 
 def clamp_probability(x: Tensor) -> Tensor:

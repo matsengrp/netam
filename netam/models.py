@@ -4,15 +4,26 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from netam.common import PositionalEncoding
+from netam.common import generate_kmers, PositionalEncoding
 
 
-class FivemerModel(nn.Module):
-    def __init__(self, dataset):
-        super(FivemerModel, self).__init__()
-        self.all_kmers = dataset.all_kmers
-        self.kmer_count = len(dataset.kmer_to_index)
+class KmerModel(nn.Module):
+    def __init__(self, kmer_length):
+        super(KmerModel, self).__init__()
+        self.kmer_length = kmer_length
+        self.all_kmers = generate_kmers(kmer_length)
+        self.kmer_count = len(self.all_kmers)
 
+    @property
+    def hyperparameters(self):
+        return {
+            "kmer_length": self.kmer_length,
+        }
+
+
+class FivemerModel(KmerModel):
+    def __init__(self, kmer_length):
+        super(FivemerModel, self).__init__(kmer_length)
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
 
     def forward(self, encoded_parents, masks):
@@ -26,13 +37,10 @@ class FivemerModel(nn.Module):
         return torch.exp(self.kmer_embedding.weight).squeeze()
 
 
-class SHMoofModel(nn.Module):
-    def __init__(self, dataset):
-        super(SHMoofModel, self).__init__()
-        self.all_kmers = dataset.all_kmers
-        self.kmer_count = len(dataset.kmer_to_index)
-        self.site_count = dataset.max_length
-
+class SHMoofModel(KmerModel):
+    def __init__(self, kmer_length, site_count):
+        super(SHMoofModel, self).__init__(kmer_length)
+        self.site_count = site_count
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
         self.log_site_rates = nn.Embedding(self.site_count, 1)
 
@@ -46,6 +54,13 @@ class SHMoofModel(nn.Module):
         # Rates are the product of kmer and site rates.
         rates = torch.exp(log_kmer_rates + log_site_rates)
         return rates
+
+    @property
+    def hyperparameters(self):
+        return {
+            "kmer_length": self.kmer_length,
+            "site_count": self.site_count,
+        }
 
     @property
     def kmer_rates(self):
@@ -83,25 +98,24 @@ class SHMoofModel(nn.Module):
         )
 
 
-class CNNModel(nn.Module):
+class CNNModel(KmerModel):
     """
     This is a CNN model that uses k-mers as input and trains an embedding layer.
     """
 
     def __init__(
-        self, dataset, embedding_dim, num_filters, kernel_size, dropout_rate=0.1
+        self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_rate=0.1
     ):
-        super(CNNModel, self).__init__()
-        self.kmer_count = len(dataset.kmer_to_index)
+        super(CNNModel, self).__init__(kmer_length)
         self.kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
         self.conv = nn.Conv1d(
             in_channels=embedding_dim,
-            out_channels=num_filters,
+            out_channels=filter_count,
             kernel_size=kernel_size,
             padding="same",
         )
         self.dropout = nn.Dropout(dropout_rate)
-        self.linear = nn.Linear(in_features=num_filters, out_features=1)
+        self.linear = nn.Linear(in_features=filter_count, out_features=1)
 
     def forward(self, encoded_parents, masks):
         kmer_embeds = self.kmer_embedding(encoded_parents)
@@ -113,21 +127,21 @@ class CNNModel(nn.Module):
         rates = torch.exp(log_rates * masks)
         return rates
 
+    @property
+    def hyperparameters(self):
+        return {
+            "kmer_length": self.kmer_length,
+            "embedding_dim": self.kmer_embedding.embedding_dim,
+            "filter_count": self.conv.out_channels,
+            "kernel_size": self.conv.kernel_size[0],
+            "dropout_rate": self.dropout.p,
+        }
 
-class CNNPEModel(nn.Module):
-    def __init__(self, dataset, embedding_dim, num_filters, kernel_size, dropout_rate):
-        super(CNNPEModel, self).__init__()
-        self.kmer_count = len(dataset.kmer_to_index)
-        self.kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
+
+class CNNPEModel(CNNModel):
+    def __init__(self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_rate):
+        super(CNNModel, self).__init__(self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_rate)
         self.pos_encoder = PositionalEncoding(embedding_dim, dropout=dropout_rate)
-        self.conv = nn.Conv1d(
-            in_channels=embedding_dim,
-            out_channels=num_filters,
-            kernel_size=kernel_size,
-            padding="same",
-        )
-        self.dropout = nn.Dropout(dropout_rate)
-        self.linear = nn.Linear(in_features=num_filters, out_features=1)
 
     def forward(self, encoded_parents, masks):
         kmer_embeds = self.kmer_embedding(encoded_parents)
@@ -147,12 +161,13 @@ class CNN1merModel(CNNModel):
     embedding layer.
     """
 
-    def __init__(self, dataset, num_filters, kernel_size, dropout_rate=0.1):
+    def __init__(self, filter_count, kernel_size, dropout_rate=0.1):
+        # Fixed embedding_dim because there are only 4 bases.
         embedding_dim = 5
+        kmer_length = 1
         super(CNN1merModel, self).__init__(
-            dataset, embedding_dim, num_filters, kernel_size, dropout_rate
+            kmer_length, embedding_dim, filter_count, kernel_size, dropout_rate
         )
-        assert dataset.kmer_length == 1
         identity_matrix = torch.eye(embedding_dim)
         self.kmer_embedding.weight = nn.Parameter(identity_matrix, requires_grad=False)
 
@@ -162,10 +177,10 @@ class PersiteWrapper(nn.Module):
     This wraps another model, but adds a per-site rate component.
     """
 
-    def __init__(self, base_model, dataset):
+    def __init__(self, base_model, site_count):
         super(PersiteWrapper, self).__init__()
         self.base_model = base_model
-        self.site_count = dataset.max_length
+        self.site_count = site_count
         self.log_site_rates = nn.Embedding(self.site_count, 1)
 
     def forward(self, encoded_parents, masks):
@@ -175,6 +190,13 @@ class PersiteWrapper(nn.Module):
         log_site_rates = self.log_site_rates(positions).T
         rates = base_model_rates * torch.exp(log_site_rates)
         return rates
+
+    @property
+    def hyperparameters(self):
+        return {
+            "base_model_hyperparameters": self.base_model.hyperparameters,
+            "site_count": self.site_count,
+        }
 
     @property
     def site_rates(self):
