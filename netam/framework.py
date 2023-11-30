@@ -217,8 +217,8 @@ class Crepe(SequenceEncodingBase):
                 {
                     "serialization_version": self.SERIALIZATION_VERSION,
                     "model_class": self.model.__class__.__name__,
-                    "site_count": self.site_count,
                     "model_hyperparameters": self.model.hyperparameters,
+                    "site_count": self.site_count,
                 },
                 f,
             )
