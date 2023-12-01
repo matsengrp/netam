@@ -282,19 +282,16 @@ class Burrito:
         self.learning_rate = learning_rate
         self.min_learning_rate = min_learning_rate
         self.l2_regularization_coeff = l2_regularization_coeff
-        self.reset_optimizer()
-        self.scheduler = ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.2, patience=4, verbose=verbose
-        )
         self.verbose = verbose
-        self.bce_loss = nn.BCELoss()
-
-    def reset_optimizer(self):
         self.optimizer = torch.optim.Adam(
             self.model.parameters(),
             lr=self.learning_rate,
             weight_decay=self.l2_regularization_coeff,
         )
+        self.scheduler = ReduceLROnPlateau(
+            self.optimizer, mode="min", factor=0.2, patience=4, verbose=self.verbose
+        )
+        self.bce_loss = nn.BCELoss()
 
     def process_data_loader(self, data_loader, train_mode=False):
         """
