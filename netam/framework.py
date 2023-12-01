@@ -192,9 +192,10 @@ class Crepe(SequenceEncodingBase):
 
     SERIALIZATION_VERSION = 0
 
-    def __init__(self, model, site_count):
+    def __init__(self, model, site_count, training_hyperparameters={}):
         super().__init__(model.kmer_length, site_count)
         self.model = model
+        self.training_hyperparameters = training_hyperparameters
         self.device = None
 
     def to(self, device):
@@ -222,6 +223,7 @@ class Crepe(SequenceEncodingBase):
                     "serialization_version": self.SERIALIZATION_VERSION,
                     "model_class": self.model.__class__.__name__,
                     "model_hyperparameters": self.model.hyperparameters,
+                    "training_hyperparameters": self.training_hyperparameters,
                     "site_count": self.site_count,
                 },
                 f,
@@ -251,7 +253,9 @@ def load_crepe(prefix, device=None):
     model_state_path = f"{prefix}.pth"
     model.load_state_dict(torch.load(model_state_path, map_location=device))
 
-    crepe_instance = Crepe(model, config["site_count"])
+    crepe_instance = Crepe(
+        model, config["site_count"], config["training_hyperparameters"]
+    )
     if device:
         crepe_instance.to(device)
 
@@ -412,7 +416,17 @@ class Burrito:
         return self.process_data_loader(self.val_loader, train_mode=False)
 
     def to_crepe(self):
-        return Crepe(self.model, self.train_loader.dataset.site_count)
+        training_hyperparameters = {
+            key: self.__dict__[key]
+            for key in [
+                "learning_rate",
+                "min_learning_rate",
+                "l2_regularization_coeff",
+            ]
+        }
+        return Crepe(
+            self.model, self.train_loader.dataset.site_count, training_hyperparameters
+        )
 
     def save_crepe(self, prefix):
         self.to_crepe().save(prefix)
