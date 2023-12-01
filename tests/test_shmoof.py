@@ -60,4 +60,3 @@ def test_crepe_roundtrip(tiny_burrito):
     assert crepe.kmer_length == tiny_burrito.model.kmer_length
     assert torch.isclose(crepe.model.kmer_rates, tiny_burrito.model.kmer_rates).all()
     assert torch.isclose(crepe.model.site_rates, tiny_burrito.model.site_rates).all()
-
