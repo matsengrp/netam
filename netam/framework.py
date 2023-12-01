@@ -388,9 +388,13 @@ class Burrito:
 
                 current_lr = self.optimizer.param_groups[0]["lr"]
                 if len(val_losses) > 1:
+                    val_loss = val_losses[-1]
                     loss_diff = val_losses[-1] - val_losses[-2]
                     pbar.set_postfix(
-                        loss_diff=f"{loss_diff:.4g}", lr=current_lr, refresh=True
+                        val_loss=f"{val_loss:.4g}",
+                        loss_diff=f"{loss_diff:.4g}",
+                        lr=current_lr,
+                        refresh=True,
                     )
 
         if best_model_state is not None:
