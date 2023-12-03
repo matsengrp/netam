@@ -157,6 +157,9 @@ class SHMoofDataset(SequenceEncodingBase, Dataset):
     def __getitem__(self, idx):
         return self.encoded_parents[idx], self.masks[idx], self.mutation_indicators[idx]
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(Size: {len(self)}) on {self.encoded_parents.device}"
+
     def to(self, device):
         self.encoded_parents = self.encoded_parents.to(device)
         self.masks = self.masks.to(device)
@@ -399,6 +402,9 @@ class Burrito:
 
         if best_model_state is not None:
             self.model.load_state_dict(best_model_state)
+
+        # Make sure that saving the best model state worked.
+        assert abs(best_val_loss - self.evaluate()) < 1e-6
 
         return pd.DataFrame({"train_loss": train_losses, "val_loss": val_losses})
 
