@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 from netam import framework, models
 from netam.common import pick_device, parameter_count_of_model
@@ -201,4 +202,37 @@ class Experiment:
             for _, row in experiment_df.iterrows()
         ]
 
-    # def plot_comparison(self, experiment_df, baseline_model_name):
+
+def plot_loss_difference(expt_df, baseline_model_name):
+    df = expt_df
+    # Identify loss columns (ending with '_loss')
+    loss_columns = [col for col in df.columns if col.endswith('_loss')]
+
+    # Calculate differences from the baseline model for each loss type
+    for loss_col in loss_columns:
+        baseline_loss = df[df['model_name'] == baseline_model_name][loss_col].values[0]
+        df[f'{loss_col}_diff'] = df[loss_col] - baseline_loss
+
+    # Filter out the baseline model and sort by parameter count
+    df = df[df['model_name'] != baseline_model_name]
+    df = df.sort_values(by='parameter_count')
+
+    # Prepare data for plotting
+    melted_df = pd.melt(df, id_vars=['model_name', 'parameter_count'],
+                        value_vars=[f'{col}_diff' for col in loss_columns],
+                        var_name='Loss Type', value_name='Loss Difference')
+
+    # Create a separate plot for each loss type
+    n_loss_types = len(loss_columns)
+    fig, axes = plt.subplots(n_loss_types, 1, figsize=(8, 4 * n_loss_types))
+    
+    for i, loss_type in enumerate(loss_columns):
+        sns.barplot(data=melted_df[melted_df['Loss Type'] == f'{loss_type}_diff'],
+                    x='Loss Difference', y='model_name', ax=axes[i])
+        axes[i].set_title(loss_type.replace('_loss', '').replace('_', ' ').title())
+        axes[i].axvline(0, color='black', linewidth=1)  # Add vertical line at zero
+
+    plt.tight_layout()
+    plt.show()
+
+
