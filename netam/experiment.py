@@ -205,8 +205,10 @@ class Experiment:
 
 def plot_loss_difference(expt_df, baseline_model_name):
     df = expt_df
+    assert baseline_model_name in df['model_name'].values, 'Baseline model not found'
     # Identify loss columns (ending with '_loss')
     loss_columns = [col for col in df.columns if col.endswith('_loss')]
+    assert len(loss_columns) > 0, 'No loss columns found'
 
     # Calculate differences from the baseline model for each loss type
     for loss_col in loss_columns:
@@ -224,13 +226,13 @@ def plot_loss_difference(expt_df, baseline_model_name):
 
     # Create a separate plot for each loss type
     n_loss_types = len(loss_columns)
-    fig, axes = plt.subplots(n_loss_types, 1, figsize=(8, 4 * n_loss_types))
+    fig, axes = plt.subplots(n_loss_types, 1, figsize=(8, 4 * n_loss_types), squeeze=False)
     
     for i, loss_type in enumerate(loss_columns):
         sns.barplot(data=melted_df[melted_df['Loss Type'] == f'{loss_type}_diff'],
-                    x='Loss Difference', y='model_name', ax=axes[i])
-        axes[i].set_title(loss_type.replace('_loss', '').replace('_', ' ').title())
-        axes[i].axvline(0, color='black', linewidth=1)  # Add vertical line at zero
+                    x='Loss Difference', y='model_name', ax=axes[i, 0])
+        axes[i, 0].set_title(loss_type.replace('_loss', '').replace('_', ' ').title())
+        axes[i, 0].axvline(0, color='black', linewidth=1)  # Add vertical line at zero
 
     plt.tight_layout()
     plt.show()
