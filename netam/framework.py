@@ -515,7 +515,7 @@ class HyperBurrito:
             )
 
         model_hyperparams = filter_kwargs(self.model_class, hyperparams)
-        model = self.model_class(self.train_dataset, **model_hyperparams)
+        model = self.model_class(**model_hyperparams)
         model.to(self.device)
 
         if hyperparams is not None and "max_parameter_count" in hyperparams:
