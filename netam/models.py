@@ -7,7 +7,30 @@ import torch.nn.functional as F
 from netam.common import generate_kmers, PositionalEncoding
 
 
-class KmerModel(nn.Module):
+class ModelBase(nn.Module):
+    def reinitialize_weights(self):
+        for layer in self.children():
+            if isinstance(layer, nn.Embedding):
+                nn.init.normal_(layer.weight)
+            elif isinstance(layer, nn.Linear):
+                nn.init.kaiming_normal_(layer.weight, nonlinearity='none')
+                if layer.bias is not None:
+                    nn.init.constant_(layer.bias, 0)
+            elif isinstance(layer, nn.Conv1d):
+                nn.init.kaiming_normal_(layer.weight, nonlinearity='relu')
+                if layer.bias is not None:
+                    nn.init.constant_(layer.bias, 0)
+            elif isinstance(layer, nn.TransformerEncoder):
+                for sublayer in layer.modules():
+                    if isinstance(sublayer, nn.Linear):
+                        nn.init.kaiming_normal_(sublayer.weight, nonlinearity='relu')
+                        if sublayer.bias is not None:
+                            nn.init.constant_(sublayer.bias, 0)
+            else:
+                raise ValueError(f"Unrecognized layer type: {type(layer)}")
+
+
+class KmerModel(ModelBase):
     def __init__(self, kmer_length):
         super(KmerModel, self).__init__()
         self.kmer_length = kmer_length
@@ -176,7 +199,7 @@ class CNN1merModel(CNNModel):
         self.kmer_embedding.weight = nn.Parameter(identity_matrix, requires_grad=False)
 
 
-class PersiteWrapper(nn.Module):
+class PersiteWrapper(ModelBase):
     """
     This wraps another model, but adds a per-site rate component.
     """

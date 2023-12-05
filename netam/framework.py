@@ -290,6 +290,11 @@ class Burrito:
         self.min_learning_rate = min_learning_rate
         self.l2_regularization_coeff = l2_regularization_coeff
         self.verbose = verbose
+        self.reset_optimization()
+        self.bce_loss = nn.BCELoss()
+
+    def reset_optimization(self):
+        """Reset the optimizer and scheduler."""
         self.optimizer = torch.optim.Adam(
             self.model.parameters(),
             lr=self.learning_rate,
@@ -298,7 +303,6 @@ class Burrito:
         self.scheduler = ReduceLROnPlateau(
             self.optimizer, mode="min", factor=0.2, patience=4, verbose=self.verbose
         )
-        self.bce_loss = nn.BCELoss()
 
     def process_data_loader(self, data_loader, train_mode=False):
         """
@@ -407,6 +411,21 @@ class Burrito:
         assert abs(best_val_loss - self.evaluate()) < 1e-6
 
         return pd.DataFrame({"train_loss": train_losses, "val_loss": val_losses})
+
+    def multi_train(self, epochs, max_tries):
+        """Train the model. If lr isn't below min_lr, reset the optimizer and scheduler, and reset the model and resume training."""
+        for i in range(max_tries):
+            train_history = self.train(epochs)
+            if self.optimizer.param_groups[0]["lr"] < self.min_learning_rate:
+                return train_history
+            else:
+                print(
+                    f"Learning rate {self.optimizer.param_groups[0]['lr']} not below {self.min_learning_rate}. Resetting model and optimizer."
+                )
+                self.reset_optimization()
+                self.model.reinitialize_weights()
+        print(f"Failed to train model to min_learning_rate after {max_tries} tries.")
+        return train_history
 
     def _calculate_loss(self, encoded_parents, masks, mutation_indicators):
         rates = self.model(encoded_parents, masks)
