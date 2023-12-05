@@ -265,7 +265,7 @@ def load_crepe(prefix, device=None):
     return crepe_instance
 
 
-def does_crepe_exist(prefix):
+def crepe_exists(prefix):
     return os.path.exists(f"{prefix}.yml") and os.path.exists(f"{prefix}.pth")
 
 

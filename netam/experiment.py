@@ -97,7 +97,7 @@ class Experiment:
     ):
         crepe_prefix = f"{pretrained_dir}/{model_name}"
 
-        if framework.does_crepe_exist(crepe_prefix):
+        if framework.crepe_exists(crepe_prefix):
             print(f"\tLoading pre-trained {model_name}...")
             crepe = framework.load_crepe(crepe_prefix)
             assert crepe.model.hyperparameters == model.hyperparameters

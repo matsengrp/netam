@@ -13,7 +13,7 @@ class ModelBase(nn.Module):
             if isinstance(layer, nn.Embedding):
                 nn.init.normal_(layer.weight)
             elif isinstance(layer, nn.Linear):
-                nn.init.kaiming_normal_(layer.weight, nonlinearity='none')
+                nn.init.kaiming_normal_(layer.weight, nonlinearity='linear')
                 if layer.bias is not None:
                     nn.init.constant_(layer.bias, 0)
             elif isinstance(layer, nn.Conv1d):
@@ -26,6 +26,8 @@ class ModelBase(nn.Module):
                         nn.init.kaiming_normal_(sublayer.weight, nonlinearity='relu')
                         if sublayer.bias is not None:
                             nn.init.constant_(sublayer.bias, 0)
+            elif isinstance(layer, nn.Dropout):
+                pass
             else:
                 raise ValueError(f"Unrecognized layer type: {type(layer)}")
 
