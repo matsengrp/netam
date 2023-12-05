@@ -412,7 +412,7 @@ class Burrito:
 
         return pd.DataFrame({"train_loss": train_losses, "val_loss": val_losses})
 
-    def multi_train(self, epochs, max_tries):
+    def multi_train(self, epochs, max_tries=3):
         """Train the model. If lr isn't below min_lr, reset the optimizer and scheduler, and reset the model and resume training."""
         for i in range(max_tries):
             train_history = self.train(epochs)

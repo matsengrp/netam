@@ -117,7 +117,7 @@ class Experiment:
         burrito = framework.Burrito(
             train_dataset, val_dataset, model, verbose=False, **our_burrito_params
         )
-        train_history = burrito.train(epochs=self.epochs)
+        train_history = burrito.multi_train(epochs=self.epochs)
         Path(pretrained_dir).mkdir(parents=True, exist_ok=True)
         burrito.save_crepe(crepe_prefix)
 
