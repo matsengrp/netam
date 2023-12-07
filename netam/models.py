@@ -129,7 +129,7 @@ class CNNModel(KmerModel):
     """
 
     def __init__(
-        self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_rate=0.1
+        self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
     ):
         super(CNNModel, self).__init__(kmer_length)
         self.kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
@@ -139,7 +139,7 @@ class CNNModel(KmerModel):
             kernel_size=kernel_size,
             padding="same",
         )
-        self.dropout = nn.Dropout(dropout_rate)
+        self.dropout = nn.Dropout(dropout_prob)
         self.linear = nn.Linear(in_features=filter_count, out_features=1)
 
     def forward(self, encoded_parents, masks):
@@ -159,18 +159,18 @@ class CNNModel(KmerModel):
             "embedding_dim": self.kmer_embedding.embedding_dim,
             "filter_count": self.conv.out_channels,
             "kernel_size": self.conv.kernel_size[0],
-            "dropout_rate": self.dropout.p,
+            "dropout_prob": self.dropout.p,
         }
 
 
 class CNNPEModel(CNNModel):
     def __init__(
-        self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_rate
+        self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
     ):
         super(CNNPEModel, self).__init__(
-            kmer_length, embedding_dim, filter_count, kernel_size, dropout_rate
+            kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
         )
-        self.pos_encoder = PositionalEncoding(embedding_dim, dropout=dropout_rate)
+        self.pos_encoder = PositionalEncoding(embedding_dim, dropout=dropout_prob)
 
     def forward(self, encoded_parents, masks):
         kmer_embeds = self.kmer_embedding(encoded_parents)
@@ -190,12 +190,12 @@ class CNN1merModel(CNNModel):
     embedding layer.
     """
 
-    def __init__(self, filter_count, kernel_size, dropout_rate=0.1):
+    def __init__(self, filter_count, kernel_size, dropout_prob=0.1):
         # Fixed embedding_dim because there are only 4 bases.
         embedding_dim = 5
         kmer_length = 1
         super(CNN1merModel, self).__init__(
-            kmer_length, embedding_dim, filter_count, kernel_size, dropout_rate
+            kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
         )
         identity_matrix = torch.eye(embedding_dim)
         self.kmer_embedding.weight = nn.Parameter(identity_matrix, requires_grad=False)
