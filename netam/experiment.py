@@ -35,14 +35,21 @@ class Experiment:
                 embedding_dim=6,
                 filter_count=14,
                 kernel_size=7,
-                dropout_rate=0.0,
+                dropout_rate=0.1,
             ),
-            f"{prename}_cnn_med": models.CNNModel(
+            f"{prename}_cnn_med_orig": models.CNNModel(
                 kmer_length=3,
                 embedding_dim=9,
                 filter_count=9,
                 kernel_size=11,
                 dropout_rate=0.1,
+            ),
+            f"{prename}_cnn_med": models.CNNModel(
+                kmer_length=3,
+                embedding_dim=7,
+                filter_count=16,
+                kernel_size=9,
+                dropout_rate=0.2,
             ),
             f"{prename}_cnn_lrg": models.CNNModel(
                 kmer_length=3,
@@ -57,6 +64,13 @@ class Experiment:
                 filter_count=14,
                 kernel_size=17,
                 dropout_rate=0.1,
+            ),
+            f"{prename}_cnn_4k_k13": models.CNNModel(
+                kmer_length=3,
+                embedding_dim=12,
+                filter_count=20,
+                kernel_size=13,
+                dropout_rate=0.3,
             ),
             f"{prename}_cnn_8k": models.CNNModel(
                 kmer_length=3,
@@ -205,36 +219,44 @@ class Experiment:
 
 def plot_loss_difference(expt_df, baseline_model_name):
     df = expt_df
-    assert baseline_model_name in df['model_name'].values, 'Baseline model not found'
+    assert baseline_model_name in df["model_name"].values, "Baseline model not found"
     # Identify loss columns (ending with '_loss')
-    loss_columns = [col for col in df.columns if col.endswith('_loss')]
-    assert len(loss_columns) > 0, 'No loss columns found'
+    loss_columns = [col for col in df.columns if col.endswith("_loss")]
+    assert len(loss_columns) > 0, "No loss columns found"
 
     # Calculate differences from the baseline model for each loss type
     for loss_col in loss_columns:
-        baseline_loss = df[df['model_name'] == baseline_model_name][loss_col].values[0]
-        df[f'{loss_col}_diff'] = df[loss_col] - baseline_loss
+        baseline_loss = df[df["model_name"] == baseline_model_name][loss_col].values[0]
+        df[f"{loss_col}_diff"] = df[loss_col] - baseline_loss
 
     # Filter out the baseline model and sort by parameter count
-    df = df[df['model_name'] != baseline_model_name]
-    df = df.sort_values(by='parameter_count')
+    df = df[df["model_name"] != baseline_model_name]
+    df = df.sort_values(by="parameter_count")
 
     # Prepare data for plotting
-    melted_df = pd.melt(df, id_vars=['model_name', 'parameter_count'],
-                        value_vars=[f'{col}_diff' for col in loss_columns],
-                        var_name='Loss Type', value_name='Loss Difference')
+    melted_df = pd.melt(
+        df,
+        id_vars=["model_name", "parameter_count"],
+        value_vars=[f"{col}_diff" for col in loss_columns],
+        var_name="Loss Type",
+        value_name="Loss Difference",
+    )
 
     # Create a separate plot for each loss type
     n_loss_types = len(loss_columns)
-    fig, axes = plt.subplots(n_loss_types, 1, figsize=(8, 4 * n_loss_types), squeeze=False)
-    
+    fig, axes = plt.subplots(
+        n_loss_types, 1, figsize=(8, 4 * n_loss_types), squeeze=False
+    )
+
     for i, loss_type in enumerate(loss_columns):
-        sns.barplot(data=melted_df[melted_df['Loss Type'] == f'{loss_type}_diff'],
-                    x='Loss Difference', y='model_name', ax=axes[i, 0])
-        axes[i, 0].set_title(loss_type.replace('_loss', '').replace('_', ' ').title())
-        axes[i, 0].axvline(0, color='black', linewidth=1)  # Add vertical line at zero
+        sns.barplot(
+            data=melted_df[melted_df["Loss Type"] == f"{loss_type}_diff"],
+            x="Loss Difference",
+            y="model_name",
+            ax=axes[i, 0],
+        )
+        axes[i, 0].set_title(loss_type.replace("_loss", "").replace("_", " ").title())
+        axes[i, 0].axvline(0, color="black", linewidth=1)  # Add vertical line at zero
 
     plt.tight_layout()
     plt.show()
-
-
