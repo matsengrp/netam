@@ -105,7 +105,7 @@ class PCPDataset(Dataset):
                 parent_idxs, subs_probs[:parent_len, :]
             )
 
-            neutral_aa_mut_prob = molevol.neutral_aa_mut_prob_v(
+            neutral_aa_mut_prob = molevol.neutral_aa_mut_probs(
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
                 normed_subs_probs.reshape(-1, 3, 4),
@@ -342,46 +342,56 @@ class DNSMBurrito:
 
         print("training model...")
 
-        for epoch in range(num_epochs):
-            self.dnsm.train()
-            for i, batch in enumerate(train_loader):
-                self.optimizer.zero_grad()
-                loss = self.loss_of_batch(batch)
-                loss.backward()
-                self.optimizer.step()
-                self.writer.add_scalar(
-                    "Training Loss", loss.item(), self.global_train_step
-                )
-                self.global_train_step += 1
+        val_losses = []
+        
+        with tqdm(range(1, num_epochs + 1), desc="Epoch") as pbar:
+            for epoch in pbar:
+                self.dnsm.train()
+                for i, batch in enumerate(train_loader):
+                    self.optimizer.zero_grad()
+                    loss = self.loss_of_batch(batch)
+                    loss.backward()
+                    self.optimizer.step()
+                    self.writer.add_scalar(
+                        "Training Loss", loss.item(), self.global_train_step
+                    )
+                    self.global_train_step += 1
 
-            # Validation Loop
-            self.dnsm.eval()
-            val_loss = 0
-            with torch.no_grad():
-                for batch in val_loader:
-                    val_loss += self.loss_of_batch(batch).item()
+                # Validation Loop
+                self.dnsm.eval()
+                val_loss = 0
+                with torch.no_grad():
+                    for batch in val_loader:
+                        val_loss += self.loss_of_batch(batch).item()
 
-                avg_val_loss = val_loss / len(val_loader)
-                self.writer.add_scalar(
-                    "Validation Loss", avg_val_loss, self.global_val_step
-                )
-                self.global_val_step += 1
+                    avg_val_loss = val_loss / len(val_loader)
+                    self.writer.add_scalar(
+                        "Validation Loss", avg_val_loss, self.global_val_step
+                    )
+                    self.global_val_step += 1
 
-                # Save model checkpoint
-                torch.save(
-                    {
-                        "epoch": epoch,
-                        "model_state_dict": self.dnsm.state_dict(),
-                        "optimizer_state_dict": self.optimizer.state_dict(),
-                        "loss": avg_val_loss,
-                    },
-                    f"{self.checkpoint_dir}/model_epoch_{epoch}.pth",
-                )
+                    # Save model checkpoint
+                    torch.save(
+                        {
+                            "epoch": epoch,
+                            "model_state_dict": self.dnsm.state_dict(),
+                            "optimizer_state_dict": self.optimizer.state_dict(),
+                            "loss": avg_val_loss,
+                        },
+                        f"{self.checkpoint_dir}/model_epoch_{epoch}.pth",
+                    )
+                    val_losses.append(avg_val_loss)
 
-            self.writer.flush()
-            print(
-                f"Epoch [{epoch + 1}/{num_epochs}], Training Loss: {loss.item()}, Validation Loss: {avg_val_loss}"
-            )
+                self.writer.flush()
+                if len(val_losses) > 1:
+                    loss_diff = val_losses[-1] - val_losses[-2]
+                    pbar.set_postfix(
+                        val_loss=f"{avg_val_loss:.4g}",
+                        loss_diff=f"{loss_diff:.4g}",
+                        # lr=current_lr,
+                        refresh=True,
+                    )
+
 
     def _build_log_pcp_probability(
         self, parent: str, child: str, rates: Tensor, subs_probs: Tensor
@@ -409,7 +419,7 @@ class DNSMBurrito:
             mut_probs = 1.0 - torch.exp(-branch_length * rates)
             normed_subs_probs = molevol.normalize_sub_probs(parent_idxs, subs_probs)
 
-            neutral_aa_mut_prob = molevol.neutral_aa_mut_prob_v(
+            neutral_aa_mut_prob = molevol.neutral_aa_mut_probs(
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
                 normed_subs_probs.reshape(-1, 3, 4),
