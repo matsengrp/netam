@@ -34,7 +34,7 @@ class ModelBase(nn.Module):
 
 class KmerModel(ModelBase):
     def __init__(self, kmer_length):
-        super(KmerModel, self).__init__()
+        super().__init__()
         self.kmer_length = kmer_length
         self.all_kmers = generate_kmers(kmer_length)
         self.kmer_count = len(self.all_kmers)
@@ -48,7 +48,7 @@ class KmerModel(ModelBase):
 
 class FivemerModel(KmerModel):
     def __init__(self, kmer_length):
-        super(FivemerModel, self).__init__(kmer_length)
+        super().__init__(kmer_length)
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
 
     def forward(self, encoded_parents, masks):
@@ -64,7 +64,7 @@ class FivemerModel(KmerModel):
 
 class SHMoofModel(KmerModel):
     def __init__(self, kmer_length, site_count):
-        super(SHMoofModel, self).__init__(kmer_length)
+        super().__init__(kmer_length)
         self.site_count = site_count
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
         self.log_site_rates = nn.Embedding(self.site_count, 1)
@@ -131,7 +131,7 @@ class CNNModel(KmerModel):
     def __init__(
         self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
     ):
-        super(CNNModel, self).__init__(kmer_length)
+        super().__init__(kmer_length)
         self.kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
         self.conv = nn.Conv1d(
             in_channels=embedding_dim,
@@ -167,7 +167,7 @@ class CNNPEModel(CNNModel):
     def __init__(
         self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
     ):
-        super(CNNPEModel, self).__init__(
+        super().__init__(
             kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
         )
         self.pos_encoder = PositionalEncoding(embedding_dim, dropout=dropout_prob)
@@ -194,7 +194,7 @@ class CNN1merModel(CNNModel):
         # Fixed embedding_dim because there are only 4 bases.
         embedding_dim = 5
         kmer_length = 1
-        super(CNN1merModel, self).__init__(
+        super().__init__(
             kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
         )
         identity_matrix = torch.eye(embedding_dim)
@@ -207,7 +207,7 @@ class PersiteWrapper(ModelBase):
     """
 
     def __init__(self, base_model, site_count):
-        super(PersiteWrapper, self).__init__()
+        super().__init__()
         self.base_model = base_model
         self.site_count = site_count
         self.log_site_rates = nn.Embedding(self.site_count, 1)
