@@ -343,7 +343,7 @@ class DNSMBurrito:
         print("training model...")
 
         val_losses = []
-        
+
         with tqdm(range(1, num_epochs + 1), desc="Epoch") as pbar:
             for epoch in pbar:
                 self.dnsm.train()
@@ -391,7 +391,6 @@ class DNSMBurrito:
                         # lr=current_lr,
                         refresh=True,
                     )
-
 
     def _build_log_pcp_probability(
         self, parent: str, child: str, rates: Tensor, subs_probs: Tensor

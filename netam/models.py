@@ -13,17 +13,17 @@ class ModelBase(nn.Module):
             if isinstance(layer, nn.Embedding):
                 nn.init.normal_(layer.weight)
             elif isinstance(layer, nn.Linear):
-                nn.init.kaiming_normal_(layer.weight, nonlinearity='linear')
+                nn.init.kaiming_normal_(layer.weight, nonlinearity="linear")
                 if layer.bias is not None:
                     nn.init.constant_(layer.bias, 0)
             elif isinstance(layer, nn.Conv1d):
-                nn.init.kaiming_normal_(layer.weight, nonlinearity='relu')
+                nn.init.kaiming_normal_(layer.weight, nonlinearity="relu")
                 if layer.bias is not None:
                     nn.init.constant_(layer.bias, 0)
             elif isinstance(layer, nn.TransformerEncoder):
                 for sublayer in layer.modules():
                     if isinstance(sublayer, nn.Linear):
-                        nn.init.kaiming_normal_(sublayer.weight, nonlinearity='relu')
+                        nn.init.kaiming_normal_(sublayer.weight, nonlinearity="relu")
                         if sublayer.bias is not None:
                             nn.init.constant_(sublayer.bias, 0)
             elif isinstance(layer, nn.Dropout):

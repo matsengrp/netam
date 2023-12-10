@@ -113,11 +113,11 @@ class KmerSequenceEncoder:
         self.overhang_length = (kmer_length - 1) // 2
         self.all_kmers = generate_kmers(kmer_length)
         self.kmer_to_index = kmer_to_index_of(self.all_kmers)
- 
+
     @property
     def parameters(self):
         return {"kmer_length": self.kmer_length, "site_count": self.site_count}
- 
+
     def encode_sequence(self, sequence):
         # Pad sequence with overhang_length 'N's at the start and end so that we
         # can assign parameters to every site in the sequence.
@@ -192,7 +192,7 @@ class SHMoofDataset(KmerSequenceEncoder, Dataset):
         )
 
 
-class Crepe():
+class Crepe:
     """
     A lightweight wrapper around a model that can be used for prediction but not training.
     It handles serialization.
@@ -254,9 +254,7 @@ def load_crepe(prefix, device=None):
     try:
         encoder_class = globals()[encoder_class_name]
     except AttributeError:
-        raise ValueError(
-            f"Encoder class '{encoder_class_name}' not known."
-        )
+        raise ValueError(f"Encoder class '{encoder_class_name}' not known.")
 
     encoder = encoder_class(**config["encoder_parameters"])
 
@@ -274,9 +272,7 @@ def load_crepe(prefix, device=None):
     model_state_path = f"{prefix}.pth"
     model.load_state_dict(torch.load(model_state_path, map_location=device))
 
-    crepe_instance = Crepe(
-        encoder, model, config["training_hyperparameters"]
-    )
+    crepe_instance = Crepe(encoder, model, config["training_hyperparameters"])
     if device:
         crepe_instance.to(device)
 
@@ -475,9 +471,7 @@ class Burrito:
             self.model.hyperparameters["kmer_length"],
             self.train_loader.dataset.site_count,
         )
-        return Crepe(
-            encoder, self.model, training_hyperparameters
-        )
+        return Crepe(encoder, self.model, training_hyperparameters)
 
     def save_crepe(self, prefix):
         self.to_crepe().save(prefix)
