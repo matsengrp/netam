@@ -56,7 +56,7 @@ def test_write_output(tiny_burrito):
 def test_crepe_roundtrip(tiny_burrito):
     tiny_burrito.save_crepe("_ignore/tiny_crepe")
     crepe = framework.load_crepe("_ignore/tiny_crepe")
-    assert crepe.site_count == tiny_burrito.model.site_count
-    assert crepe.kmer_length == tiny_burrito.model.kmer_length
+    assert crepe.encoder.parameters["site_count"] == tiny_burrito.model.site_count
+    assert crepe.encoder.parameters["kmer_length"] == tiny_burrito.model.kmer_length
     assert torch.isclose(crepe.model.kmer_rates, tiny_burrito.model.kmer_rates).all()
     assert torch.isclose(crepe.model.site_rates, tiny_burrito.model.site_rates).all()

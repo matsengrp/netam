@@ -105,7 +105,7 @@ def timestamp_str():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
-class SequenceEncodingBase:
+class KmerSequenceEncoder:
     def __init__(self, kmer_length, site_count):
         self.kmer_length = kmer_length
         self.site_count = site_count
@@ -113,7 +113,11 @@ class SequenceEncodingBase:
         self.overhang_length = (kmer_length - 1) // 2
         self.all_kmers = generate_kmers(kmer_length)
         self.kmer_to_index = kmer_to_index_of(self.all_kmers)
-
+ 
+    @property
+    def parameters(self):
+        return {"kmer_length": self.kmer_length, "site_count": self.site_count}
+ 
     def encode_sequence(self, sequence):
         # Pad sequence with overhang_length 'N's at the start and end so that we
         # can assign parameters to every site in the sequence.
@@ -142,7 +146,8 @@ class SequenceEncodingBase:
         )
 
 
-class SHMoofDataset(SequenceEncodingBase, Dataset):
+# TODO have an encoder, don't inherit from it
+class SHMoofDataset(KmerSequenceEncoder, Dataset):
     def __init__(self, dataframe, kmer_length, site_count):
         super().__init__(kmer_length, site_count)
         (
@@ -187,7 +192,7 @@ class SHMoofDataset(SequenceEncodingBase, Dataset):
         )
 
 
-class Crepe(SequenceEncodingBase):
+class Crepe():
     """
     A lightweight wrapper around a model that can be used for prediction but not training.
     It handles serialization.
@@ -195,8 +200,9 @@ class Crepe(SequenceEncodingBase):
 
     SERIALIZATION_VERSION = 0
 
-    def __init__(self, model, site_count, training_hyperparameters={}):
-        super().__init__(model.kmer_length, site_count)
+    def __init__(self, encoder, model, training_hyperparameters={}):
+        super().__init__()
+        self.encoder = encoder
         self.model = model
         self.training_hyperparameters = training_hyperparameters
         self.device = None
@@ -207,7 +213,7 @@ class Crepe(SequenceEncodingBase):
 
     def encode_sequences(self, sequences):
         encoded_parents, masks = zip(
-            *[self.encode_sequence(sequence) for sequence in sequences]
+            *[self.encoder.encode_sequence(sequence) for sequence in sequences]
         )
         return torch.stack(encoded_parents), torch.stack(masks)
 
@@ -227,7 +233,8 @@ class Crepe(SequenceEncodingBase):
                     "model_class": self.model.__class__.__name__,
                     "model_hyperparameters": self.model.hyperparameters,
                     "training_hyperparameters": self.training_hyperparameters,
-                    "site_count": self.site_count,
+                    "encoder_class": self.encoder.__class__.__name__,
+                    "encoder_parameters": self.encoder.parameters,
                 },
                 f,
             )
@@ -241,6 +248,17 @@ def load_crepe(prefix, device=None):
         raise ValueError(
             f"Unsupported serialization version: {config['serialization_version']}"
         )
+
+    encoder_class_name = config["encoder_class"]
+
+    try:
+        encoder_class = globals()[encoder_class_name]
+    except AttributeError:
+        raise ValueError(
+            f"Encoder class '{encoder_class_name}' not known."
+        )
+
+    encoder = encoder_class(**config["encoder_parameters"])
 
     model_class_name = config["model_class"]
 
@@ -257,7 +275,7 @@ def load_crepe(prefix, device=None):
     model.load_state_dict(torch.load(model_state_path, map_location=device))
 
     crepe_instance = Crepe(
-        model, config["site_count"], config["training_hyperparameters"]
+        encoder, model, config["training_hyperparameters"]
     )
     if device:
         crepe_instance.to(device)
@@ -453,8 +471,12 @@ class Burrito:
                 "l2_regularization_coeff",
             ]
         }
+        encoder = KmerSequenceEncoder(
+            self.model.hyperparameters["kmer_length"],
+            self.train_loader.dataset.site_count,
+        )
         return Crepe(
-            self.model, self.train_loader.dataset.site_count, training_hyperparameters
+            encoder, self.model, training_hyperparameters
         )
 
     def save_crepe(self, prefix):
