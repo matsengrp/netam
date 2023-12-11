@@ -20,6 +20,7 @@ from tensorboardX import SummaryWriter
 
 from netam.common import parameter_count_of_model, generate_kmers, kmer_to_index_of
 from netam import models
+from abc import ABC, abstractmethod
 
 
 def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
@@ -293,7 +294,7 @@ def crepe_exists(prefix):
     return os.path.exists(f"{prefix}.yml") and os.path.exists(f"{prefix}.pth")
 
 
-class Burrito:
+class Burrito(ABC):
     def __init__(
         self,
         train_dataset,
@@ -460,6 +461,39 @@ class Burrito:
 
     def save_crepe(self, prefix):
         self.to_crepe().save(prefix)
+
+    @abstractmethod
+    def loss_of_batch(self, batch):
+        pass
+    
+    @abstractmethod
+    def to_crepe(self):
+        pass
+
+
+class SHMBurrito(Burrito):
+    def __init__(
+        self,
+        train_dataset,
+        val_dataset,
+        model,
+        batch_size=1024,
+        learning_rate=0.1,
+        min_learning_rate=1e-4,
+        l2_regularization_coeff=1e-6,
+        verbose=False,
+    ):
+        self.train_loader = DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=True
+        )
+        self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+        self.model = model
+        self.learning_rate = learning_rate
+        self.min_learning_rate = min_learning_rate
+        self.l2_regularization_coeff = l2_regularization_coeff
+        self.verbose = verbose
+        self.reset_optimization()
+        self.bce_loss = nn.BCELoss()
 
 
     def loss_of_batch(self, batch):

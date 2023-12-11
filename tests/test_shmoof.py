@@ -6,7 +6,7 @@ import torch
 
 import netam.framework as framework
 from netam.common import BASES
-from netam.framework import SHMoofDataset, Burrito
+from netam.framework import SHMoofDataset, SHMBurrito
 from netam.models import SHMoofModel
 
 
@@ -29,7 +29,7 @@ def tiny_model():
 
 @pytest.fixture
 def tiny_burrito(tiny_dataset, tiny_val_dataset, tiny_model):
-    burrito = Burrito(tiny_dataset, tiny_val_dataset, tiny_model)
+    burrito = SHMBurrito(tiny_dataset, tiny_val_dataset, tiny_model)
     burrito.train(epochs=5)
     return burrito
 
