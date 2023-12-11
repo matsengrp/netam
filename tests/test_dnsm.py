@@ -1,16 +1,17 @@
 import pandas as pd
+from netam.framework import load_crepe
 from netam.dnsm import TransformerBinarySelectionModel, DNSMBurrito
 from epam.shmple_precompute import load_and_convert_to_tensors
+import pytest
 
 
-def test_dnsm():
-    """Just make sure that the model trains."""
-    # pcp_df = pd.read_csv("~/data/wyatt-10x-1p5m_pcp_2023-10-07.first100.csv")
+@pytest.fixture
+def dnsm_burrito():
+    """Fixture that returns the DNSM Burrito object."""
     pcp_df = load_and_convert_to_tensors(
         "/Users/matsen/data/wyatt-10x-1p5m_pcp_2023-10-07.first100.shmple.hdf5"
     )
 
-    # filter out rows of pcp_df where the parent and child sequences are identical
     pcp_df = pcp_df[pcp_df["parent"] != pcp_df["child"]]
     print(f"After filtering out identical PCPs, we have {len(pcp_df)} PCPs.")
 
@@ -24,6 +25,16 @@ def test_dnsm():
         checkpoint_dir="./_checkpoints",
         log_dir="./_logs",
     )
-
     burrito.train(2)
     burrito.optimize_branch_lengths()
+    return burrito
+
+
+def test_crepe_roundtrip(dnsm_burrito):
+    dnsm_burrito.save_crepe("_ignore/dnsm")
+    crepe = load_crepe("_ignore/dnsm")
+    dnsm = crepe.dnsm
+    assert isinstance(dnsm, TransformerBinarySelectionModel)
+    assert dnsm_burrito.dnsm.hyperparameters == dnsm.hyperparameters
+    assert dnsm_burrito.dnsm.state_dict() == dnsm.state_dict()
+    assert dnsm_burrito.encoder == crepe.encoder

@@ -30,6 +30,7 @@ from netam.common import (
     pick_device,
     PositionalEncoding,
 )
+import netam.framework as framework
 from epam.torch_common import optimize_branch_length
 import epam.molevol as molevol
 import epam.sequences as sequences
@@ -157,6 +158,8 @@ class TransformerBinarySelectionModel(nn.Module):
         super().__init__()
         self.device = pick_device()
         self.d_model = d_model
+        self.nhead = nhead
+        self.dim_feedforward = dim_feedforward
         self.pos_encoder = PositionalEncoding(self.d_model, dropout)
         self.encoder_layer = nn.TransformerEncoderLayer(
             d_model=self.d_model,
@@ -166,9 +169,18 @@ class TransformerBinarySelectionModel(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(self.encoder_layer, layer_count)
         self.linear = nn.Linear(self.d_model, 1)
-
         self.to(self.device)
         self.init_weights()
+
+    @property
+    def hyperparameters(self):
+        return {
+            "nhead": self.nhead,
+            "dim_feedforward": self.dim_feedforward,
+            "layer_count": self.encoder.num_layers,
+            "d_model": self.d_model,
+            "dropout_prob": self.pos_encoder.dropout.p,
+        }
 
     def init_weights(self) -> None:
         initrange = 0.1
@@ -485,3 +497,16 @@ class DNSMBurrito:
                 dataset.all_subs_probs,
                 dataset.branch_lengths,
             )
+
+    def to_crepe(self):
+        training_hyperparameters = {
+            key: self.__dict__[key]
+            for key in [
+                "learning_rate",
+            ]
+        }
+        encoder = framework.PlaceholderEncoder()
+        return framework.Crepe(encoder, self.dnsm, training_hyperparameters)
+
+    def save_crepe(self, prefix):
+        self.to_crepe().save(prefix)

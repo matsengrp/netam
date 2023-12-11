@@ -146,6 +146,15 @@ class KmerSequenceEncoder:
         )
 
 
+class PlaceholderEncoder():
+    def __init__(self):
+        pass
+
+    @property
+    def parameters(self):
+        return {}
+
+
 class SHMoofDataset(Dataset):
     def __init__(self, dataframe, kmer_length, site_count):
         super().__init__()
