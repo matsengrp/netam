@@ -351,8 +351,8 @@ class Burrito:
             self.model.eval()
 
         with torch.set_grad_enabled(train_mode):
-            for encoded_parents, masks, mutation_indicators in data_loader:
-                loss = self._calculate_loss(encoded_parents, masks, mutation_indicators)
+            for batch in data_loader:
+                loss = self.loss_of_batch(batch)
 
                 if train_mode:
                     if hasattr(self.model, "regularization_loss"):
@@ -365,8 +365,9 @@ class Burrito:
                 # If we multiply the loss by the batch size, then the loss will be the sum of the
                 # losses for each example in the batch. Then, when we divide by the number of
                 # examples in the dataset below, we will get the average loss per example.
-                total_loss += loss.item() * encoded_parents.size(0)
-                total_samples += encoded_parents.size(0)
+                batch_size = batch[0].size(0)
+                total_loss += loss.item() * batch_size
+                total_samples += batch_size
 
         average_loss = total_loss / total_samples
         return average_loss
@@ -451,7 +452,8 @@ class Burrito:
         print(f"Failed to train model to min_learning_rate after {max_tries} tries.")
         return train_history
 
-    def _calculate_loss(self, encoded_parents, masks, mutation_indicators):
+    def loss_of_batch(self, batch):
+        encoded_parents, masks, mutation_indicators = batch
         rates = self.model(encoded_parents, masks)
         mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
             dim=1, keepdim=True
