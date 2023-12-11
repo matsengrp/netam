@@ -38,14 +38,14 @@ def test_make_dataset(tiny_dataset):
     encoded_parent, mask, mutation_indicator = tiny_dataset[0]
     assert (mask == torch.tensor([1, 1, 1, 1, 1, 0], dtype=torch.bool)).all()
     # First kmer is NAT due to padding, but our encoding defaults this to "N".
-    assert encoded_parent[0].item() == tiny_dataset.kmer_to_index["N"]
+    assert encoded_parent[0].item() == tiny_dataset.encoder.kmer_to_index["N"]
     assert (
         mutation_indicator == torch.tensor([0, 1, 0, 0, 0, 0], dtype=torch.bool)
     ).all()
 
 
 def test_run_model_forward(tiny_dataset, tiny_model):
-    assert tiny_dataset.site_count == tiny_model.site_count
+    assert tiny_dataset.encoder.site_count == tiny_model.site_count
     tiny_model.forward(tiny_dataset.encoded_parents, tiny_dataset.masks)
 
 
@@ -60,3 +60,5 @@ def test_crepe_roundtrip(tiny_burrito):
     assert crepe.encoder.parameters["kmer_length"] == tiny_burrito.model.kmer_length
     assert torch.isclose(crepe.model.kmer_rates, tiny_burrito.model.kmer_rates).all()
     assert torch.isclose(crepe.model.site_rates, tiny_burrito.model.site_rates).all()
+    ## Assert that crepe.model is in eval mode
+    assert not crepe.model.training

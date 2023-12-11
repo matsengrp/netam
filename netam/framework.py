@@ -479,7 +479,7 @@ class Burrito:
         }
         encoder = KmerSequenceEncoder(
             self.model.hyperparameters["kmer_length"],
-            self.train_loader.dataset.site_count,
+            self.train_loader.dataset.encoder.site_count,
         )
         return Crepe(encoder, self.model, training_hyperparameters)
 
