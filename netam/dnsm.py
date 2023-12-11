@@ -144,13 +144,13 @@ class DNSMBurrito:
     def __init__(
         self,
         pcp_df,
-        dnsm,
+        model,
         batch_size=32,
         learning_rate=0.001,
         checkpoint_dir="./_checkpoints",
         log_dir="./_logs",
     ):
-        self.dnsm = dnsm
+        self.model = model
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.checkpoint_dir = checkpoint_dir
@@ -179,8 +179,8 @@ class DNSMBurrito:
         )
         self.val_set = PCPDataset(val_parents, val_children, val_rates, val_subs_probs)
 
-        self.optimizer = optim.Adam(self.dnsm.parameters(), lr=learning_rate)
-        self.device = self.dnsm.device
+        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.device = self.model.device
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
         self.writer = SummaryWriter(log_dir=log_dir)
@@ -216,7 +216,7 @@ class DNSMBurrito:
         aa_subs_indicator = batch["subs_indicator"].to(self.device)
         padding_mask = batch["padding_mask"].to(self.device)
         log_neutral_aa_mut_probs = batch["log_neutral_aa_mut_probs"].to(self.device)
-        log_selection_factors = self.dnsm(aa_onehot, padding_mask)
+        log_selection_factors = self.model(aa_onehot, padding_mask)
         return self.complete_loss_fn(
             log_neutral_aa_mut_probs,
             log_selection_factors,
@@ -238,9 +238,9 @@ class DNSMBurrito:
         val_loader = DataLoader(self.val_set, batch_size=self.batch_size, shuffle=False)
 
         # Record epoch 0
-        self.dnsm.train()
+        self.model.train()
         avg_train_loss_epoch_zero = self.compute_avg_loss(train_loader)
-        self.dnsm.eval()
+        self.model.eval()
         avg_val_loss_epoch_zero = self.compute_avg_loss(val_loader)
         self.writer.add_scalar(
             "Training Loss", avg_train_loss_epoch_zero, self.global_train_step
@@ -258,7 +258,7 @@ class DNSMBurrito:
 
         with tqdm(range(1, num_epochs + 1), desc="Epoch") as pbar:
             for epoch in pbar:
-                self.dnsm.train()
+                self.model.train()
                 for i, batch in enumerate(train_loader):
                     self.optimizer.zero_grad()
                     loss = self.loss_of_batch(batch)
@@ -270,7 +270,7 @@ class DNSMBurrito:
                     self.global_train_step += 1
 
                 # Validation Loop
-                self.dnsm.eval()
+                self.model.eval()
                 val_loss = 0
                 with torch.no_grad():
                     for batch in val_loader:
@@ -286,7 +286,7 @@ class DNSMBurrito:
                     torch.save(
                         {
                             "epoch": epoch,
-                            "model_state_dict": self.dnsm.state_dict(),
+                            "model_state_dict": self.model.state_dict(),
                             "optimizer_state_dict": self.optimizer.state_dict(),
                             "loss": avg_val_loss,
                         },
@@ -322,7 +322,7 @@ class DNSMBurrito:
             [p != c for p, c in zip(aa_parent, aa_child)], dtype=torch.float
         )
 
-        selection_factors = self.dnsm.selection_factors_of_aa_str(aa_parent).to("cpu")
+        selection_factors = self.model.selection_factors_of_aa_str(aa_parent).to("cpu")
         bce_loss = torch.nn.BCELoss()
 
         def log_pcp_probability(log_branch_length: torch.Tensor):
@@ -406,7 +406,7 @@ class DNSMBurrito:
             ]
         }
         encoder = framework.PlaceholderEncoder()
-        return framework.Crepe(encoder, self.dnsm, training_hyperparameters)
+        return framework.Crepe(encoder, self.model, training_hyperparameters)
 
     def save_crepe(self, prefix):
         self.to_crepe().save(prefix)

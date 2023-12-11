@@ -18,11 +18,11 @@ def dnsm_burrito():
     pcp_df = pcp_df[pcp_df["parent"] != pcp_df["child"]]
     print(f"After filtering out identical PCPs, we have {len(pcp_df)} PCPs.")
 
-    dnsm = TransformerBinarySelectionModel(nhead=2, dim_feedforward=256, layer_count=2)
+    model = TransformerBinarySelectionModel(nhead=2, dim_feedforward=256, layer_count=2)
 
     burrito = DNSMBurrito(
         pcp_df,
-        dnsm,
+        model,
         batch_size=32,
         learning_rate=0.001,
         checkpoint_dir="./_checkpoints",
@@ -36,10 +36,10 @@ def dnsm_burrito():
 def test_crepe_roundtrip(dnsm_burrito):
     dnsm_burrito.save_crepe("_ignore/dnsm")
     crepe = load_crepe("_ignore/dnsm")
-    dnsm = crepe.model
-    assert isinstance(dnsm, TransformerBinarySelectionModel)
-    assert dnsm_burrito.dnsm.hyperparameters == dnsm.hyperparameters
+    model = crepe.model
+    assert isinstance(model, TransformerBinarySelectionModel)
+    assert dnsm_burrito.model.hyperparameters == model.hyperparameters
     for t1, t2 in zip(
-        dnsm_burrito.dnsm.state_dict().values(), dnsm.state_dict().values()
+        dnsm_burrito.model.state_dict().values(), model.state_dict().values()
     ):
         assert torch.equal(t1, t2)
