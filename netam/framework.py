@@ -146,10 +146,10 @@ class KmerSequenceEncoder:
         )
 
 
-# TODO have an encoder, don't inherit from it
-class SHMoofDataset(KmerSequenceEncoder, Dataset):
+class SHMoofDataset(Dataset):
     def __init__(self, dataframe, kmer_length, site_count):
-        super().__init__(kmer_length, site_count)
+        super().__init__()
+        self.encoder = KmerSequenceEncoder(kmer_length, site_count)
         (
             self.encoded_parents,
             self.masks,
@@ -176,9 +176,9 @@ class SHMoofDataset(KmerSequenceEncoder, Dataset):
         mutation_vectors = []
 
         for _, row in dataframe.iterrows():
-            encoded_parent, mask = self.encode_sequence(row["parent"])
+            encoded_parent, mask = self.encoder.encode_sequence(row["parent"])
             mutation_indicator = create_mutation_indicator(
-                row["parent"], row["child"], self.site_count
+                row["parent"], row["child"], self.encoder.site_count
             )
 
             encoded_parents.append(encoded_parent)
