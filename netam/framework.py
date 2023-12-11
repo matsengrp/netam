@@ -328,6 +328,21 @@ class Burrito:
             self.optimizer, mode="min", factor=0.2, patience=4, verbose=self.verbose
         )
 
+    def multi_train(self, epochs, max_tries=3):
+        """Train the model. If lr isn't below min_lr, reset the optimizer and scheduler, and reset the model and resume training."""
+        for i in range(max_tries):
+            train_history = self.train(epochs)
+            if self.optimizer.param_groups[0]["lr"] < self.min_learning_rate:
+                return train_history
+            else:
+                print(
+                    f"Learning rate {self.optimizer.param_groups[0]['lr']} not below {self.min_learning_rate}. Resetting model and optimizer."
+                )
+                self.reset_optimization()
+                self.model.reinitialize_weights()
+        print(f"Failed to train model to min_learning_rate after {max_tries} tries.")
+        return train_history
+
     def process_data_loader(self, data_loader, train_mode=False):
         """
         Process data through the model using the given data loader.
@@ -437,20 +452,15 @@ class Burrito:
 
         return pd.DataFrame({"train_loss": train_losses, "val_loss": val_losses})
 
-    def multi_train(self, epochs, max_tries=3):
-        """Train the model. If lr isn't below min_lr, reset the optimizer and scheduler, and reset the model and resume training."""
-        for i in range(max_tries):
-            train_history = self.train(epochs)
-            if self.optimizer.param_groups[0]["lr"] < self.min_learning_rate:
-                return train_history
-            else:
-                print(
-                    f"Learning rate {self.optimizer.param_groups[0]['lr']} not below {self.min_learning_rate}. Resetting model and optimizer."
-                )
-                self.reset_optimization()
-                self.model.reinitialize_weights()
-        print(f"Failed to train model to min_learning_rate after {max_tries} tries.")
-        return train_history
+    def evaluate(self):
+        """
+        Evaluate the model on the validation set.
+        """
+        return self.process_data_loader(self.val_loader, train_mode=False)
+
+    def save_crepe(self, prefix):
+        self.to_crepe().save(prefix)
+
 
     def loss_of_batch(self, batch):
         encoded_parents, masks, mutation_indicators = batch
@@ -463,12 +473,6 @@ class Burrito:
         mutation_indicator_masked = mutation_indicators[masks].float()
         loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
         return loss
-
-    def evaluate(self):
-        """
-        Evaluate the model on the validation set.
-        """
-        return self.process_data_loader(self.val_loader, train_mode=False)
 
     def to_crepe(self):
         training_hyperparameters = {
@@ -484,9 +488,6 @@ class Burrito:
             self.train_loader.dataset.encoder.site_count,
         )
         return Crepe(encoder, self.model, training_hyperparameters)
-
-    def save_crepe(self, prefix):
-        self.to_crepe().save(prefix)
 
 
 class HyperBurrito:
