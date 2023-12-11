@@ -280,6 +280,7 @@ def load_crepe(prefix, device=None):
 
     model_state_path = f"{prefix}.pth"
     model.load_state_dict(torch.load(model_state_path, map_location=device))
+    model.eval()
 
     crepe_instance = Crepe(encoder, model, config["training_hyperparameters"])
     if device:
