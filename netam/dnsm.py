@@ -140,12 +140,10 @@ class PCPDataset(Dataset):
         }
 
 
-
 class DNSMBurrito(framework.Burrito):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.device = pick_device()
-
 
     def complete_loss_fn(
         self,

@@ -147,7 +147,7 @@ class KmerSequenceEncoder:
         )
 
 
-class PlaceholderEncoder():
+class PlaceholderEncoder:
     def __init__(self):
         pass
 
@@ -381,7 +381,9 @@ class Burrito(ABC):
                     self.optimizer.step()
 
                 # We support both dicts and lists of tensors as the batch.
-                first_value_of_batch = list(batch.values())[0] if isinstance(batch, dict) else batch[0]
+                first_value_of_batch = (
+                    list(batch.values())[0] if isinstance(batch, dict) else batch[0]
+                )
                 batch_size = first_value_of_batch.shape[0]
                 # If we multiply the loss by the batch size, then the loss will be the sum of the
                 # losses for each example in the batch. Then, when we divide by the number of
@@ -460,7 +462,7 @@ class Burrito(ABC):
     @abstractmethod
     def loss_of_batch(self, batch):
         pass
-    
+
     @abstractmethod
     def to_crepe(self):
         pass
@@ -489,7 +491,6 @@ class SHMBurrito(Burrito):
         self.verbose = verbose
         self.reset_optimization()
         self.bce_loss = nn.BCELoss()
-
 
     def loss_of_batch(self, batch):
         encoded_parents, masks, mutation_indicators = batch
