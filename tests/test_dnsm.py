@@ -40,6 +40,7 @@ def test_crepe_roundtrip(dnsm_burrito):
     model = crepe.model
     assert isinstance(model, TransformerBinarySelectionModel)
     assert dnsm_burrito.model.hyperparameters == model.hyperparameters
+    model.to(dnsm_burrito.device)
     for t1, t2 in zip(
         dnsm_burrito.model.state_dict().values(), model.state_dict().values()
     ):

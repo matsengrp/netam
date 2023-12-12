@@ -254,8 +254,6 @@ class TransformerBinarySelectionModel(nn.Module):
         dropout_prob: float = 0.5,
     ):
         super().__init__()
-        # TODO
-        self.device = pick_device()
         self.d_model = d_model
         self.nhead = nhead
         self.dim_feedforward = dim_feedforward
@@ -268,7 +266,6 @@ class TransformerBinarySelectionModel(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(self.encoder_layer, layer_count)
         self.linear = nn.Linear(self.d_model, 1)
-        self.to(self.device)
         self.init_weights()
 
     @property
@@ -327,11 +324,12 @@ class TransformerBinarySelectionModel(nn.Module):
         """
         aa_onehot = sequences.aa_onehot_tensor_of_str(aa_str)
 
+        model_device = next(self.parameters()).device
         # Create a padding mask with False values (i.e., no padding)
-        padding_mask = torch.zeros(len(aa_str), dtype=torch.bool).to(self.device)
+        padding_mask = torch.zeros(len(aa_str), dtype=torch.bool).to(model_device)
 
         with torch.no_grad():
-            aa_onehot = aa_onehot.to(self.device)
+            aa_onehot = aa_onehot.to(model_device)
             model_out = self(aa_onehot.unsqueeze(0), padding_mask.unsqueeze(0)).squeeze(
                 0
             )
