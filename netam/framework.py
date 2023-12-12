@@ -316,6 +316,8 @@ class Burrito(ABC):
         self.l2_regularization_coeff = l2_regularization_coeff
         self.verbose = verbose
         self.reset_optimization()
+        self.global_epoch = 0
+        self.writer = SummaryWriter(log_dir="./_logs")
         self.bce_loss = nn.BCELoss()
 
     def reset_optimization(self):
@@ -328,8 +330,6 @@ class Burrito(ABC):
         self.scheduler = ReduceLROnPlateau(
             self.optimizer, mode="min", factor=0.2, patience=4, verbose=self.verbose
         )
-        self.global_epoch = 0
-        self.writer = SummaryWriter(log_dir="./_logs")
 
     def multi_train(self, epochs, max_tries=3):
         """Train the model. If lr isn't below min_lr, reset the optimizer and scheduler, and reset the model and resume training."""
@@ -438,6 +438,7 @@ class Burrito(ABC):
                         lr=current_lr,
                         refresh=True,
                     )
+                self.writer.flush()
 
         if best_model_state is not None:
             self.model.load_state_dict(best_model_state)
