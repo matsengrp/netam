@@ -100,7 +100,6 @@ class DNSMDataset(Dataset):
             parent_len = len(nt_parent)
 
             mut_probs = 1.0 - torch.exp(-branch_length * rates[:parent_len])
-            # TODO don't we normalize already?
             normed_subs_probs = molevol.normalize_sub_probs(
                 parent_idxs, subs_probs[:parent_len, :]
             )
@@ -194,7 +193,6 @@ class DNSMBurrito(framework.Burrito):
         predictions = predictions.masked_select(~padding_mask)
         aa_subs_indicator = aa_subs_indicator.masked_select(~padding_mask)
 
-        # TODO this shouldn't be necessary any more because of the log sigmoid activation.
         # In the early stages of training, we can get probabilities > 1.0 because
         # of bad parameter initialization. We clamp the predictions to be between
         # 0 and 0.999 to avoid this: out of range predictions can make NaNs
