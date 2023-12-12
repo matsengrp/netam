@@ -380,10 +380,12 @@ class Burrito(ABC):
                     loss.backward()
                     self.optimizer.step()
 
+                # We support both dicts and lists of tensors as the batch.
+                first_value_of_batch = list(batch.values())[0] if isinstance(batch, dict) else batch[0]
+                batch_size = first_value_of_batch.shape[0]
                 # If we multiply the loss by the batch size, then the loss will be the sum of the
                 # losses for each example in the batch. Then, when we divide by the number of
                 # examples in the dataset below, we will get the average loss per example.
-                batch_size = batch[0].size(0)
                 total_loss += loss.item() * batch_size
                 total_samples += batch_size
 
