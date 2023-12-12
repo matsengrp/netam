@@ -19,7 +19,6 @@ from torch import Tensor
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 
-from epam.torch_common import pick_device
 import numpy as np
 
 from tensorboardX import SummaryWriter
@@ -164,8 +163,12 @@ class DNSMBurrito(framework.Burrito):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.device = pick_device()
+        self.model.to(self.device)
 
     def loss_of_batch(self, batch):
+        # In contrast to the SHM case, we don't move the whole dataset to the
+        # GPU because we want finer-grained control: we want to do branch length
+        # optimization on the CPU.
         aa_onehot = batch["aa_onehot"].to(self.device)
         aa_subs_indicator = batch["subs_indicator"].to(self.device)
         padding_mask = batch["padding_mask"].to(self.device)
