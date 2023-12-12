@@ -4,7 +4,7 @@ import pytest
 
 from netam.framework import load_crepe
 from netam.models import TransformerBinarySelectionModel
-from netam.dnsm import DNSMBurrito
+from netam.dnsm import DNSMBurrito, train_test_datasets_of_pcp_df
 from epam.shmple_precompute import load_and_convert_to_tensors
 
 
@@ -17,16 +17,17 @@ def dnsm_burrito():
 
     pcp_df = pcp_df[pcp_df["parent"] != pcp_df["child"]]
     print(f"After filtering out identical PCPs, we have {len(pcp_df)} PCPs.")
+    train_dataset, val_dataset = train_test_datasets_of_pcp_df(pcp_df)
 
     model = TransformerBinarySelectionModel(nhead=2, dim_feedforward=256, layer_count=2)
 
     burrito = DNSMBurrito(
-        pcp_df,
+        train_dataset,
+        val_dataset,
         model,
         batch_size=32,
         learning_rate=0.001,
-        checkpoint_dir="./_checkpoints",
-        log_dir="./_logs",
+        min_learning_rate=0.0001,
     )
     burrito.train(2)
     burrito.optimize_branch_lengths()

@@ -29,7 +29,6 @@ from netam.common import (
     clamp_probability,
     stack_heterogeneous,
     pick_device,
-    PositionalEncoding,
 )
 import netam.framework as framework
 from epam.torch_common import optimize_branch_length
@@ -38,7 +37,7 @@ import epam.sequences as sequences
 from epam.sequences import translate_sequence, translate_sequences
 
 
-class PCPDataset(Dataset):
+class DNSMDataset(Dataset):
     def __init__(self, nt_parents, nt_children, all_rates, all_subs_probs):
         self.nt_parents = nt_parents
         self.nt_children = nt_children
@@ -139,11 +138,45 @@ class PCPDataset(Dataset):
             "subs_probs": self.all_subs_probs[idx],
         }
 
+def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8):
+    nt_parents = pcp_df["parent"].reset_index(drop=True)
+    nt_children = pcp_df["child"].reset_index(drop=True)
+    rates = pcp_df["rates"].reset_index(drop=True)
+    subs_probs = pcp_df["subs_probs"].reset_index(drop=True)
+
+    train_len = int(train_frac * len(nt_parents))
+    train_parents, val_parents = nt_parents[:train_len], nt_parents[train_len:]
+    train_children, val_children = nt_children[:train_len], nt_children[train_len:]
+    train_rates, val_rates = rates[:train_len], rates[train_len:]
+    train_subs_probs, val_subs_probs = (
+        subs_probs[:train_len],
+        subs_probs[train_len:],
+    )
+
+    train_dataset = DNSMDataset(
+        train_parents, train_children, train_rates, train_subs_probs
+    )
+    val_dataset = DNSMDataset(val_parents, val_children, val_rates, val_subs_probs)
+    
+    return train_dataset, val_dataset
 
 class DNSMBurrito(framework.Burrito):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.device = pick_device()
+
+    def loss_of_batch(self, batch):
+        aa_onehot = batch["aa_onehot"].to(self.device)
+        aa_subs_indicator = batch["subs_indicator"].to(self.device)
+        padding_mask = batch["padding_mask"].to(self.device)
+        log_neutral_aa_mut_probs = batch["log_neutral_aa_mut_probs"].to(self.device)
+        log_selection_factors = self.model(aa_onehot, padding_mask)
+        return self.complete_loss_fn(
+            log_neutral_aa_mut_probs,
+            log_selection_factors,
+            aa_subs_indicator,
+            padding_mask,
+        )
 
     def complete_loss_fn(
         self,
@@ -166,19 +199,6 @@ class DNSMBurrito(framework.Burrito):
         predictions = clamp_probability(predictions)
 
         return self.bce_loss(predictions, aa_subs_indicator)
-
-    def loss_of_batch(self, batch):
-        aa_onehot = batch["aa_onehot"].to(self.device)
-        aa_subs_indicator = batch["subs_indicator"].to(self.device)
-        padding_mask = batch["padding_mask"].to(self.device)
-        log_neutral_aa_mut_probs = batch["log_neutral_aa_mut_probs"].to(self.device)
-        log_selection_factors = self.model(aa_onehot, padding_mask)
-        return self.complete_loss_fn(
-            log_neutral_aa_mut_probs,
-            log_selection_factors,
-            aa_subs_indicator,
-            padding_mask,
-        )
 
     def _build_log_pcp_probability(
         self, parent: str, child: str, rates: Tensor, subs_probs: Tensor
