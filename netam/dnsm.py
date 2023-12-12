@@ -180,14 +180,6 @@ class DNSMBurrito(framework.Burrito):
             padding_mask,
         )
 
-    # TODO is this used?
-    def compute_avg_loss(self, data_loader):
-        total_loss = 0
-        with torch.no_grad():
-            for batch in data_loader:
-                total_loss += self.loss_of_batch(batch).item()
-        return total_loss / len(data_loader)
-
     def _build_log_pcp_probability(
         self, parent: str, child: str, rates: Tensor, subs_probs: Tensor
     ):
