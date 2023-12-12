@@ -328,6 +328,8 @@ class Burrito(ABC):
         self.scheduler = ReduceLROnPlateau(
             self.optimizer, mode="min", factor=0.2, patience=4, verbose=self.verbose
         )
+        self.global_epoch = 0
+        self.writer = SummaryWriter(log_dir="./_logs")
 
     def multi_train(self, epochs, max_tries=3):
         """Train the model. If lr isn't below min_lr, reset the optimizer and scheduler, and reset the model and resume training."""
@@ -389,37 +391,27 @@ class Burrito(ABC):
         return average_loss
 
     def train(self, epochs):
-        writer = SummaryWriter(log_dir="./_logs")
         train_losses = []
         val_losses = []
         best_val_loss = float("inf")
         best_model_state = None
 
-        def record_losses(epoch, train_loss, val_loss):
+        def record_losses(train_loss, val_loss):
             train_losses.append(train_loss)
             val_losses.append(val_loss)
 
-            writer.add_scalar("Train loss", train_loss, epoch)
-            writer.add_scalar("Validation loss", val_loss, epoch)
+            self.writer.add_scalar("Training loss", train_loss, self.global_epoch)
+            self.writer.add_scalar("Validation loss", val_loss, self.global_epoch)
 
-            if self.verbose:
-                print(
-                    f"Epoch [{epoch}/{epochs}]\t Loss: {train_loss:.8g}\t Val Loss: {val_loss:.8g}"
-                )
-
+        # Record the initial loss before training.
         train_loss = self.process_data_loader(self.train_loader, train_mode=False)
         val_loss = self.process_data_loader(self.val_loader, train_mode=False)
-
-        record_losses(0, train_loss, val_loss)
+        record_losses(train_loss, val_loss)
 
         with tqdm(range(1, epochs + 1), desc="Epoch") as pbar:
             for epoch in pbar:
                 current_lr = self.optimizer.param_groups[0]["lr"]
                 if current_lr < self.min_learning_rate:
-                    if self.verbose:
-                        print(
-                            f"Stopping training early: learning rate below {self.min_learning_rate}"
-                        )
                     break
 
                 train_loss = self.process_data_loader(
@@ -427,8 +419,8 @@ class Burrito(ABC):
                 )
                 val_loss = self.process_data_loader(self.val_loader, train_mode=False)
                 self.scheduler.step(val_loss)
-
-                record_losses(epoch, train_loss, val_loss)
+                record_losses(train_loss, val_loss)
+                self.global_epoch += 1
 
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
