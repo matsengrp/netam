@@ -19,6 +19,7 @@ from torch import Tensor
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 
+from epam.torch_common import pick_device
 import numpy as np
 
 from tensorboardX import SummaryWriter
@@ -140,54 +141,11 @@ class PCPDataset(Dataset):
 
 
 
-class DNSMBurrito:
-    def __init__(
-        self,
-        pcp_df,
-        model,
-        batch_size=32,
-        learning_rate=0.001,
-        checkpoint_dir="./_checkpoints",
-        log_dir="./_logs",
-    ):
-        self.model = model
-        self.batch_size = batch_size
-        self.learning_rate = learning_rate
-        self.checkpoint_dir = checkpoint_dir
-        self.global_train_step = 0
-        self.global_val_step = 0
+class DNSMBurrito(framework.Burrito):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.device = pick_device()
 
-        print("preparing data...")
-        nt_parents = pcp_df["parent"].reset_index(drop=True)
-        nt_children = pcp_df["child"].reset_index(drop=True)
-        rates = pcp_df["rates"].reset_index(drop=True)
-        subs_probs = pcp_df["subs_probs"].reset_index(drop=True)
-
-        train_len = int(0.8 * len(nt_parents))
-        train_parents, val_parents = nt_parents[:train_len], nt_parents[train_len:]
-        train_children, val_children = nt_children[:train_len], nt_children[train_len:]
-        train_rates, val_rates = rates[:train_len], rates[train_len:]
-        train_subs_probs, val_subs_probs = (
-            subs_probs[:train_len],
-            subs_probs[train_len:],
-        )
-
-        # It's important to make separate PCPDatasets for training and validation
-        # because the maximum sequence length can differ between those two.
-        self.train_set = PCPDataset(
-            train_parents, train_children, train_rates, train_subs_probs
-        )
-        self.val_set = PCPDataset(val_parents, val_children, val_rates, val_subs_probs)
-
-        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
-        self.device = self.model.device
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
-        self.writer = SummaryWriter(log_dir=log_dir)
-        if not os.path.exists(checkpoint_dir):
-            os.makedirs(checkpoint_dir)
-
-        self.bce_loss = nn.BCELoss()
 
     def complete_loss_fn(
         self,
@@ -224,85 +182,13 @@ class DNSMBurrito:
             padding_mask,
         )
 
+    # TODO is this used?
     def compute_avg_loss(self, data_loader):
         total_loss = 0
         with torch.no_grad():
             for batch in data_loader:
                 total_loss += self.loss_of_batch(batch).item()
         return total_loss / len(data_loader)
-
-    def train(self, num_epochs=10):
-        train_loader = DataLoader(
-            self.train_set, batch_size=self.batch_size, shuffle=True
-        )
-        val_loader = DataLoader(self.val_set, batch_size=self.batch_size, shuffle=False)
-
-        # Record epoch 0
-        self.model.train()
-        avg_train_loss_epoch_zero = self.compute_avg_loss(train_loader)
-        self.model.eval()
-        avg_val_loss_epoch_zero = self.compute_avg_loss(val_loader)
-        self.writer.add_scalar(
-            "Training Loss", avg_train_loss_epoch_zero, self.global_train_step
-        )
-        self.writer.add_scalar(
-            "Validation Loss", avg_val_loss_epoch_zero, self.global_val_step
-        )
-        print(
-            f"Epoch [0/{num_epochs}], Training Loss: {avg_train_loss_epoch_zero}, Validation Loss: {avg_val_loss_epoch_zero}"
-        )
-
-        print("training model...")
-
-        val_losses = []
-
-        with tqdm(range(1, num_epochs + 1), desc="Epoch") as pbar:
-            for epoch in pbar:
-                self.model.train()
-                for i, batch in enumerate(train_loader):
-                    self.optimizer.zero_grad()
-                    loss = self.loss_of_batch(batch)
-                    loss.backward()
-                    self.optimizer.step()
-                    self.writer.add_scalar(
-                        "Training Loss", loss.item(), self.global_train_step
-                    )
-                    self.global_train_step += 1
-
-                # Validation Loop
-                self.model.eval()
-                val_loss = 0
-                with torch.no_grad():
-                    for batch in val_loader:
-                        val_loss += self.loss_of_batch(batch).item()
-
-                    avg_val_loss = val_loss / len(val_loader)
-                    self.writer.add_scalar(
-                        "Validation Loss", avg_val_loss, self.global_val_step
-                    )
-                    self.global_val_step += 1
-
-                    # Save model checkpoint
-                    torch.save(
-                        {
-                            "epoch": epoch,
-                            "model_state_dict": self.model.state_dict(),
-                            "optimizer_state_dict": self.optimizer.state_dict(),
-                            "loss": avg_val_loss,
-                        },
-                        f"{self.checkpoint_dir}/model_epoch_{epoch}.pth",
-                    )
-                    val_losses.append(avg_val_loss)
-
-                self.writer.flush()
-                if len(val_losses) > 1:
-                    loss_diff = val_losses[-1] - val_losses[-2]
-                    pbar.set_postfix(
-                        val_loss=f"{avg_val_loss:.4g}",
-                        loss_diff=f"{loss_diff:.4g}",
-                        # lr=current_lr,
-                        refresh=True,
-                    )
 
     def _build_log_pcp_probability(
         self, parent: str, child: str, rates: Tensor, subs_probs: Tensor
@@ -389,7 +275,7 @@ class DNSMBurrito:
         return np.array(optimal_lengths)
 
     def optimize_branch_lengths(self):
-        for dataset in [self.train_set, self.val_set]:
+        for dataset in [self.train_loader.dataset, self.val_loader.dataset]:
             dataset.branch_lengths = self.find_optimal_branch_lengths(
                 dataset.nt_parents,
                 dataset.nt_children,
@@ -407,6 +293,3 @@ class DNSMBurrito:
         }
         encoder = framework.PlaceholderEncoder()
         return framework.Crepe(encoder, self.model, training_hyperparameters)
-
-    def save_crepe(self, prefix):
-        self.to_crepe().save(prefix)
