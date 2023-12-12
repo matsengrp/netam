@@ -196,7 +196,8 @@ class DNSMBurrito(framework.Burrito):
         # In the early stages of training, we can get probabilities > 1.0 because
         # of bad parameter initialization. We clamp the predictions to be between
         # 0 and 0.999 to avoid this: out of range predictions can make NaNs
-        # downstream.
+        # downstream. Note that any reasonable trained model will have the mutation
+        # probabilities be << 1.0, so this is not a problem in practice.
         predictions = clamp_probability(predictions)
 
         return self.bce_loss(predictions, aa_subs_indicator)
