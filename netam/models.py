@@ -50,10 +50,9 @@ class KmerModel(ModelBase):
         }
 
 
-# TODO FivemerModel takes a kmer_length, but it should be 5.
 class FivemerModel(KmerModel):
-    def __init__(self, kmer_length):
-        super().__init__(kmer_length)
+    def __init__(self):
+        super().__init__(kmer_length=5)
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
 
     def forward(self, encoded_parents, masks):

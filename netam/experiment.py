@@ -82,7 +82,7 @@ class Experiment:
         }
 
         model_instances_5 = {
-            f"{prename}_fivemer": models.FivemerModel(kmer_length=5),
+            f"{prename}_fivemer": models.FivemerModel(),
             f"{prename}_shmoof": models.SHMoofModel(
                 kmer_length=5, site_count=self.site_count
             ),
@@ -128,7 +128,7 @@ class Experiment:
 
         our_burrito_params = deepcopy(self.burrito_params)
         our_burrito_params.update(training_params)
-        burrito = framework.Burrito(
+        burrito = framework.SHMBurrito(
             train_dataset, val_dataset, model, verbose=False, **our_burrito_params
         )
         train_history = burrito.multi_train(epochs=self.epochs)
@@ -204,7 +204,7 @@ class Experiment:
 
     def calculate_loss(self, model, dataset):
         model.eval()
-        burrito = framework.Burrito(
+        burrito = framework.SHMBurrito(
             dataset, dataset, model, verbose=False, **self.burrito_params
         )
         loss = burrito.evaluate()
