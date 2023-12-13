@@ -233,7 +233,9 @@ class DNSMBurrito(framework.Burrito):
 
         assert len(parent) % 3 == 0
 
-        parent_idxs = sequences.nt_idx_tensor_of_str(parent)
+        # Note we are replacing all Ns with As, which means that we need to be careful
+        # with masking out these positions later. We do this below.
+        parent_idxs = sequences.nt_idx_tensor_of_str(parent.replace("N", "A"))
         aa_parent = translate_sequence(parent)
         aa_child = translate_sequence(child)
         aa_subs_indicator = subs_indicator_tensor_of(aa_parent, aa_child)
