@@ -18,6 +18,7 @@ import optuna
 
 from tensorboardX import SummaryWriter
 
+from epam.sequences import mask_tensor_of
 from netam.common import parameter_count_of_model, generate_kmers, kmer_to_index_of
 from netam import models
 from abc import ABC, abstractmethod
@@ -137,14 +138,9 @@ class KmerSequenceEncoder:
             for i in range(self.site_count)
         ]
 
-        mask = [
-            1 if i < len(sequence) and sequence[i] != "N" else 0
-            for i in range(self.site_count)
-        ]
+        mask = mask_tensor_of(sequence, self.site_count)
 
-        return torch.tensor(kmer_indices, dtype=torch.int32), torch.tensor(
-            mask, dtype=torch.bool
-        )
+        return torch.tensor(kmer_indices, dtype=torch.int32), mask
 
 
 class PlaceholderEncoder:

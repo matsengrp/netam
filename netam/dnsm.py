@@ -33,7 +33,12 @@ import netam.framework as framework
 from epam.torch_common import optimize_branch_length
 import epam.molevol as molevol
 import epam.sequences as sequences
-from epam.sequences import translate_sequence, translate_sequences
+from epam.sequences import (
+    mask_tensor_of,
+    subs_indicator_tensor_of,
+    translate_sequence,
+    translate_sequences,
+)
 
 
 class DNSMDataset(Dataset):
@@ -58,19 +63,21 @@ class DNSMDataset(Dataset):
         self.aa_parents_onehot = torch.zeros((pcp_count, self.max_aa_seq_len, 20))
         self.aa_subs_indicator_tensor = torch.zeros((pcp_count, self.max_aa_seq_len))
 
-        # padding_mask is True for padding positions.
-        self.padding_mask = torch.ones(
-            (pcp_count, self.max_aa_seq_len), dtype=torch.bool
-        )
+        self.mask = torch.ones((pcp_count, self.max_aa_seq_len), dtype=torch.bool)
 
         for i, (aa_parent, aa_child) in enumerate(zip(aa_parents, aa_children)):
-            aa_indices_parent = sequences.aa_idx_array_of_str(aa_parent)
+            self.mask[i, :] = mask_tensor_of(aa_parent, self.max_aa_seq_len)
+            # Note we are replacing all Ns with As, which means that we need to be careful
+            # with masking out these positions later. We do this in
+            # update_neutral_aa_mut_probs.
+            aa_indices_parent = sequences.aa_idx_array_of_str(
+                aa_parent.replace("N", "A")
+            )
             aa_seq_len = len(aa_parent)
             self.aa_parents_onehot[i, torch.arange(aa_seq_len), aa_indices_parent] = 1
-            self.aa_subs_indicator_tensor[i, :aa_seq_len] = torch.tensor(
-                [p != c for p, c in zip(aa_parent, aa_child)], dtype=torch.float
+            self.aa_subs_indicator_tensor[i, :aa_seq_len] = subs_indicator_tensor_of(
+                aa_parent, aa_child
             )
-            self.padding_mask[i, :aa_seq_len] = False
 
         # Make initial branch lengths (will get optimized later).
         self._branch_lengths = [
@@ -93,10 +100,16 @@ class DNSMDataset(Dataset):
 
         neutral_aa_mut_prob_l = []
 
-        for nt_parent, rates, branch_length, subs_probs in zip(
-            self.nt_parents, self.all_rates, self._branch_lengths, self.all_subs_probs
+        for nt_parent, mask, rates, branch_length, subs_probs in zip(
+            self.nt_parents,
+            self.mask,
+            self.all_rates,
+            self._branch_lengths,
+            self.all_subs_probs,
         ):
-            parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent)
+            # Note we are replacing all Ns with As, which means that we need to be careful
+            # with masking out these positions later. We do this below.
+            parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
             parent_len = len(nt_parent)
 
             mut_probs = 1.0 - torch.exp(-branch_length * rates[:parent_len])
@@ -118,9 +131,13 @@ class DNSMDataset(Dataset):
                 neutral_aa_mut_prob = F.pad(
                     neutral_aa_mut_prob, (0, pad_len), value=1e-8
                 )
+            # Here we zero out masked positions.
+            neutral_aa_mut_prob *= mask
 
             neutral_aa_mut_prob_l.append(neutral_aa_mut_prob)
 
+        # Note that our masked out positions will have a nan log probability,
+        # which will ensure that we are handling them correctly downstream.
         self.log_neutral_aa_mut_probs = torch.log(torch.stack(neutral_aa_mut_prob_l))
 
     def __len__(self):
@@ -130,11 +147,12 @@ class DNSMDataset(Dataset):
         return {
             "aa_onehot": self.aa_parents_onehot[idx],
             "subs_indicator": self.aa_subs_indicator_tensor[idx],
-            "padding_mask": self.padding_mask[idx],
+            "mask": self.mask[idx],
             "log_neutral_aa_mut_probs": self.log_neutral_aa_mut_probs[idx],
             "rates": self.all_rates[idx],
             "subs_probs": self.all_subs_probs[idx],
         }
+
 
 def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8):
     nt_parents = pcp_df["parent"].reset_index(drop=True)
@@ -155,13 +173,14 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8):
         train_parents, train_children, train_rates, train_subs_probs
     )
     val_dataset = DNSMDataset(val_parents, val_children, val_rates, val_subs_probs)
-    
+
     return train_dataset, val_dataset
 
+
 class DNSMBurrito(framework.Burrito):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, device=pick_device(), **kwargs):
         super().__init__(*args, **kwargs)
-        self.device = pick_device()
+        self.device = device
         self.model.to(self.device)
 
     def loss_of_batch(self, batch):
@@ -170,14 +189,14 @@ class DNSMBurrito(framework.Burrito):
         # optimization on the CPU.
         aa_onehot = batch["aa_onehot"].to(self.device)
         aa_subs_indicator = batch["subs_indicator"].to(self.device)
-        padding_mask = batch["padding_mask"].to(self.device)
+        mask = batch["mask"].to(self.device)
         log_neutral_aa_mut_probs = batch["log_neutral_aa_mut_probs"].to(self.device)
-        log_selection_factors = self.model(aa_onehot, padding_mask)
+        log_selection_factors = self.model(aa_onehot, mask)
         return self.complete_loss_fn(
             log_neutral_aa_mut_probs,
             log_selection_factors,
             aa_subs_indicator,
-            padding_mask,
+            mask,
         )
 
     def complete_loss_fn(
@@ -185,19 +204,20 @@ class DNSMBurrito(framework.Burrito):
         log_neutral_aa_mut_probs,
         log_selection_factors,
         aa_subs_indicator,
-        padding_mask,
+        mask,
     ):
         # Take the product of the neutral mutation probabilities and the selection factors.
         predictions = torch.exp(log_neutral_aa_mut_probs + log_selection_factors)
 
-        predictions = predictions.masked_select(~padding_mask)
-        aa_subs_indicator = aa_subs_indicator.masked_select(~padding_mask)
+        predictions = predictions.masked_select(mask)
+        aa_subs_indicator = aa_subs_indicator.masked_select(mask)
 
         # In the early stages of training, we can get probabilities > 1.0 because
         # of bad parameter initialization. We clamp the predictions to be between
         # 0 and 0.999 to avoid this: out of range predictions can make NaNs
         # downstream. Note that any reasonable trained model will have the mutation
         # probabilities be << 1.0, so this is not a problem in practice.
+        # TODO logsigmoid?
         predictions = clamp_probability(predictions)
 
         return self.bce_loss(predictions, aa_subs_indicator)
@@ -216,11 +236,12 @@ class DNSMBurrito(framework.Burrito):
         parent_idxs = sequences.nt_idx_tensor_of_str(parent)
         aa_parent = translate_sequence(parent)
         aa_child = translate_sequence(child)
-        aa_subs_indicator = torch.tensor(
-            [p != c for p, c in zip(aa_parent, aa_child)], dtype=torch.float
-        )
+        aa_subs_indicator = subs_indicator_tensor_of(aa_parent, aa_child)
+        mask = mask_tensor_of(aa_parent)
 
-        selection_factors = self.model.selection_factors_of_aa_str(aa_parent).to("cpu")
+        selection_factors = self.model.selection_factors_of_aa_str(aa_parent, mask).to(
+            "cpu"
+        )
         bce_loss = torch.nn.BCELoss()
 
         def log_pcp_probability(log_branch_length: torch.Tensor):
@@ -239,7 +260,9 @@ class DNSMBurrito(framework.Burrito):
             predictions = clamp_probability(predictions)
 
             # negative because BCELoss is negative log likelihood
-            return -bce_loss(predictions, aa_subs_indicator)
+            predictions = predictions.masked_select(mask)
+            masked_indicator = aa_subs_indicator.masked_select(mask)
+            return -bce_loss(predictions, masked_indicator)
 
         return log_pcp_probability
 

@@ -28,6 +28,7 @@ def dnsm_burrito():
         batch_size=32,
         learning_rate=0.001,
         min_learning_rate=0.0001,
+        device="cpu",
     )
     burrito.train(2)
     burrito.optimize_branch_lengths()

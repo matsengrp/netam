@@ -6,7 +6,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from epam.torch_common import pick_device
 from epam import sequences
 from netam.common import generate_kmers, PositionalEncoding
 
@@ -283,7 +282,7 @@ class TransformerBinarySelectionModel(nn.Module):
         self.linear.bias.data.zero_()
         self.linear.weight.data.uniform_(-initrange, initrange)
 
-    def forward(self, parent_onehots: Tensor, padding_mask: Tensor) -> Tensor:
+    def forward(self, parent_onehots: Tensor, mask: Tensor) -> Tensor:
         """Build a binary log selection matrix from a one-hot encoded parent sequence.
 
         Because we're predicting log of the selection factor, we don't use an
@@ -291,7 +290,7 @@ class TransformerBinarySelectionModel(nn.Module):
 
         Parameters:
             parent_onehots: A tensor of shape (B, L, 20) representing the one-hot encoding of parent sequences.
-            padding_mask: A tensor of shape (B, L) representing the padding mask for the sequence.
+            mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.
 
         Returns:
             A tensor of shape (B, L, 1) representing the log level of selection
@@ -306,13 +305,13 @@ class TransformerBinarySelectionModel(nn.Module):
             1, 0, 2
         )
 
-        # NOTE: not masking due to MPS bug
-        out = self.encoder(parent_onehots)  # , src_key_padding_mask=padding_mask)
+        # To learn about src_key_padding_mask, see https://stackoverflow.com/q/62170439
+        out = self.encoder(parent_onehots, src_key_padding_mask=~mask)
         out = self.linear(out)
         out = F.logsigmoid(out)
         return out.squeeze(-1)
 
-    def selection_factors_of_aa_str(self, aa_str: str):
+    def selection_factors_of_aa_str(self, aa_str: str, mask: Tensor) -> Tensor:
         """Do the forward method without gradients from an amino acid string and convert to numpy.
 
         Parameters:
@@ -325,14 +324,10 @@ class TransformerBinarySelectionModel(nn.Module):
         aa_onehot = sequences.aa_onehot_tensor_of_str(aa_str)
 
         model_device = next(self.parameters()).device
-        # Create a padding mask with False values (i.e., no padding)
-        padding_mask = torch.zeros(len(aa_str), dtype=torch.bool).to(model_device)
 
         with torch.no_grad():
             aa_onehot = aa_onehot.to(model_device)
-            model_out = self(aa_onehot.unsqueeze(0), padding_mask.unsqueeze(0)).squeeze(
-                0
-            )
+            model_out = self(aa_onehot.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
             final_out = torch.exp(model_out)
 
         return final_out[: len(aa_str)]
