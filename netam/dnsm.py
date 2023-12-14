@@ -255,6 +255,7 @@ class DNSMBurrito(framework.Burrito):
             )
 
             neutral_aa_mut_prob = clamp_probability(neutral_aa_mut_prob)
+            neutral_aa_mut_prob = neutral_aa_mut_prob.to(self.device)
             predictions = neutral_aa_mut_prob * selection_factors
             predictions = clamp_probability(predictions)
 
