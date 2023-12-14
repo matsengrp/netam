@@ -311,7 +311,7 @@ class TransformerBinarySelectionModel(nn.Module):
         out = F.logsigmoid(out)
         return out.squeeze(-1)
 
-    def selection_factors_of_aa_str(self, aa_str: str, mask: Tensor) -> Tensor:
+    def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
         """Do the forward method without gradients from an amino acid string and convert to numpy.
 
         Parameters:
@@ -321,12 +321,15 @@ class TransformerBinarySelectionModel(nn.Module):
             A numpy array of the same length as the input string representing
             the level of selection for each amino acid site.
         """
-        aa_onehot = sequences.aa_onehot_tensor_of_str(aa_str)
 
         model_device = next(self.parameters()).device
 
+        aa_onehot = sequences.aa_onehot_tensor_of_str(aa_str)
+        aa_onehot = aa_onehot.to(model_device)
+        mask = sequences.mask_tensor_of(aa_str)
+        mask = mask.to(model_device)
+
         with torch.no_grad():
-            aa_onehot = aa_onehot.to(model_device)
             model_out = self(aa_onehot.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
             final_out = torch.exp(model_out)
 
