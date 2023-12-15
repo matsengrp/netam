@@ -8,18 +8,14 @@ We'll use these conventions:
 
 """
 
-import logging
-import math
-import os
-
 import torch
-import torch.optim as optim
 import torch.nn as nn
 from torch import Tensor
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 
 import numpy as np
+import pandas as pd
 
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -241,7 +237,7 @@ class DNSMBurrito(framework.Burrito):
         aa_subs_indicator = subs_indicator_tensor_of(aa_parent, aa_child).to(self.device)
         mask = mask_tensor_of(aa_parent).to(self.device)
         selection_factors = self.model.selection_factors_of_aa_str(aa_parent).to(self.device)
-        bce_loss = torch.nn.BCELoss()
+        bce_loss = nn.BCELoss()
 
         def log_pcp_probability(log_branch_length: torch.Tensor):
             branch_length = torch.exp(log_branch_length)
@@ -318,6 +314,21 @@ class DNSMBurrito(framework.Burrito):
                 dataset.all_subs_probs,
                 dataset.branch_lengths,
             )
+
+    def train_and_optimize_branch_lengths(self, epochs=20, cycle_count=2):
+        loss_history_l = []
+        loss_history_l.append(self.train(3))
+        self.optimize_branch_lengths()
+        # We double branch lengths and then retrain to avoid the best parameter
+        # values hitting the boundary of 1.  
+        self.train_loader.dataset.branch_lengths *= 2
+        self.val_loader.dataset.branch_lengths *= 2
+        self.reset_optimization()
+        for cycle in range(cycle_count):
+            loss_history_l.append(self.train(epochs))
+            if cycle < cycle_count - 1:
+                self.optimize_branch_lengths()
+        return pd.concat(loss_history_l, ignore_index=True)
 
     def to_crepe(self):
         training_hyperparameters = {
