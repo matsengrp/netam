@@ -242,6 +242,8 @@ class DNSMBurrito(framework.Burrito):
         aa_subs_indicator = subs_indicator_tensor_of(aa_parent, aa_child)
         mask = mask_tensor_of(aa_parent)
         selection_factors = self.model.selection_factors_of_aa_str(aa_parent).to("cpu")
+        rates = rates.to("cpu")
+        subs_probs = subs_probs.to("cpu")
         bce_loss = nn.BCELoss()
 
         def log_pcp_probability(log_branch_length: torch.Tensor):
