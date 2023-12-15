@@ -1,4 +1,5 @@
 import math
+import inspect
 import itertools
 
 import numpy as np
@@ -103,6 +104,26 @@ def pick_device():
     else:
         print("Using CPU")
         return torch.device("cpu")
+
+
+def print_tensor_devices(scope='local'):
+    """
+    Print the devices of all PyTorch tensors in the given scope.
+    
+    Args:
+    scope (str): 'local' for local scope, 'global' for global scope.
+    """
+    if scope == 'local':
+        frame = inspect.currentframe()
+        variables = frame.f_back.f_locals
+    elif scope == 'global':
+        variables = globals()
+    else:
+        raise ValueError("Scope must be 'local' or 'global'.")
+
+    for var_name, var_value in variables.items():
+        if isinstance(var_value, torch.Tensor):
+            print(f"{var_name}: {var_value.device}")
 
 
 # Reference: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
