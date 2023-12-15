@@ -312,9 +312,9 @@ class Burrito(ABC):
         self.l2_regularization_coeff = l2_regularization_coeff
         self.verbose = verbose
         self.reset_optimization()
-        self.global_epoch = 0
         self.writer = SummaryWriter(log_dir="./_logs")
         self.bce_loss = nn.BCELoss()
+        self.global_epoch = 0
 
     def reset_optimization(self):
         """Reset the optimizer and scheduler."""
@@ -476,17 +476,16 @@ class SHMBurrito(Burrito):
         l2_regularization_coeff=1e-6,
         verbose=False,
     ):
-        self.train_loader = DataLoader(
-            train_dataset, batch_size=batch_size, shuffle=True
+        super().__init__(
+            train_dataset,
+            val_dataset,
+            model,
+            batch_size,
+            learning_rate,
+            min_learning_rate,
+            l2_regularization_coeff,
+            verbose,
         )
-        self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-        self.model = model
-        self.learning_rate = learning_rate
-        self.min_learning_rate = min_learning_rate
-        self.l2_regularization_coeff = l2_regularization_coeff
-        self.verbose = verbose
-        self.reset_optimization()
-        self.bce_loss = nn.BCELoss()
 
     def loss_of_batch(self, batch):
         encoded_parents, masks, mutation_indicators = batch
@@ -527,6 +526,7 @@ class HyperBurrito:
         train_dataset,
         val_dataset,
         model_class,
+        burrito_class,
         epochs=100,
     ):
         self.device = device
@@ -535,10 +535,11 @@ class HyperBurrito:
         train_dataset.to(self.device)
         val_dataset.to(self.device)
         self.model_class = model_class
+        self.burrito_class = burrito_class
         self.epochs = epochs
 
     def burrito_of_model(self, model, **kwargs):
-        burrito = Burrito(
+        burrito = self.burrito_class(
             self.train_dataset, self.val_dataset, model, verbose=False, **kwargs
         )
         return burrito
