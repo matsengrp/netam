@@ -460,6 +460,10 @@ class Burrito(ABC):
         pass
 
     @abstractmethod
+    def full_train(self, *args, **kwargs):
+        pass
+
+    @abstractmethod
     def to_crepe(self):
         pass
 
@@ -499,6 +503,9 @@ class SHMBurrito(Burrito):
         loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
         return loss
 
+    def full_train(self, *args, **kwargs):
+        return self.train(*args, **kwargs)
+
     def to_crepe(self):
         training_hyperparameters = {
             key: self.__dict__[key]
@@ -515,9 +522,9 @@ class SHMBurrito(Burrito):
         return Crepe(encoder, self.model, training_hyperparameters)
 
 
-class HyperBurrito:
+class HyperBurrito(ABC):
     """
-    A burrito that can be used to optimize hyperparameters.
+    A class to optimize hyperparameters.
     """
 
     def __init__(
@@ -526,7 +533,6 @@ class HyperBurrito:
         train_dataset,
         val_dataset,
         model_class,
-        burrito_class,
         epochs=100,
     ):
         self.device = device
@@ -535,14 +541,11 @@ class HyperBurrito:
         train_dataset.to(self.device)
         val_dataset.to(self.device)
         self.model_class = model_class
-        self.burrito_class = burrito_class
         self.epochs = epochs
 
+    @abstractmethod
     def burrito_of_model(self, model, **kwargs):
-        burrito = self.burrito_class(
-            self.train_dataset, self.val_dataset, model, verbose=False, **kwargs
-        )
-        return burrito
+        pass
 
     def optuna_objective(
         self,
@@ -607,9 +610,10 @@ class HyperBurrito:
                 return 1e9
 
         burrito_hyperparams = filter_kwargs(self.burrito_of_model, hyperparams)
+        print("burrito_hypers:", burrito_hyperparams)
         burrito = self.burrito_of_model(model, **burrito_hyperparams)
 
-        losses = burrito.train(epochs=self.epochs)
+        losses = burrito.full_train(epochs=self.epochs)
 
         return losses["val_loss"].min()
 
@@ -644,3 +648,28 @@ class HyperBurrito:
         )
         trial_data = study.trials_dataframe()
         trial_data.to_csv(output_path, index=False)
+
+
+class SHMHyperBurrito(HyperBurrito):
+    # Note that we have to write the args out explicitly because we use some
+    # magic to filter kwargs in the optuna_objective method.
+    def burrito_of_model(
+        self,
+        model,
+        batch_size=1024,
+        learning_rate=0.1,
+        min_learning_rate=1e-4,
+        l2_regularization_coeff=1e-6,
+        verbose=False,
+    ):
+        burrito = SHMBurrito(
+            self.train_dataset,
+            self.val_dataset,
+            model,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            min_learning_rate=min_learning_rate,
+            l2_regularization_coeff=l2_regularization_coeff,
+            verbose=verbose,
+        )
+        return burrito

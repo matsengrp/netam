@@ -149,6 +149,14 @@ class DNSMDataset(Dataset):
             "subs_probs": self.all_subs_probs[idx],
         }
 
+    def to(self, device):
+        self.aa_parents_onehot = self.aa_parents_onehot.to(device)
+        self.aa_subs_indicator_tensor = self.aa_subs_indicator_tensor.to(device)
+        self.mask = self.mask.to(device)
+        self.log_neutral_aa_mut_probs = self.log_neutral_aa_mut_probs.to(device)
+        self.all_rates = self.all_rates.to(device)
+        self.all_subs_probs = self.all_subs_probs.to(device)
+
 
 def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8):
     nt_parents = pcp_df["parent"].reset_index(drop=True)
@@ -180,9 +188,6 @@ class DNSMBurrito(framework.Burrito):
         self.model.to(self.device)
 
     def loss_of_batch(self, batch):
-        # In contrast to the SHM case, we don't move the whole dataset to the
-        # GPU because we want finer-grained control: we want to do branch length
-        # optimization on the CPU.
         aa_onehot = batch["aa_onehot"].to(self.device)
         aa_subs_indicator = batch["subs_indicator"].to(self.device)
         mask = batch["mask"].to(self.device)
@@ -234,9 +239,13 @@ class DNSMBurrito(framework.Burrito):
         parent_idxs = sequences.nt_idx_tensor_of_str(parent.replace("N", "A"))
         aa_parent = translate_sequence(parent)
         aa_child = translate_sequence(child)
-        aa_subs_indicator = subs_indicator_tensor_of(aa_parent, aa_child).to(self.device)
+        aa_subs_indicator = subs_indicator_tensor_of(aa_parent, aa_child).to(
+            self.device
+        )
         mask = mask_tensor_of(aa_parent).to(self.device)
-        selection_factors = self.model.selection_factors_of_aa_str(aa_parent).to(self.device)
+        selection_factors = self.model.selection_factors_of_aa_str(aa_parent).to(
+            self.device
+        )
         bce_loss = nn.BCELoss()
 
         def log_pcp_probability(log_branch_length: torch.Tensor):
@@ -315,12 +324,12 @@ class DNSMBurrito(framework.Burrito):
                 dataset.branch_lengths,
             )
 
-    def train_and_optimize_branch_lengths(self, epochs=20, cycle_count=2):
+    def full_train(self, epochs=20, cycle_count=2):
         loss_history_l = []
         loss_history_l.append(self.train(3))
         self.optimize_branch_lengths()
         # We double branch lengths and then retrain to avoid the best parameter
-        # values hitting the boundary of 1.  
+        # values hitting the boundary of 1.
         self.train_loader.dataset.branch_lengths *= 2
         self.val_loader.dataset.branch_lengths *= 2
         self.reset_optimization()
@@ -339,3 +348,29 @@ class DNSMBurrito(framework.Burrito):
         }
         encoder = framework.PlaceholderEncoder()
         return framework.Crepe(encoder, self.model, training_hyperparameters)
+
+
+class DNSMHyperBurrito(framework.HyperBurrito):
+    # Note that we have to write the args out explicitly because we use some magic to filter kwargs in the optuna_objective method.
+    def burrito_of_model(
+        self,
+        model,
+        device=pick_device(),
+        batch_size=1024,
+        learning_rate=0.1,
+        min_learning_rate=1e-4,
+        l2_regularization_coeff=1e-6,
+        verbose=False,
+    ):
+        burrito = DNSMBurrito(
+            self.train_dataset,
+            self.val_dataset,
+            model,
+            device=device,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            min_learning_rate=min_learning_rate,
+            l2_regularization_coeff=l2_regularization_coeff,
+            verbose=verbose,
+        )
+        return burrito
