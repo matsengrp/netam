@@ -103,6 +103,9 @@ class DNSMDataset(Dataset):
             self._branch_lengths,
             self.all_subs_probs,
         ):
+            mask = mask.to("cpu")
+            rates = rates.to("cpu")
+            subs_probs = subs_probs.to("cpu")
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
             parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
