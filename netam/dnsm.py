@@ -246,6 +246,8 @@ class DNSMBurrito(framework.Burrito):
         selection_factors = self.model.selection_factors_of_aa_str(aa_parent).to(
             self.device
         )
+        rates = rates.to(self.device)
+        subs_probs = subs_probs.to(self.device)
         bce_loss = nn.BCELoss()
 
         def log_pcp_probability(log_branch_length: torch.Tensor):
