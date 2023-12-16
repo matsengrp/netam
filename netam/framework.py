@@ -576,6 +576,10 @@ class HyperBurrito(ABC):
         Returns:
             float: Validation loss or 1e9 if the model has too many parameters.
         """
+        if fixed_hyperparams is not None:
+            for key, value in fixed_hyperparams.items():
+                trial.set_user_attr(key, value)
+
         hyperparams = fixed_hyperparams or {}
 
         for param_name, choices in cat_params.items():
@@ -625,8 +629,20 @@ class HyperBurrito(ABC):
         float_params,
         log_float_params,
         fixed_hyperparams=None,
+        study_name=None,
     ):
-        study = optuna.create_study(direction="minimize")
+        storage_url = "sqlite:///_ignore/optuna.db"
+        if study_name is None:
+            study_name = f"study_{self.model_class.__name__}"
+
+        # Create or load the study
+        study = optuna.create_study(
+            direction="minimize",
+            study_name=study_name,
+            storage=storage_url,
+            load_if_exists=True,
+        )
+
         study.optimize(
             lambda trial: self.optuna_objective(
                 trial,
