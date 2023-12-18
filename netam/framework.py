@@ -86,7 +86,6 @@ def create_mutation_indicator(parent, child, site_count):
     return torch.tensor(mutation_indicator, dtype=torch.bool)
 
 
-
 class KmerSequenceEncoder:
     def __init__(self, kmer_length, site_count):
         self.kmer_length = kmer_length
@@ -500,4 +499,3 @@ class SHMBurrito(Burrito):
             self.train_loader.dataset.encoder.site_count,
         )
         return Crepe(encoder, self.model, training_hyperparameters)
-

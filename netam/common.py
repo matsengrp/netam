@@ -32,7 +32,9 @@ def kmer_to_index_of(all_kmers):
 def aa_idx_tensor_of_str_ambig(aa_str):
     """Return the indices of the amino acids in a string, allowing the ambiguous character."""
     try:
-        return torch.tensor([AA_STR_SORTED_AMBIG.index(aa) for aa in aa_str], dtype=torch.int)
+        return torch.tensor(
+            [AA_STR_SORTED_AMBIG.index(aa) for aa in aa_str], dtype=torch.int
+        )
     except ValueError:
         print(f"Found an invalid amino acid in the string: {aa_str}")
         raise
@@ -119,17 +121,17 @@ def pick_device():
         return torch.device("cpu")
 
 
-def print_tensor_devices(scope='local'):
+def print_tensor_devices(scope="local"):
     """
     Print the devices of all PyTorch tensors in the given scope.
-    
+
     Args:
     scope (str): 'local' for local scope, 'global' for global scope.
     """
-    if scope == 'local':
+    if scope == "local":
         frame = inspect.currentframe()
         variables = frame.f_back.f_locals
-    elif scope == 'global':
+    elif scope == "global":
         variables = globals()
     else:
         raise ValueError("Scope must be 'local' or 'global'.")

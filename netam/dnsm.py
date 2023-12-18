@@ -62,7 +62,9 @@ class DNSMDataset(Dataset):
         # We have sequences of varying length, so we start with all tensors set
         # to the ambiguous amino acid, and then will fill in the actual values
         # below.
-        self.aa_parents_idxs = torch.full((pcp_count, self.max_aa_seq_len), MAX_AMBIG_AA_IDX)
+        self.aa_parents_idxs = torch.full(
+            (pcp_count, self.max_aa_seq_len), MAX_AMBIG_AA_IDX
+        )
         self.aa_subs_indicator_tensor = torch.zeros((pcp_count, self.max_aa_seq_len))
 
         self.mask = torch.ones((pcp_count, self.max_aa_seq_len), dtype=torch.bool)
