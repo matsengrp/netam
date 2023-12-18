@@ -17,7 +17,7 @@ MAX_AMBIG_AA_IDX = len(AA_STR_SORTED_AMBIG) - 1
 
 def generate_kmers(kmer_length):
     # Our strategy for kmers is to have a single representation for any kmer that isn't in ACGT.
-    # This is the first one so is the default value below.
+    # This is the first one, which is simply "N", and so this placeholder value is 0.
     all_kmers = ["N"] + [
         "".join(p) for p in itertools.product(BASES, repeat=kmer_length)
     ]
@@ -30,7 +30,7 @@ def kmer_to_index_of(all_kmers):
 
 
 def aa_idx_tensor_of_str_ambig(aa_str):
-    """Return the indices of the amino acids in a string."""
+    """Return the indices of the amino acids in a string, allowing the ambiguous character."""
     try:
         return torch.tensor([AA_STR_SORTED_AMBIG.index(aa) for aa in aa_str], dtype=torch.int)
     except ValueError:
