@@ -81,10 +81,10 @@ class DNSMDataset(Dataset):
         assert torch.max(self.aa_parents_idxs) <= MAX_AMBIG_AA_IDX
 
         # Make initial branch lengths (will get optimized later).
-        self._branch_lengths = [
+        self._branch_lengths = np.array([
             sequences.mutation_frequency(parent, child)
             for parent, child in zip(self.nt_parents, self.nt_children)
-        ]
+        ])
         self.update_neutral_aa_mut_probs()
 
     @property
