@@ -9,7 +9,7 @@ from netam.dnsm import DNSMBurrito, train_test_datasets_of_pcp_df
 from epam.shmple_precompute import load_and_convert_to_tensors
 
 
-def test_mask_tensor_of():
+def test_aa_idx_tensor_of_str_ambig():
     input_seq = "ACX"
     expected_output = torch.tensor([0, 1, MAX_AMBIG_AA_IDX], dtype=torch.int)
     output = aa_idx_tensor_of_str_ambig(input_seq)

@@ -66,7 +66,6 @@ class FivemerModel(KmerModel):
 
     @property
     def kmer_rates(self):
-        # Convert kmer log rates to linear space
         return torch.exp(self.kmer_embedding.weight).squeeze()
 
 
@@ -97,12 +96,10 @@ class SHMoofModel(KmerModel):
 
     @property
     def kmer_rates(self):
-        # Convert kmer log rates to linear space
         return torch.exp(self.kmer_embedding.weight).squeeze()
 
     @property
     def site_rates(self):
-        # Convert site log rates to linear space
         return torch.exp(self.log_site_rates.weight).squeeze()
 
     def write_shmoof_output(self, out_dir):
@@ -205,6 +202,8 @@ class CNN1merModel(CNNModel):
         super().__init__(
             kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
         )
+        # Here's how we adapt the model to use individual bases as input rather
+        # than trainable kmer embeddings.
         identity_matrix = torch.eye(embedding_dim)
         self.kmer_embedding.weight = nn.Parameter(identity_matrix, requires_grad=False)
 
@@ -237,7 +236,6 @@ class PersiteWrapper(ModelBase):
 
     @property
     def site_rates(self):
-        # Convert site log rates to linear space
         return torch.exp(self.log_site_rates.weight).squeeze()
 
 
