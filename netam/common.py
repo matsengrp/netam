@@ -7,8 +7,12 @@ import torch
 import torch.optim as optim
 from torch import nn, Tensor
 
+from epam.sequences import AA_STR_SORTED
+
 SMALL_PROB = 1e-8
 BASES = ["A", "C", "G", "T"]
+AA_STR_SORTED_AMBIG = AA_STR_SORTED + "X"
+MAX_AMBIG_AA_IDX = len(AA_STR_SORTED_AMBIG) - 1
 
 
 def generate_kmers(kmer_length):
@@ -23,6 +27,15 @@ def generate_kmers(kmer_length):
 
 def kmer_to_index_of(all_kmers):
     return {kmer: idx for idx, kmer in enumerate(all_kmers)}
+
+
+def aa_idx_tensor_of_str_ambig(aa_str):
+    """Return the indices of the amino acids in a string."""
+    try:
+        return torch.tensor([AA_STR_SORTED_AMBIG.index(aa) for aa in aa_str], dtype=torch.int)
+    except ValueError:
+        print(f"Found an invalid amino acid in the string: {aa_str}")
+        raise
 
 
 def clamp_probability(x: Tensor) -> Tensor:

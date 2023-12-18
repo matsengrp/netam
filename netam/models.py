@@ -7,7 +7,12 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from epam import sequences
-from netam.common import generate_kmers, PositionalEncoding
+from netam.common import (
+    MAX_AMBIG_AA_IDX,
+    aa_idx_tensor_of_str_ambig,
+    PositionalEncoding,
+    generate_kmers,
+)
 
 
 class ModelBase(nn.Module):
@@ -247,16 +252,20 @@ class TransformerBinarySelectionModel(nn.Module):
     def __init__(
         self,
         nhead: int,
+        d_model_per_head: int,
         dim_feedforward: int,
         layer_count: int,
-        d_model: int = 20,
         dropout_prob: float = 0.5,
     ):
         super().__init__()
-        self.d_model = d_model
+        # Note that d_model has to be divisible by nhead, so we make that
+        # automatic here.
+        self.d_model_per_head = d_model_per_head
+        self.d_model = d_model_per_head * nhead
         self.nhead = nhead
         self.dim_feedforward = dim_feedforward
         self.pos_encoder = PositionalEncoding(self.d_model, dropout_prob)
+        self.amino_acid_embedding = nn.Embedding(MAX_AMBIG_AA_IDX + 1, self.d_model)
         self.encoder_layer = nn.TransformerEncoderLayer(
             d_model=self.d_model,
             nhead=nhead,
@@ -271,9 +280,9 @@ class TransformerBinarySelectionModel(nn.Module):
     def hyperparameters(self):
         return {
             "nhead": self.nhead,
+            "d_model_per_head": self.d_model_per_head,
             "dim_feedforward": self.dim_feedforward,
             "layer_count": self.encoder.num_layers,
-            "d_model": self.d_model,
             "dropout_prob": self.pos_encoder.dropout.p,
         }
 
@@ -282,14 +291,14 @@ class TransformerBinarySelectionModel(nn.Module):
         self.linear.bias.data.zero_()
         self.linear.weight.data.uniform_(-initrange, initrange)
 
-    def forward(self, parent_onehots: Tensor, mask: Tensor) -> Tensor:
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         """Build a binary log selection matrix from a one-hot encoded parent sequence.
 
         Because we're predicting log of the selection factor, we don't use an
         activation function after the transformer.
 
         Parameters:
-            parent_onehots: A tensor of shape (B, L, 20) representing the one-hot encoding of parent sequences.
+            amino_acid_indices: A tensor of shape (B, L) containing the indices of parent AA sequences.
             mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.
 
         Returns:
@@ -298,15 +307,17 @@ class TransformerBinarySelectionModel(nn.Module):
         """
 
         # Multiply by sqrt(d_model) to match the transformer paper.
-        parent_onehots = parent_onehots * math.sqrt(self.d_model)
+        embedded_amino_acids = self.amino_acid_embedding(
+            amino_acid_indices
+        ) * math.sqrt(self.d_model)
         # Have to do the permutation because the positional encoding expects the
         # sequence length to be the first dimension.
-        parent_onehots = self.pos_encoder(parent_onehots.permute(1, 0, 2)).permute(
-            1, 0, 2
-        )
+        embedded_amino_acids = self.pos_encoder(
+            embedded_amino_acids.permute(1, 0, 2)
+        ).permute(1, 0, 2)
 
         # To learn about src_key_padding_mask, see https://stackoverflow.com/q/62170439
-        out = self.encoder(parent_onehots, src_key_padding_mask=~mask)
+        out = self.encoder(embedded_amino_acids, src_key_padding_mask=~mask)
         out = self.linear(out)
         out = F.logsigmoid(out)
         return out.squeeze(-1)
@@ -324,13 +335,13 @@ class TransformerBinarySelectionModel(nn.Module):
 
         model_device = next(self.parameters()).device
 
-        aa_onehot = sequences.aa_onehot_tensor_of_str(aa_str)
-        aa_onehot = aa_onehot.to(model_device)
+        aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
+        aa_idxs = aa_idxs.to(model_device)
         mask = sequences.mask_tensor_of(aa_str)
         mask = mask.to(model_device)
 
         with torch.no_grad():
-            model_out = self(aa_onehot.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
+            model_out = self(aa_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
             final_out = torch.exp(model_out)
 
         return final_out[: len(aa_str)]

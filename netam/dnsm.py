@@ -21,6 +21,8 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 from netam.common import (
+    MAX_AMBIG_AA_IDX,
+    aa_idx_tensor_of_str_ambig,
     clamp_probability,
     stack_heterogeneous,
     pick_device,
@@ -56,24 +58,21 @@ class DNSMDataset(Dataset):
         aa_parents = translate_sequences(self.nt_parents)
         aa_children = translate_sequences(self.nt_children)
         self.max_aa_seq_len = max(len(seq) for seq in aa_parents)
-        self.aa_parents_onehot = torch.zeros((pcp_count, self.max_aa_seq_len, 20))
+        self.aa_parents_idxs = torch.full((pcp_count, self.max_aa_seq_len), MAX_AMBIG_AA_IDX)
         self.aa_subs_indicator_tensor = torch.zeros((pcp_count, self.max_aa_seq_len))
 
         self.mask = torch.ones((pcp_count, self.max_aa_seq_len), dtype=torch.bool)
 
         for i, (aa_parent, aa_child) in enumerate(zip(aa_parents, aa_children)):
             self.mask[i, :] = mask_tensor_of(aa_parent, self.max_aa_seq_len)
-            # Note we are replacing all Ns with As, which means that we need to be careful
-            # with masking out these positions later. We do this in
-            # update_neutral_aa_mut_probs.
-            aa_indices_parent = sequences.aa_idx_array_of_str(
-                aa_parent.replace("N", "A")
-            )
             aa_seq_len = len(aa_parent)
-            self.aa_parents_onehot[i, torch.arange(aa_seq_len), aa_indices_parent] = 1
+            self.aa_parents_idxs[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(aa_parent)
             self.aa_subs_indicator_tensor[i, :aa_seq_len] = subs_indicator_tensor_of(
                 aa_parent, aa_child
             )
+
+        assert torch.all(self.mask.sum(dim=1) > 0)
+        assert torch.max(self.aa_parents_idxs) <= MAX_AMBIG_AA_IDX
 
         # Make initial branch lengths (will get optimized later).
         self._branch_lengths = [
@@ -140,11 +139,11 @@ class DNSMDataset(Dataset):
         self.log_neutral_aa_mut_probs = torch.log(torch.stack(neutral_aa_mut_prob_l))
 
     def __len__(self):
-        return len(self.aa_parents_onehot)
+        return len(self.aa_parents_idxs)
 
     def __getitem__(self, idx):
         return {
-            "aa_onehot": self.aa_parents_onehot[idx],
+            "aa_parents_idxs": self.aa_parents_idxs[idx],
             "subs_indicator": self.aa_subs_indicator_tensor[idx],
             "mask": self.mask[idx],
             "log_neutral_aa_mut_probs": self.log_neutral_aa_mut_probs[idx],
@@ -153,7 +152,7 @@ class DNSMDataset(Dataset):
         }
 
     def to(self, device):
-        self.aa_parents_onehot = self.aa_parents_onehot.to(device)
+        self.aa_parents_idxs = self.aa_parents_idxs.to(device)
         self.aa_subs_indicator_tensor = self.aa_subs_indicator_tensor.to(device)
         self.mask = self.mask.to(device)
         self.log_neutral_aa_mut_probs = self.log_neutral_aa_mut_probs.to(device)
@@ -191,11 +190,11 @@ class DNSMBurrito(framework.Burrito):
         self.model.to(self.device)
 
     def loss_of_batch(self, batch):
-        aa_onehot = batch["aa_onehot"].to(self.device)
+        aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
         aa_subs_indicator = batch["subs_indicator"].to(self.device)
         mask = batch["mask"].to(self.device)
         log_neutral_aa_mut_probs = batch["log_neutral_aa_mut_probs"].to(self.device)
-        log_selection_factors = self.model(aa_onehot, mask)
+        log_selection_factors = self.model(aa_parents_idxs, mask)
         return self.complete_loss_fn(
             log_neutral_aa_mut_probs,
             log_selection_factors,

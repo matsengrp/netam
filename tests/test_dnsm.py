@@ -3,9 +3,17 @@ import torch
 import pytest
 
 from netam.framework import load_crepe
+from netam.common import aa_idx_tensor_of_str_ambig, MAX_AMBIG_AA_IDX
 from netam.models import TransformerBinarySelectionModel
 from netam.dnsm import DNSMBurrito, train_test_datasets_of_pcp_df
 from epam.shmple_precompute import load_and_convert_to_tensors
+
+
+def test_mask_tensor_of():
+    input_seq = "ACX"
+    expected_output = torch.tensor([0, 1, MAX_AMBIG_AA_IDX], dtype=torch.int)
+    output = aa_idx_tensor_of_str_ambig(input_seq)
+    assert torch.equal(output, expected_output)
 
 
 @pytest.fixture
@@ -19,7 +27,9 @@ def dnsm_burrito():
     print(f"After filtering out identical PCPs, we have {len(pcp_df)} PCPs.")
     train_dataset, val_dataset = train_test_datasets_of_pcp_df(pcp_df)
 
-    model = TransformerBinarySelectionModel(nhead=2, dim_feedforward=256, layer_count=2)
+    model = TransformerBinarySelectionModel(
+        nhead=2, d_model_per_head=4, dim_feedforward=256, layer_count=2
+    )
 
     burrito = DNSMBurrito(
         train_dataset,
