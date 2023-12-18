@@ -259,6 +259,7 @@ class DNSMBurrito(framework.Burrito):
                 normed_subs_probs.reshape(-1, 3, 4),
             )
 
+            assert torch.all((predictions >= 0) & (predictions <= 1))
             predictions = neutral_aa_mut_prob * selection_factors
             predictions = predictions.masked_select(mask)
             masked_indicator = aa_subs_indicator.masked_select(mask)
