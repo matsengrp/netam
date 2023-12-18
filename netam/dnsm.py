@@ -20,14 +20,6 @@ import pandas as pd
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
-from netam.common import (
-    MAX_AMBIG_AA_IDX,
-    aa_idx_tensor_of_str_ambig,
-    clamp_probability,
-    stack_heterogeneous,
-    pick_device,
-)
-import netam.framework as framework
 from epam.torch_common import optimize_branch_length
 import epam.molevol as molevol
 import epam.sequences as sequences
@@ -37,6 +29,15 @@ from epam.sequences import (
     translate_sequence,
     translate_sequences,
 )
+from netam.common import (
+    MAX_AMBIG_AA_IDX,
+    aa_idx_tensor_of_str_ambig,
+    clamp_probability,
+    stack_heterogeneous,
+    pick_device,
+)
+import netam.framework as framework
+from netam.hyper_burrito import HyperBurrito
 
 
 class DNSMDataset(Dataset):
@@ -259,9 +260,9 @@ class DNSMBurrito(framework.Burrito):
                 normed_subs_probs.reshape(-1, 3, 4),
             )
 
-            assert torch.all((predictions >= 0) & (predictions <= 1))
             predictions = neutral_aa_mut_prob * selection_factors
             predictions = predictions.masked_select(mask)
+            assert torch.all((predictions >= 0) & (predictions <= 1))
             masked_indicator = aa_subs_indicator.masked_select(mask)
             # Negative because BCELoss is negative log likelihood.
             return -bce_loss(predictions, masked_indicator)
@@ -347,12 +348,12 @@ class DNSMBurrito(framework.Burrito):
         return framework.Crepe(encoder, self.model, training_hyperparameters)
 
 
-class DNSMHyperBurrito(framework.HyperBurrito):
+class DNSMHyperBurrito(HyperBurrito):
     # Note that we have to write the args out explicitly because we use some magic to filter kwargs in the optuna_objective method.
     def burrito_of_model(
         self,
         model,
-        device=pick_device(),
+        device,
         batch_size=1024,
         learning_rate=0.1,
         min_learning_rate=1e-4,
