@@ -58,6 +58,9 @@ class DNSMDataset(Dataset):
         aa_parents = translate_sequences(self.nt_parents)
         aa_children = translate_sequences(self.nt_children)
         self.max_aa_seq_len = max(len(seq) for seq in aa_parents)
+        # We have sequences of varying length, so we start with all tensors set
+        # to the ambiguous amino acid, and then will fill in the actual values
+        # below.
         self.aa_parents_idxs = torch.full((pcp_count, self.max_aa_seq_len), MAX_AMBIG_AA_IDX)
         self.aa_subs_indicator_tensor = torch.zeros((pcp_count, self.max_aa_seq_len))
 
@@ -135,7 +138,7 @@ class DNSMDataset(Dataset):
             neutral_aa_mut_prob_l.append(neutral_aa_mut_prob)
 
         # Note that our masked out positions will have a nan log probability,
-        # which will ensure that we are handling them correctly downstream.
+        # which will require us to handle them correctly downstream.
         self.log_neutral_aa_mut_probs = torch.log(torch.stack(neutral_aa_mut_prob_l))
 
     def __len__(self):
@@ -215,13 +218,10 @@ class DNSMBurrito(framework.Burrito):
         predictions = predictions.masked_select(mask)
         aa_subs_indicator = aa_subs_indicator.masked_select(mask)
 
-        # In the early stages of training, we can get probabilities > 1.0 because
-        # of bad parameter initialization. We clamp the predictions to be between
-        # 0 and 0.999 to avoid this: out of range predictions can make NaNs
-        # downstream. Note that any reasonable trained model will have the mutation
-        # probabilities be << 1.0, so this is not a problem in practice.
-        # TODO logsigmoid?
-        predictions = clamp_probability(predictions)
+        # Because the neutral mutation probabilities should be normalized, and
+        # log_selection_factors comes from a logsigmoid, we should have
+        # predictions <= 1.
+        assert torch.all(predictions <= 1)
 
         return self.bce_loss(predictions, aa_subs_indicator)
 
