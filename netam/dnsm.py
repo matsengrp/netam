@@ -259,13 +259,10 @@ class DNSMBurrito(framework.Burrito):
                 normed_subs_probs.reshape(-1, 3, 4),
             )
 
-            neutral_aa_mut_prob = clamp_probability(neutral_aa_mut_prob)
             predictions = neutral_aa_mut_prob * selection_factors
-            predictions = clamp_probability(predictions)
-
-            # negative because BCELoss is negative log likelihood
             predictions = predictions.masked_select(mask)
             masked_indicator = aa_subs_indicator.masked_select(mask)
+            # Negative because BCELoss is negative log likelihood.
             return -bce_loss(predictions, masked_indicator)
 
         return log_pcp_probability
