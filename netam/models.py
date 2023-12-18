@@ -1,28 +1,78 @@
-import itertools
-
+import math
 import pandas as pd
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-from torch.nn import TransformerEncoder, TransformerEncoderLayer
-from torch.utils.data import DataLoader
+from torch import Tensor
 
-from tensorboardX import SummaryWriter
+from epam import sequences
+from netam.common import (
+    MAX_AMBIG_AA_IDX,
+    aa_idx_tensor_of_str_ambig,
+    PositionalEncoding,
+    generate_kmers,
+)
 
-from epam.torch_common import PositionalEncoding
 
-BASES = ["A", "C", "G", "T"]
+class ModelBase(nn.Module):
+    def reinitialize_weights(self):
+        for layer in self.children():
+            if isinstance(layer, nn.Embedding):
+                nn.init.normal_(layer.weight)
+            elif isinstance(layer, nn.Linear):
+                nn.init.kaiming_normal_(layer.weight, nonlinearity="linear")
+                if layer.bias is not None:
+                    nn.init.constant_(layer.bias, 0)
+            elif isinstance(layer, nn.Conv1d):
+                nn.init.kaiming_normal_(layer.weight, nonlinearity="relu")
+                if layer.bias is not None:
+                    nn.init.constant_(layer.bias, 0)
+            elif isinstance(layer, nn.TransformerEncoder):
+                for sublayer in layer.modules():
+                    if isinstance(sublayer, nn.Linear):
+                        nn.init.kaiming_normal_(sublayer.weight, nonlinearity="relu")
+                        if sublayer.bias is not None:
+                            nn.init.constant_(sublayer.bias, 0)
+            elif isinstance(layer, nn.Dropout):
+                pass
+            else:
+                raise ValueError(f"Unrecognized layer type: {type(layer)}")
 
 
-class SHMoofModel(nn.Module):
-    def __init__(self, dataset):
-        super(SHMoofModel, self).__init__()
-        self.all_kmers = dataset.all_kmers
-        self.kmer_count = len(dataset.kmer_to_index)
-        self.site_count = dataset.max_length
+class KmerModel(ModelBase):
+    def __init__(self, kmer_length):
+        super().__init__()
+        self.kmer_length = kmer_length
+        self.all_kmers = generate_kmers(kmer_length)
+        self.kmer_count = len(self.all_kmers)
 
+    @property
+    def hyperparameters(self):
+        return {
+            "kmer_length": self.kmer_length,
+        }
+
+
+class FivemerModel(KmerModel):
+    def __init__(self):
+        super().__init__(kmer_length=5)
+        self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
+
+    def forward(self, encoded_parents, masks):
+        log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze()
+        rates = torch.exp(log_kmer_rates)
+        return rates
+
+    @property
+    def kmer_rates(self):
+        return torch.exp(self.kmer_embedding.weight).squeeze()
+
+
+class SHMoofModel(KmerModel):
+    def __init__(self, kmer_length, site_count):
+        super().__init__(kmer_length)
+        self.site_count = site_count
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
         self.log_site_rates = nn.Embedding(self.site_count, 1)
 
@@ -38,13 +88,18 @@ class SHMoofModel(nn.Module):
         return rates
 
     @property
+    def hyperparameters(self):
+        return {
+            "kmer_length": self.kmer_length,
+            "site_count": self.site_count,
+        }
+
+    @property
     def kmer_rates(self):
-        # Convert kmer log rates to linear space
         return torch.exp(self.kmer_embedding.weight).squeeze()
 
     @property
     def site_rates(self):
-        # Convert site log rates to linear space
         return torch.exp(self.log_site_rates.weight).squeeze()
 
     def write_shmoof_output(self, out_dir):
@@ -73,50 +128,218 @@ class SHMoofModel(nn.Module):
         )
 
 
-class NoofModel(nn.Module):
+class CNNModel(KmerModel):
+    """
+    This is a CNN model that uses k-mers as input and trains an embedding layer.
+    """
+
     def __init__(
-        self, dataset, embedding_dim, nhead, dim_feedforward, layer_count, dropout=0.5
+        self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
     ):
-        super(NoofModel, self).__init__()
-        self.kmer_count = len(dataset.kmer_to_index)
-        self.embedding_dim = embedding_dim
-        self.site_count = dataset.max_length
+        super().__init__(kmer_length)
+        self.kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
+        self.conv = nn.Conv1d(
+            in_channels=embedding_dim,
+            out_channels=filter_count,
+            kernel_size=kernel_size,
+            padding="same",
+        )
+        self.dropout = nn.Dropout(dropout_prob)
+        self.linear = nn.Linear(in_features=filter_count, out_features=1)
 
-        self.kmer_embedding = nn.Embedding(self.kmer_count, self.embedding_dim)
-        self.pos_encoder = PositionalEncoding(self.embedding_dim, dropout)
+    def forward(self, encoded_parents, masks):
+        kmer_embeds = self.kmer_embedding(encoded_parents)
+        kmer_embeds = kmer_embeds.permute(0, 2, 1)  # Transpose for Conv1D
+        conv_out = F.relu(self.conv(kmer_embeds))
+        conv_out = self.dropout(conv_out)
+        conv_out = conv_out.permute(0, 2, 1)  # Transpose back for Linear layer
+        log_rates = self.linear(conv_out).squeeze(-1)
+        rates = torch.exp(log_rates * masks)
+        return rates
 
-        self.encoder_layer = TransformerEncoderLayer(
-            d_model=self.embedding_dim,
+    @property
+    def hyperparameters(self):
+        return {
+            "kmer_length": self.kmer_length,
+            "embedding_dim": self.kmer_embedding.embedding_dim,
+            "filter_count": self.conv.out_channels,
+            "kernel_size": self.conv.kernel_size[0],
+            "dropout_prob": self.dropout.p,
+        }
+
+
+class CNNPEModel(CNNModel):
+    def __init__(
+        self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
+    ):
+        super().__init__(
+            kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
+        )
+        self.pos_encoder = PositionalEncoding(embedding_dim, dropout=dropout_prob)
+
+    def forward(self, encoded_parents, masks):
+        kmer_embeds = self.kmer_embedding(encoded_parents)
+        kmer_embeds = self.pos_encoder(kmer_embeds)
+        kmer_embeds = kmer_embeds.permute(0, 2, 1)  # Transpose for Conv1D
+        conv_out = F.relu(self.conv(kmer_embeds))
+        conv_out = self.dropout(conv_out)
+        conv_out = conv_out.permute(0, 2, 1)  # Transpose back for Linear layer
+        log_rates = self.linear(conv_out).squeeze(-1)
+        rates = torch.exp(log_rates * masks)
+        return rates
+
+
+class CNN1merModel(CNNModel):
+    """
+    This is a CNN model that uses individual bases as input and does not train an
+    embedding layer.
+    """
+
+    def __init__(self, filter_count, kernel_size, dropout_prob=0.1):
+        # Fixed embedding_dim because there are only 4 bases.
+        embedding_dim = 5
+        kmer_length = 1
+        super().__init__(
+            kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
+        )
+        # Here's how we adapt the model to use individual bases as input rather
+        # than trainable kmer embeddings.
+        identity_matrix = torch.eye(embedding_dim)
+        self.kmer_embedding.weight = nn.Parameter(identity_matrix, requires_grad=False)
+
+
+class PersiteWrapper(ModelBase):
+    """
+    This wraps another model, but adds a per-site rate component.
+    """
+
+    def __init__(self, base_model, site_count):
+        super().__init__()
+        self.base_model = base_model
+        self.site_count = site_count
+        self.log_site_rates = nn.Embedding(self.site_count, 1)
+
+    def forward(self, encoded_parents, masks):
+        base_model_rates = self.base_model(encoded_parents, masks)
+        sequence_length = encoded_parents.size(1)
+        positions = torch.arange(sequence_length, device=encoded_parents.device)
+        log_site_rates = self.log_site_rates(positions).T
+        rates = base_model_rates * torch.exp(log_site_rates)
+        return rates
+
+    @property
+    def hyperparameters(self):
+        return {
+            "base_model_hyperparameters": self.base_model.hyperparameters,
+            "site_count": self.site_count,
+        }
+
+    @property
+    def site_rates(self):
+        return torch.exp(self.log_site_rates.weight).squeeze()
+
+
+class TransformerBinarySelectionModel(nn.Module):
+    """A transformer-based model for binary selection.
+
+    This is a model that takes in a batch of one-hot encoded sequences and outputs a binary selection matrix.
+
+    See forward() for details.
+    """
+
+    def __init__(
+        self,
+        nhead: int,
+        d_model_per_head: int,
+        dim_feedforward: int,
+        layer_count: int,
+        dropout_prob: float = 0.5,
+    ):
+        super().__init__()
+        # Note that d_model has to be divisible by nhead, so we make that
+        # automatic here.
+        self.d_model_per_head = d_model_per_head
+        self.d_model = d_model_per_head * nhead
+        self.nhead = nhead
+        self.dim_feedforward = dim_feedforward
+        self.pos_encoder = PositionalEncoding(self.d_model, dropout_prob)
+        self.amino_acid_embedding = nn.Embedding(MAX_AMBIG_AA_IDX + 1, self.d_model)
+        self.encoder_layer = nn.TransformerEncoderLayer(
+            d_model=self.d_model,
             nhead=nhead,
             dim_feedforward=dim_feedforward,
-            dropout=dropout,
             batch_first=True,
         )
-        self.encoder = TransformerEncoder(self.encoder_layer, layer_count)
-        self.linear = nn.Linear(self.embedding_dim, 1)
-
+        self.encoder = nn.TransformerEncoder(self.encoder_layer, layer_count)
+        self.linear = nn.Linear(self.d_model, 1)
         self.init_weights()
+
+    @property
+    def hyperparameters(self):
+        return {
+            "nhead": self.nhead,
+            "d_model_per_head": self.d_model_per_head,
+            "dim_feedforward": self.dim_feedforward,
+            "layer_count": self.encoder.num_layers,
+            "dropout_prob": self.pos_encoder.dropout.p,
+        }
 
     def init_weights(self) -> None:
         initrange = 0.1
         self.linear.bias.data.zero_()
         self.linear.weight.data.uniform_(-initrange, initrange)
 
-    def forward(self, encoded_parents, masks):
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        """Build a binary log selection matrix from a one-hot encoded parent sequence.
+
+        Because we're predicting log of the selection factor, we don't use an
+        activation function after the transformer.
+
+        Parameters:
+            amino_acid_indices: A tensor of shape (B, L) containing the indices of parent AA sequences.
+            mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.
+
+        Returns:
+            A tensor of shape (B, L, 1) representing the log level of selection
+            for each amino acid site.
         """
-        The forward method.
 
-        encoded_parents is expected to be an integer tensor of [batch_size, sequence_length].
+        # Multiply by sqrt(d_model) to match the transformer paper.
+        embedded_amino_acids = self.amino_acid_embedding(
+            amino_acid_indices
+        ) * math.sqrt(self.d_model)
+        # Have to do the permutation because the positional encoding expects the
+        # sequence length to be the first dimension.
+        embedded_amino_acids = self.pos_encoder(
+            embedded_amino_acids.permute(1, 0, 2)
+        ).permute(1, 0, 2)
+
+        # To learn about src_key_padding_mask, see https://stackoverflow.com/q/62170439
+        out = self.encoder(embedded_amino_acids, src_key_padding_mask=~mask)
+        out = self.linear(out)
+        out = F.logsigmoid(out)
+        return out.squeeze(-1)
+
+    def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
+        """Do the forward method without gradients from an amino acid string and convert to numpy.
+
+        Parameters:
+            aa_str: A string of amino acids.
+
+        Returns:
+            A numpy array of the same length as the input string representing
+            the level of selection for each amino acid site.
         """
-        kmer_embeddings = self.kmer_embedding(encoded_parents)
-        kmer_embeddings = self.pos_encoder(kmer_embeddings)
 
-        # Pass through the transformer encoder
-        transformer_output = self.encoder(kmer_embeddings)
+        model_device = next(self.parameters()).device
 
-        # Apply the linear layer and squeeze out the last dimension.
-        # After the linear layer, the dimensions will be [batch_size, sequence_length, 1].
-        # We squeeze out the last dimension to make it [batch_size, sequence_length].
-        log_rates = self.linear(transformer_output).squeeze(-1)
-        rates = torch.exp(log_rates)
-        return rates
+        aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
+        aa_idxs = aa_idxs.to(model_device)
+        mask = sequences.mask_tensor_of(aa_str)
+        mask = mask.to(model_device)
+
+        with torch.no_grad():
+            model_out = self(aa_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
+            final_out = torch.exp(model_out)
+
+        return final_out[: len(aa_str)]

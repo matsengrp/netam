@@ -11,11 +11,14 @@ setup(
     long_description_content_type="text/markdown",
     packages=find_packages(),
     install_requires=[
-        "torch",  
-        "pandas",
         "biopython",
+        "optuna",
+        "pandas",
+        "pyyaml",
         "seaborn",
-        "fire",
+        "tensorboardX",
+        "torch",
+        "tqdm",
     ],
     python_requires="==3.9.*",
     classifiers=[
