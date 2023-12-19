@@ -41,7 +41,14 @@ from netam.hyper_burrito import HyperBurrito
 
 
 class DNSMDataset(Dataset):
-    def __init__(self, nt_parents, nt_children, all_rates, all_subs_probs):
+    def __init__(
+        self,
+        nt_parents,
+        nt_children,
+        all_rates,
+        all_subs_probs,
+        branch_length_multiplier=1.0,
+    ):
         self.nt_parents = nt_parents
         self.nt_children = nt_children
         self.all_rates = stack_heterogeneous(all_rates.reset_index(drop=True))
@@ -81,10 +88,12 @@ class DNSMDataset(Dataset):
         assert torch.max(self.aa_parents_idxs) <= MAX_AMBIG_AA_IDX
 
         # Make initial branch lengths (will get optimized later).
-        self._branch_lengths = np.array([
-            sequences.mutation_frequency(parent, child)
-            for parent, child in zip(self.nt_parents, self.nt_children)
-        ])
+        self._branch_lengths = np.array(
+            [
+                sequences.mutation_frequency(parent, child) * branch_length_multiplier
+                for parent, child in zip(self.nt_parents, self.nt_children)
+            ]
+        )
         self.update_neutral_aa_mut_probs()
 
     @property
@@ -166,7 +175,7 @@ class DNSMDataset(Dataset):
         self.all_subs_probs = self.all_subs_probs.to(device)
 
 
-def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8):
+def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multiplier=1.0):
     nt_parents = pcp_df["parent"].reset_index(drop=True)
     nt_children = pcp_df["child"].reset_index(drop=True)
     rates = pcp_df["rates"].reset_index(drop=True)
@@ -182,9 +191,19 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8):
     )
 
     train_dataset = DNSMDataset(
-        train_parents, train_children, train_rates, train_subs_probs
+        train_parents,
+        train_children,
+        train_rates,
+        train_subs_probs,
+        branch_length_multiplier=branch_length_multiplier,
     )
-    val_dataset = DNSMDataset(val_parents, val_children, val_rates, val_subs_probs)
+    val_dataset = DNSMDataset(
+        val_parents,
+        val_children,
+        val_rates,
+        val_subs_probs,
+        branch_length_multiplier=branch_length_multiplier,
+    )
 
     return train_dataset, val_dataset
 
