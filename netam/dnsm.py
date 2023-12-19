@@ -343,7 +343,10 @@ class DNSMBurrito(framework.Burrito):
                 dataset.branch_lengths,
             )
 
-    def full_train(self, epochs=20, cycle_count=2):
+    def joint_train(self, epochs=20, cycle_count=2):
+        """
+        Do joint optimization of model and branch lengths.
+        """
         loss_history_l = []
         loss_history_l.append(self.train(3))
         self.optimize_branch_lengths()
@@ -357,6 +360,12 @@ class DNSMBurrito(framework.Burrito):
             if cycle < cycle_count - 1:
                 self.optimize_branch_lengths()
         return pd.concat(loss_history_l, ignore_index=True)
+
+    def full_train(self, epochs=100):
+        """
+        For now, just optimize the model and not branch lengths.
+        """
+        return self.train(epochs)
 
     def to_crepe(self):
         training_hyperparameters = {
