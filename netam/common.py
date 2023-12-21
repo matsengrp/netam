@@ -40,6 +40,20 @@ def aa_idx_tensor_of_str_ambig(aa_str):
         raise
 
 
+def mask_tensor_of(seq_str, length=None):
+    """Return a mask tensor indicating non-empty and non-"N" sites. Sites
+    beyond the length of the sequence are masked."""
+    if length is None:
+        length = len(seq_str)
+    mask = torch.zeros(length, dtype=torch.bool)
+    if len(seq_str) < length:
+        seq_str += "N" * (length - len(seq_str))
+    else:
+        seq_str = seq_str[:length]
+    mask[[c != "N" for c in seq_str]] = 1
+    return mask
+
+
 def clamp_probability(x: Tensor) -> Tensor:
     return torch.clamp(x, min=SMALL_PROB, max=(1.0 - SMALL_PROB))
 

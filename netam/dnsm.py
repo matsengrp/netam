@@ -24,7 +24,6 @@ from epam.torch_common import optimize_branch_length
 import epam.molevol as molevol
 import epam.sequences as sequences
 from epam.sequences import (
-    mask_tensor_of,
     subs_indicator_tensor_of,
     translate_sequence,
     translate_sequences,
@@ -33,6 +32,7 @@ from netam.common import (
     MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
     clamp_probability,
+    mask_tensor_of,
     stack_heterogeneous,
     pick_device,
 )

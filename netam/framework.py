@@ -14,8 +14,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from tensorboardX import SummaryWriter
 
-from epam.sequences import mask_tensor_of
-from netam.common import generate_kmers, kmer_to_index_of
+from netam.common import generate_kmers, kmer_to_index_of, mask_tensor_of
 from netam import models
 
 
