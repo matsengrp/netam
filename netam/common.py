@@ -7,10 +7,9 @@ import torch
 import torch.optim as optim
 from torch import nn, Tensor
 
-from epam.sequences import AA_STR_SORTED
-
 SMALL_PROB = 1e-8
 BASES = ["A", "C", "G", "T"]
+AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
 AA_STR_SORTED_AMBIG = AA_STR_SORTED + "X"
 MAX_AMBIG_AA_IDX = len(AA_STR_SORTED_AMBIG) - 1
 
