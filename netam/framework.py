@@ -254,6 +254,8 @@ def load_crepe(prefix, device=None):
     model = model_class(**config["model_hyperparameters"])
 
     model_state_path = f"{prefix}.pth"
+    if device is None:
+        device = torch.device("cpu")
     model.load_state_dict(torch.load(model_state_path, map_location=device))
     model.eval()
 
