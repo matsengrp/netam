@@ -13,6 +13,9 @@ import torch.nn as nn
 from torch import Tensor
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
+# Amazingly, using one thread makes things 50x faster for branch length
+# optimization on our server.
+torch.set_num_threads(1)
 
 import numpy as np
 import pandas as pd
