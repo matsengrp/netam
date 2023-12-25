@@ -335,6 +335,7 @@ class DNSMBurrito(framework.Burrito):
 
     def optimize_branch_lengths(self):
         for dataset in [self.train_loader.dataset, self.val_loader.dataset]:
+            dataset.to("cpu")
             dataset.branch_lengths = self.find_optimal_branch_lengths(
                 dataset.nt_parents,
                 dataset.nt_children,
@@ -342,6 +343,7 @@ class DNSMBurrito(framework.Burrito):
                 dataset.all_subs_probs,
                 dataset.branch_lengths,
             )
+            dataset.to(self.device)
 
     def joint_train(self, epochs=20, cycle_count=2):
         """
