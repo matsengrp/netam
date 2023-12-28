@@ -215,7 +215,7 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multipli
 
 class DNSMBurrito(framework.Burrito):
     # TODO path
-    def __init__(self, *args, device=pick_device(), weights_directory="/Users/matsen/re/epam/data/shmple_weights/my_shmoof", **kwargs):
+    def __init__(self, *args, device=pick_device(), weights_directory="~/re/epam/data/shmple_weights/my_shmoof", **kwargs):
         super().__init__(*args, **kwargs)
         self.device = device
         self.model.to(self.device)
