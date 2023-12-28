@@ -24,6 +24,7 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 from epam.torch_common import optimize_branch_length
+from epam.models import WrappedBinaryMutSel
 import epam.molevol as molevol
 import epam.sequences as sequences
 from epam.sequences import (
@@ -31,6 +32,7 @@ from epam.sequences import (
     translate_sequence,
     translate_sequences,
 )
+
 from netam.common import (
     MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
@@ -212,10 +214,12 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multipli
 
 
 class DNSMBurrito(framework.Burrito):
-    def __init__(self, *args, device=pick_device(), **kwargs):
+    # TODO path
+    def __init__(self, *args, device=pick_device(), weights_directory="/Users/matsen/re/epam/data/shmple_weights/my_shmoof", **kwargs):
         super().__init__(*args, **kwargs)
         self.device = device
         self.model.to(self.device)
+        self.wrapped_model = WrappedBinaryMutSel(self.model, weights_directory=weights_directory)
 
     def loss_of_batch(self, batch):
         aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
@@ -250,6 +254,7 @@ class DNSMBurrito(framework.Burrito):
 
         return self.bce_loss(predictions, aa_subs_indicator)
 
+    # TODO deprecated
     def _build_log_pcp_probability(
         self, parent: str, child: str, rates: Tensor, subs_probs: Tensor
     ):
@@ -298,9 +303,10 @@ class DNSMBurrito(framework.Burrito):
     ):
         if parent == child:
             return 0.0
-        log_pcp_probability = self._build_log_pcp_probability(
+        log_pcp_probability = self.wrapped_model._build_log_pcp_probability(
             parent, child, rates, subs_probs
         )
+        # TODO do we want to add some optimization options here?
         return optimize_branch_length(log_pcp_probability, starting_branch_length)
 
     def find_optimal_branch_lengths(
@@ -337,6 +343,10 @@ class DNSMBurrito(framework.Burrito):
         return np.array(optimal_lengths)
 
     def optimize_branch_lengths(self):
+        # We do the branch length optimization but want to restore the model to
+        # the device it was on before.
+        device = next(self.model.parameters()).device
+        self.model.to("cpu")
         for dataset in [self.train_loader.dataset, self.val_loader.dataset]:
             # make an assertion that dataset.all_rates is on the cpu
             assert dataset.all_rates.device.type == "cpu"
@@ -347,6 +357,7 @@ class DNSMBurrito(framework.Burrito):
                 dataset.all_subs_probs,
                 dataset.branch_lengths,
             )
+        self.model.to(device)
 
     def joint_train(self, epochs=20, cycle_count=2):
         """
@@ -355,6 +366,7 @@ class DNSMBurrito(framework.Burrito):
         loss_history_l = []
         loss_history_l.append(self.train(3))
         self.optimize_branch_lengths()
+        # TODO do we still need to do this?
         # We double branch lengths and then retrain to avoid the best parameter
         # values hitting the boundary of 1.
         self.train_loader.dataset.branch_lengths *= 2

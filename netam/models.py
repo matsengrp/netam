@@ -321,14 +321,14 @@ class TransformerBinarySelectionModel(nn.Module):
         return out.squeeze(-1)
 
     def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
-        """Do the forward method without gradients from an amino acid string and convert to numpy.
+        """Do the forward method without gradients from an amino acid string.
 
         Parameters:
             aa_str: A string of amino acids.
 
         Returns:
             A numpy array of the same length as the input string representing
-            the level of selection for each amino acid site.
+            the level of selection for wildtype at each amino acid site.
         """
 
         model_device = next(self.parameters()).device
