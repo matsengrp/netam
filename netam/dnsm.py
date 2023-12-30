@@ -253,50 +253,6 @@ class DNSMBurrito(framework.Burrito):
 
         return self.bce_loss(predictions, aa_subs_indicator)
 
-    # TODO deprecated
-    def _build_log_pcp_probability(
-        self, parent: str, child: str, rates: Tensor, subs_probs: Tensor
-    ):
-        """
-        This version of _build_log_pcp_probability directly expresses BCELoss
-        so that we're minimizing the same loss as the NN when we're optimizing
-        branch length.
-        """
-
-        assert len(parent) % 3 == 0
-
-        # Note we are replacing all Ns with As, which means that we need to be careful
-        # with masking out these positions later. We do this below.
-        parent_idxs = sequences.nt_idx_tensor_of_str(parent.replace("N", "A"))
-        aa_parent = translate_sequence(parent)
-        aa_child = translate_sequence(child)
-        aa_subs_indicator = subs_indicator_tensor_of(aa_parent, aa_child)
-        mask = mask_tensor_of(aa_parent)
-        selection_factors = self.model.selection_factors_of_aa_str(aa_parent).to("cpu")
-        rates = rates.to("cpu")
-        subs_probs = subs_probs.to("cpu")
-        bce_loss = nn.BCELoss()
-
-        def log_pcp_probability(log_branch_length: torch.Tensor):
-            branch_length = torch.exp(log_branch_length)
-            mut_probs = 1.0 - torch.exp(-branch_length * rates)
-            normed_subs_probs = molevol.normalize_sub_probs(parent_idxs, subs_probs)
-
-            neutral_aa_mut_prob = molevol.neutral_aa_mut_probs(
-                parent_idxs.reshape(-1, 3),
-                mut_probs.reshape(-1, 3),
-                normed_subs_probs.reshape(-1, 3, 4),
-            )
-
-            predictions = neutral_aa_mut_prob * selection_factors
-            predictions = predictions.masked_select(mask)
-            assert torch.all((predictions >= 0) & (predictions <= 1))
-            masked_indicator = aa_subs_indicator.masked_select(mask)
-            # Negative because BCELoss is negative log likelihood.
-            return -bce_loss(predictions, masked_indicator)
-
-        return log_pcp_probability
-
     def _find_optimal_branch_length(
         self, parent, child, rates, subs_probs, starting_branch_length
     ):
@@ -305,7 +261,6 @@ class DNSMBurrito(framework.Burrito):
         log_pcp_probability = self.wrapped_model._build_log_pcp_probability(
             parent, child, rates, subs_probs
         )
-        # TODO do we want to add some optimization options here?
         return optimize_branch_length(log_pcp_probability, starting_branch_length)
 
     def find_optimal_branch_lengths(
@@ -365,11 +320,6 @@ class DNSMBurrito(framework.Burrito):
         loss_history_l = []
         loss_history_l.append(self.train(3))
         self.optimize_branch_lengths()
-        # TODO do we still need to do this?
-        # We double branch lengths and then retrain to avoid the best parameter
-        # values hitting the boundary of 1.
-        self.train_loader.dataset.branch_lengths *= 2
-        self.val_loader.dataset.branch_lengths *= 2
         self.reset_optimization()
         for cycle in range(cycle_count):
             loss_history_l.append(self.train(epochs))
