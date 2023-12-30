@@ -13,6 +13,7 @@ import torch.nn as nn
 from torch import Tensor
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
+
 # Amazingly, using one thread makes things 50x faster for branch length
 # optimization on our server.
 torch.set_num_threads(1)
@@ -52,7 +53,7 @@ class DNSMDataset(Dataset):
         nt_children,
         all_rates,
         all_subs_probs,
-        branch_length_multiplier=1.0,
+        branch_length_multiplier=5.0,
     ):
         self.nt_parents = nt_parents
         self.nt_children = nt_children
@@ -180,7 +181,7 @@ class DNSMDataset(Dataset):
         self.all_subs_probs = self.all_subs_probs.to(device)
 
 
-def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multiplier=1.0):
+def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multiplier=5.0):
     nt_parents = pcp_df["parent"].reset_index(drop=True)
     nt_children = pcp_df["child"].reset_index(drop=True)
     rates = pcp_df["rates"].reset_index(drop=True)
