@@ -60,7 +60,7 @@ class FivemerModel(KmerModel):
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
 
     def forward(self, encoded_parents, masks):
-        log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze()
+        log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze(-1)
         rates = torch.exp(log_kmer_rates)
         return rates
 
@@ -77,7 +77,7 @@ class SHMoofModel(KmerModel):
         self.log_site_rates = nn.Embedding(self.site_count, 1)
 
     def forward(self, encoded_parents, masks):
-        log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze()
+        log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze(-1)
         sequence_length = encoded_parents.size(1)
         positions = torch.arange(sequence_length, device=encoded_parents.device)
         # When we transpose we get a tensor of shape [sequence_length, 1], which will broadcast
