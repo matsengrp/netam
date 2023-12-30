@@ -298,12 +298,11 @@ class DNSMBurrito(framework.Burrito):
         return np.array(optimal_lengths)
 
     def optimize_branch_lengths(self):
-        # We do the branch length optimization but want to restore the model to
-        # the device it was on before.
+        # We do the branch length optimization on CPU but want to restore the
+        # model to the device it was on before.
         device = next(self.model.parameters()).device
         self.model.to("cpu")
         for dataset in [self.train_loader.dataset, self.val_loader.dataset]:
-            # make an assertion that dataset.all_rates is on the cpu
             assert dataset.all_rates.device.type == "cpu"
             dataset.branch_lengths = self.find_optimal_branch_lengths(
                 dataset.nt_parents,
@@ -329,10 +328,7 @@ class DNSMBurrito(framework.Burrito):
         return pd.concat(loss_history_l, ignore_index=True)
 
     def full_train(self, epochs=100):
-        """
-        For now, just optimize the model and not branch lengths.
-        """
-        return self.train(epochs)
+        return self.joint_train(epochs=epochs)
 
     def to_crepe(self):
         training_hyperparameters = {
