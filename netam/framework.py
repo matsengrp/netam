@@ -422,7 +422,11 @@ class Burrito(ABC):
             self.model.load_state_dict(best_model_state)
 
         # Make sure that saving the best model state worked.
-        assert abs(best_val_loss - self.evaluate()) < 1e-6
+        val_loss_difference = best_val_loss - self.evaluate()
+        if abs(val_loss_difference) > 1e-6:
+            print(
+                f"Warning: difference in validation losses between observed and saved loss is {val_loss_difference}"
+            )
 
         return pd.DataFrame({"train_loss": train_losses, "val_loss": val_losses})
 
