@@ -111,6 +111,9 @@ class DNSMDataset(Dataset):
         self._branch_lengths = new_branch_lengths
         self.update_neutral_aa_mut_probs()
 
+    def export_branch_lengths(self, out_csv_path):
+        pd.DataFrame({"branch_length": self.branch_lengths}).to_csv(out_csv_path, index=False)
+
     def update_neutral_aa_mut_probs(self):
         print("consolidating shmple rates into substitution probabilities...")
 
