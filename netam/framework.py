@@ -422,7 +422,10 @@ class Burrito(ABC):
             self.model.load_state_dict(best_model_state)
 
         # Make sure that saving the best model state worked.
-        if abs(best_val_loss - self.evaluate()) > 1e-6:
+        if (
+            best_val_loss != float("inf") # We actually have a training step.
+            and abs(best_val_loss - self.evaluate()) > 1e-6
+        ):
             print(
                 f"\nWarning: observed val loss is {best_val_loss} and saved loss is {self.evaluate()}"
             )
