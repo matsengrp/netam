@@ -108,11 +108,21 @@ class DNSMDataset(Dataset):
 
     @branch_lengths.setter
     def branch_lengths(self, new_branch_lengths):
+        assert len(new_branch_lengths) == len(self._branch_lengths), (
+            f"Expected {len(self._branch_lengths)} branch lengths, "
+            f"got {len(new_branch_lengths)}"
+        )
+        assert np.all(np.isfinite(new_branch_lengths) & (new_branch_lengths > 0))
         self._branch_lengths = new_branch_lengths
         self.update_neutral_aa_mut_probs()
 
     def export_branch_lengths(self, out_csv_path):
-        pd.DataFrame({"branch_length": self.branch_lengths}).to_csv(out_csv_path, index=False)
+        pd.DataFrame({"branch_length": self.branch_lengths}).to_csv(
+            out_csv_path, index=False
+        )
+
+    def load_branch_lengths(self, in_csv_path):
+        self.branch_lengths = pd.read_csv(in_csv_path)["branch_length"].values
 
     def update_neutral_aa_mut_probs(self):
         print("consolidating shmple rates into substitution probabilities...")
@@ -223,6 +233,14 @@ class DNSMBurrito(framework.Burrito):
         self.device = device
         self.model.to(self.device)
         self.wrapped_model = WrappedBinaryMutSel(self.model, weights_directory=None)
+
+    def load_branch_lengths(self, in_csv_prefix):
+        self.train_loader.dataset.load_branch_lengths(
+            in_csv_prefix + ".train_branch_lengths.csv"
+        )
+        self.val_loader.dataset.load_branch_lengths(
+            in_csv_prefix + ".val_branch_lengths.csv"
+        )
 
     def loss_of_batch(self, batch):
         aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
