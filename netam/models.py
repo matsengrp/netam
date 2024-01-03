@@ -1,4 +1,6 @@
+from abc import ABC, abstractmethod
 import math
+
 import pandas as pd
 
 import torch
@@ -239,7 +241,36 @@ class PersiteWrapper(ModelBase):
         return torch.exp(self.log_site_rates.weight).squeeze()
 
 
-class TransformerBinarySelectionModel(nn.Module):
+class AbstractBinarySelectionModel(ABC, nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
+        """Do the forward method without gradients from an amino acid string.
+
+        Parameters:
+            aa_str: A string of amino acids.
+
+        Returns:
+            A numpy array of the same length as the input string representing
+            the level of selection for wildtype at each amino acid site.
+        """
+
+        model_device = next(self.parameters()).device
+
+        aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
+        aa_idxs = aa_idxs.to(model_device)
+        mask = mask_tensor_of(aa_str)
+        mask = mask.to(model_device)
+
+        with torch.no_grad():
+            model_out = self(aa_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
+            final_out = torch.exp(model_out)
+
+        return final_out[: len(aa_str)]
+
+
+class TransformerBinarySelectionModel(AbstractBinarySelectionModel):
     """A transformer-based model for binary selection.
 
     This is a model that takes in a batch of one-hot encoded sequences and outputs a binary selection matrix.
@@ -317,32 +348,8 @@ class TransformerBinarySelectionModel(nn.Module):
         out = F.logsigmoid(out)
         return out.squeeze(-1)
 
-    def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
-        """Do the forward method without gradients from an amino acid string.
 
-        Parameters:
-            aa_str: A string of amino acids.
-
-        Returns:
-            A numpy array of the same length as the input string representing
-            the level of selection for wildtype at each amino acid site.
-        """
-
-        model_device = next(self.parameters()).device
-
-        aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
-        aa_idxs = aa_idxs.to(model_device)
-        mask = mask_tensor_of(aa_str)
-        mask = mask.to(model_device)
-
-        with torch.no_grad():
-            model_out = self(aa_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
-            final_out = torch.exp(model_out)
-
-        return final_out[: len(aa_str)]
-
-
-class SingleValueBinarySelectionModel(nn.Module):
+class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
     """A one parameter selection model as a baseline."""
 
     def __init__(self):
@@ -354,31 +361,6 @@ class SingleValueBinarySelectionModel(nn.Module):
         return {}
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        """Build a binary log selection matrix from a one-hot encoded parent sequence.
-        """
+        """Build a binary log selection matrix from a one-hot encoded parent sequence."""
         replicated_value = self.single_value.expand_as(amino_acid_indices)
         return F.logsigmoid(replicated_value)
-
-    def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
-        """Do the forward method without gradients from an amino acid string.
-
-        Parameters:
-            aa_str: A string of amino acids.
-
-        Returns:
-            A numpy array of the same length as the input string representing
-            the level of selection for wildtype at each amino acid site.
-        """
-
-        model_device = next(self.parameters()).device
-
-        aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
-        aa_idxs = aa_idxs.to(model_device)
-        mask = mask_tensor_of(aa_str)
-        mask = mask.to(model_device)
-
-        with torch.no_grad():
-            model_out = self(aa_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
-            final_out = torch.exp(model_out)
-
-        return final_out[: len(aa_str)]
