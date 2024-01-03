@@ -292,15 +292,12 @@ class TransformerBinarySelectionModel(nn.Module):
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         """Build a binary log selection matrix from a one-hot encoded parent sequence.
 
-        Because we're predicting log of the selection factor, we don't use an
-        activation function after the transformer.
-
         Parameters:
             amino_acid_indices: A tensor of shape (B, L) containing the indices of parent AA sequences.
             mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.
 
         Returns:
-            A tensor of shape (B, L, 1) representing the log level of selection
+            A tensor of shape (B, L) representing the log level of selection
             for each amino acid site.
         """
 
@@ -319,6 +316,48 @@ class TransformerBinarySelectionModel(nn.Module):
         out = self.linear(out)
         out = F.logsigmoid(out)
         return out.squeeze(-1)
+
+    def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
+        """Do the forward method without gradients from an amino acid string.
+
+        Parameters:
+            aa_str: A string of amino acids.
+
+        Returns:
+            A numpy array of the same length as the input string representing
+            the level of selection for wildtype at each amino acid site.
+        """
+
+        model_device = next(self.parameters()).device
+
+        aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
+        aa_idxs = aa_idxs.to(model_device)
+        mask = mask_tensor_of(aa_str)
+        mask = mask.to(model_device)
+
+        with torch.no_grad():
+            model_out = self(aa_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
+            final_out = torch.exp(model_out)
+
+        return final_out[: len(aa_str)]
+
+
+class SingleValueBinarySelectionModel(nn.Module):
+    """A one parameter selection model as a baseline."""
+
+    def __init__(self):
+        super().__init__()
+        self.single_value = nn.Parameter(torch.tensor(0.0))
+
+    @property
+    def hyperparameters(self):
+        return {}
+
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        """Build a binary log selection matrix from a one-hot encoded parent sequence.
+        """
+        replicated_value = self.single_value.expand_as(amino_acid_indices)
+        return F.logsigmoid(replicated_value)
 
     def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
         """Do the forward method without gradients from an amino acid string.
