@@ -282,9 +282,16 @@ class Burrito(ABC):
         l2_regularization_coeff=1e-6,
         verbose=False,
     ):
-        self.train_loader = DataLoader(
-            train_dataset, batch_size=batch_size, shuffle=True
-        )
+        """
+        Note that we allow train_dataset to be None, to support use cases where
+        we just want to do evaluation.
+        """
+        if train_dataset is None:
+            self.train_loader = None
+        else:
+            self.train_loader = DataLoader(
+                train_dataset, batch_size=batch_size, shuffle=True
+            )
         self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
         self.model = model
         self.learning_rate = learning_rate
@@ -371,6 +378,8 @@ class Burrito(ABC):
         return average_loss
 
     def train(self, epochs):
+        assert self.train_loader is not None, "No training data provided."
+
         train_losses = []
         val_losses = []
         best_val_loss = float("inf")

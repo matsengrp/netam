@@ -208,14 +208,6 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multipli
         subs_probs[:train_len],
         subs_probs[train_len:],
     )
-
-    train_dataset = DNSMDataset(
-        train_parents,
-        train_children,
-        train_rates,
-        train_subs_probs,
-        branch_length_multiplier=branch_length_multiplier,
-    )
     val_dataset = DNSMDataset(
         val_parents,
         val_children,
@@ -223,7 +215,16 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multipli
         val_subs_probs,
         branch_length_multiplier=branch_length_multiplier,
     )
-
+    if train_frac == 0.0:
+        return None, val_dataset
+   # else: 
+    train_dataset = DNSMDataset(
+        train_parents,
+        train_children,
+        train_rates,
+        train_subs_probs,
+        branch_length_multiplier=branch_length_multiplier,
+    )
     return train_dataset, val_dataset
 
 
@@ -235,9 +236,10 @@ class DNSMBurrito(framework.Burrito):
         self.wrapped_model = WrappedBinaryMutSel(self.model, weights_directory=None)
 
     def load_branch_lengths(self, in_csv_prefix):
-        self.train_loader.dataset.load_branch_lengths(
-            in_csv_prefix + ".train_branch_lengths.csv"
-        )
+        if self.train_loader is not None:
+            self.train_loader.dataset.load_branch_lengths(
+                in_csv_prefix + ".train_branch_lengths.csv"
+            )
         self.val_loader.dataset.load_branch_lengths(
             in_csv_prefix + ".val_branch_lengths.csv"
         )
@@ -323,7 +325,10 @@ class DNSMBurrito(framework.Burrito):
         # model to the device it was on before.
         device = next(self.model.parameters()).device
         self.model.to("cpu")
-        for dataset in [self.train_loader.dataset, self.val_loader.dataset]:
+        for loader in [self.train_loader, self.val_loader]:
+            if loader is None:
+                continue
+            dataset = loader.dataset
             assert dataset.all_rates.device.type == "cpu"
             dataset.branch_lengths = self.find_optimal_branch_lengths(
                 dataset.nt_parents,
