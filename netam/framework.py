@@ -122,9 +122,6 @@ class KmerSequenceEncoder:
 
 
 class PlaceholderEncoder:
-    def __init__(self):
-        pass
-
     @property
     def parameters(self):
         return {}

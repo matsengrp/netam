@@ -265,6 +265,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
 
         with torch.no_grad():
             model_out = self(aa_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
+            # TODO reconsider this as we think about changing the logsigmoid
             final_out = torch.exp(model_out)
 
         return final_out[: len(aa_str)]
@@ -274,6 +275,8 @@ class TransformerBinarySelectionModel(AbstractBinarySelectionModel):
     """A transformer-based model for binary selection.
 
     This is a model that takes in a batch of one-hot encoded sequences and outputs a binary selection matrix.
+
+    # TODO be more explicit that we are spitting out a log selection factor if that's indeed what we're doing.
 
     See forward() for details.
     """
@@ -363,4 +366,4 @@ class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         """Build a binary log selection matrix from a one-hot encoded parent sequence."""
         replicated_value = self.single_value.expand_as(amino_acid_indices)
-        return F.logsigmoid(replicated_value)
+        return replicated_value
