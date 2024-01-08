@@ -274,9 +274,10 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
 class TransformerBinarySelectionModel(AbstractBinarySelectionModel):
     """A transformer-based model for binary selection.
 
-    This is a model that takes in a batch of one-hot encoded sequences and outputs a binary selection matrix.
-
-    # TODO be more explicit that we are spitting out a log selection factor if that's indeed what we're doing.
+    This is a model that takes in a batch of one-hot encoded sequences and
+    outputs a vector that represents the log level of selection for each amino
+    acid site, which after exponentiating is a multiplier on the probability of
+    an amino-acid substitution at that site.
 
     See forward() for details.
     """
@@ -324,7 +325,7 @@ class TransformerBinarySelectionModel(AbstractBinarySelectionModel):
         self.linear.weight.data.uniform_(-initrange, initrange)
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        """Build a binary log selection matrix from a one-hot encoded parent sequence.
+        """Build a batch of binary log selection vectors from a one-hot encoded parent sequence.
 
         Parameters:
             amino_acid_indices: A tensor of shape (B, L) containing the indices of parent AA sequences.
@@ -349,6 +350,24 @@ class TransformerBinarySelectionModel(AbstractBinarySelectionModel):
         out = self.encoder(embedded_amino_acids, src_key_padding_mask=~mask)
         out = self.linear(out)
         out = F.logsigmoid(out)
+        return out.squeeze(-1)
+
+
+class TransformerBinarySelectionModelLinAct(TransformerBinarySelectionModel):
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        # Multiply by sqrt(d_model) to match the transformer paper.
+        embedded_amino_acids = self.amino_acid_embedding(
+            amino_acid_indices
+        ) * math.sqrt(self.d_model)
+        # Have to do the permutation because the positional encoding expects the
+        # sequence length to be the first dimension.
+        embedded_amino_acids = self.pos_encoder(
+            embedded_amino_acids.permute(1, 0, 2)
+        ).permute(1, 0, 2)
+
+        # To learn about src_key_padding_mask, see https://stackoverflow.com/q/62170439
+        out = self.encoder(embedded_amino_acids, src_key_padding_mask=~mask)
+        out = self.linear(out)
         return out.squeeze(-1)
 
 
