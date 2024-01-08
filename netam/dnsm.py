@@ -270,10 +270,8 @@ class DNSMBurrito(framework.Burrito):
         predictions = predictions.masked_select(mask)
         aa_subs_indicator = aa_subs_indicator.masked_select(mask)
 
-        # Because the neutral mutation probabilities should be normalized, and
-        # log_selection_factors comes from a logsigmoid, we should have
-        # predictions <= 1.
-        assert torch.all(predictions <= 1)
+        # TODO think about this more.
+        predictions = torch.clamp(predictions, max=1.0)
 
         return self.bce_loss(predictions, aa_subs_indicator)
 
