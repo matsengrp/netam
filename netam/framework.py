@@ -289,6 +289,9 @@ class Burrito(ABC):
             self.train_loader = DataLoader(
                 train_dataset, batch_size=batch_size, shuffle=True
             )
+            self.writer = SummaryWriter(log_dir="./_logs")
+            self.writer.add_text("model_name", model.__class__.__name__)
+            self.writer.add_text("model_hyperparameters", str(model.hyperparameters))
         self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
         self.model = model
         self.learning_rate = learning_rate
@@ -296,7 +299,6 @@ class Burrito(ABC):
         self.l2_regularization_coeff = l2_regularization_coeff
         self.verbose = verbose
         self.reset_optimization()
-        self.writer = SummaryWriter(log_dir="./_logs")
         self.bce_loss = nn.BCELoss()
         self.global_epoch = 0
 
