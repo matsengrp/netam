@@ -278,6 +278,7 @@ class Burrito(ABC):
         min_learning_rate=1e-4,
         l2_regularization_coeff=1e-6,
         verbose=False,
+        name="",
     ):
         """
         Note that we allow train_dataset to be None, to support use cases where
@@ -289,7 +290,7 @@ class Burrito(ABC):
             self.train_loader = DataLoader(
                 train_dataset, batch_size=batch_size, shuffle=True
             )
-            self.writer = SummaryWriter(log_dir="./_logs")
+            self.writer = SummaryWriter(log_dir=f"./_logs/{name}")
             self.writer.add_text("model_name", model.__class__.__name__)
             self.writer.add_text("model_hyperparameters", str(model.hyperparameters))
         self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
@@ -298,6 +299,7 @@ class Burrito(ABC):
         self.min_learning_rate = min_learning_rate
         self.l2_regularization_coeff = l2_regularization_coeff
         self.verbose = verbose
+        self.name = name
         self.reset_optimization()
         self.bce_loss = nn.BCELoss()
         self.global_epoch = 0
