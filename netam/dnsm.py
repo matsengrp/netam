@@ -21,7 +21,6 @@ torch.set_num_threads(1)
 import numpy as np
 import pandas as pd
 
-from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 from epam.torch_common import optimize_branch_length
@@ -349,6 +348,8 @@ class DNSMBurrito(framework.Burrito):
             loss_history_l.append(self.train(epochs))
             if cycle < cycle_count - 1:
                 self.optimize_branch_lengths()
+                self.writer.add_scalar('event/branch_length_optimization', 1, self.global_epoch)
+
         return pd.concat(loss_history_l, ignore_index=True)
 
     def full_train(self, epochs=100):

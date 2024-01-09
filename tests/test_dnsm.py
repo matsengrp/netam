@@ -40,8 +40,7 @@ def dnsm_burrito():
         min_learning_rate=0.0001,
         device="cpu",
     )
-    burrito.train(2)
-    burrito.optimize_branch_lengths()
+    burrito.joint_train(epochs=1, cycle_count=2)
     return burrito
 
 
