@@ -2,7 +2,7 @@ import pandas as pd
 import torch
 import pytest
 
-from netam.framework import load_crepe
+from netam.framework import crepe_exists, load_crepe
 from netam.common import aa_idx_tensor_of_str_ambig, MAX_AMBIG_AA_IDX
 from netam.models import TransformerBinarySelectionModel
 from netam.dnsm import DNSMBurrito, train_test_datasets_of_pcp_df
@@ -45,8 +45,10 @@ def dnsm_burrito():
 
 
 def test_crepe_roundtrip(dnsm_burrito):
-    dnsm_burrito.save_crepe("_ignore/dnsm")
-    crepe = load_crepe("_ignore/dnsm")
+    crepe_path = "_ignore/dnsm"
+    dnsm_burrito.save_crepe(crepe_path)
+    assert crepe_exists(crepe_path)
+    crepe = load_crepe(crepe_path)
     model = crepe.model
     assert isinstance(model, TransformerBinarySelectionModel)
     assert dnsm_burrito.model.hyperparameters == model.hyperparameters
