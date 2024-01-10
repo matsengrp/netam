@@ -343,6 +343,7 @@ class DNSMBurrito(framework.Burrito):
         loss_history_l = []
         loss_history_l.append(self.train(3))
         self.optimize_branch_lengths()
+        self.writer.add_scalar('event/branch_length_optimization', 1, self.global_epoch)
         for cycle in range(cycle_count):
             self.reset_optimization()
             loss_history_l.append(self.train(epochs))
