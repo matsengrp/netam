@@ -265,7 +265,6 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
 
         with torch.no_grad():
             model_out = self(aa_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
-            # TODO reconsider this as we think about changing the logsigmoid
             final_out = torch.exp(model_out)
 
         return final_out[: len(aa_str)]
