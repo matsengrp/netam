@@ -370,6 +370,12 @@ class TransformerBinarySelectionModelLinAct(TransformerBinarySelectionModel):
         return out.squeeze(-1)
 
 
+class TransformerBinarySelectionModelPlusOne(TransformerBinarySelectionModel):
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        # add 1 to the superclass forward method
+        return super().forward(amino_acid_indices, mask) + 1
+
+
 class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
     """A one parameter selection model as a baseline."""
 
