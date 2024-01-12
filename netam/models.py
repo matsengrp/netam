@@ -352,6 +352,24 @@ class TransformerBinarySelectionModel(AbstractBinarySelectionModel):
         return out.squeeze(-1)
 
 
+class TransformerBinarySelectionModelLinAct(TransformerBinarySelectionModel):
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        # Multiply by sqrt(d_model) to match the transformer paper.
+        embedded_amino_acids = self.amino_acid_embedding(
+            amino_acid_indices
+        ) * math.sqrt(self.d_model)
+        # Have to do the permutation because the positional encoding expects the
+        # sequence length to be the first dimension.
+        embedded_amino_acids = self.pos_encoder(
+            embedded_amino_acids.permute(1, 0, 2)
+        ).permute(1, 0, 2)
+
+        # To learn about src_key_padding_mask, see https://stackoverflow.com/q/62170439
+        out = self.encoder(embedded_amino_acids, src_key_padding_mask=~mask)
+        out = self.linear(out)
+        return out.squeeze(-1)
+
+
 class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
     """A one parameter selection model as a baseline."""
 
