@@ -15,6 +15,7 @@ def test_aa_idx_tensor_of_str_ambig():
     output = aa_idx_tensor_of_str_ambig(input_seq)
     assert torch.equal(output, expected_output)
 
+
 @pytest.fixture
 def pcp_df():
     df = load_and_convert_to_tensors(
