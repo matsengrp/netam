@@ -7,7 +7,7 @@ import torch
 import torch.optim as optim
 from torch import nn, Tensor
 
-SMALL_PROB = 1e-8
+SMALL_PROB = 1e-7
 BASES = ["A", "C", "G", "T"]
 AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
 AA_STR_SORTED_AMBIG = AA_STR_SORTED + "X"
