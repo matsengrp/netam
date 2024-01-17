@@ -272,7 +272,7 @@ class DNSMBurrito(framework.Burrito):
         if not (predictions >= 0.0).all():
             print(f"Found negative predictions: {predictions.min()}")
 
-        predictions = torch.clamp(predictions, min=0.0, max=1.0)
+        predictions = clamp_probability(predictions)
 
         return self.bce_loss(predictions, aa_subs_indicator)
 
