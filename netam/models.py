@@ -370,6 +370,15 @@ class TransformerBinarySelectionModelLinAct(TransformerBinarySelectionModel):
         return out.squeeze(-1)
 
 
+def wiggle(x):
+    return torch.where(x < 1, 0.3 * (x - 1), 0.3 * torch.log(x))
+
+
+class TransformerBinarySelectionModelWiggleAct(TransformerBinarySelectionModelLinAct):
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        return wiggle(super().forward(amino_acid_indices, mask))
+
+
 class TransformerBinarySelectionModelPlusOne(TransformerBinarySelectionModel):
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         # add 1 to the superclass forward method
