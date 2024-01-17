@@ -312,7 +312,7 @@ class Burrito(ABC):
             weight_decay=self.l2_regularization_coeff,
         )
         self.scheduler = ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.2, patience=4, verbose=self.verbose
+            self.optimizer, mode="min", factor=0.5, patience=10, verbose=self.verbose
         )
 
     def multi_train(self, epochs, max_tries=3):
