@@ -270,6 +270,7 @@ class DNSMBurrito(framework.Burrito):
         aa_subs_indicator = aa_subs_indicator.masked_select(mask)
 
         predictions = torch.clamp(predictions, max=1.0)
+        assert (predictions >= 0.0).all()
 
         return self.bce_loss(predictions, aa_subs_indicator)
 
