@@ -269,10 +269,10 @@ class DNSMBurrito(framework.Burrito):
         predictions = predictions.masked_select(mask)
         aa_subs_indicator = aa_subs_indicator.masked_select(mask)
 
-        if not ((predictions >= 0.0).all() and (predictions <= 1.0).all()):
-            print(f"Predictions out of range: {predictions.min()}, {predictions.max()}")
-
         predictions = clamp_probability(predictions)
+
+        if not ((predictions >= 0.0).all() and (predictions <= 1.0).all()):
+            raise ValueError(f"Predictions out of range: {predictions.min()}, {predictions.max()}")
 
         return self.bce_loss(predictions, aa_subs_indicator)
 
