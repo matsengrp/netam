@@ -371,7 +371,12 @@ class TransformerBinarySelectionModelLinAct(TransformerBinarySelectionModel):
 
 
 def wiggle(x):
-    return torch.where(x < 1, 0.3 * (x - 1), 0.3 * torch.log(x))
+    output = torch.where(x < 1, 0.3 * (x - 1), 0.3 * torch.log(x))
+    if torch.isnan(output).any():
+        print(x)
+        nan_index = torch.where(torch.isnan(output))[0][0]
+        raise ValueError(f"NaN in output for input: {x[nan_index]}")
+    return output
 
 
 class TransformerBinarySelectionModelWiggleAct(TransformerBinarySelectionModelLinAct):
