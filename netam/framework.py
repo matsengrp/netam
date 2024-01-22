@@ -363,27 +363,27 @@ class Burrito(ABC):
 
                     max_grad_retries = 5
 
-                for grad_retry_count in range(max_grad_retries):
-                    self.optimizer.zero_grad()
-                    loss.backward()
+                    for grad_retry_count in range(max_grad_retries):
+                        self.optimizer.zero_grad()
+                        loss.backward()
 
-                    nan_in_gradients = False
-                    for name, param in self.model.named_parameters():
-                        if torch.isnan(param).any():
-                            raise ValueError(f"NaN in weights: {name}")
-                        if param.grad is not None and torch.isnan(param.grad).any():
-                            nan_in_gradients = True
-                            print(f"NaN in gradients: {name}")
+                        nan_in_gradients = False
+                        for name, param in self.model.named_parameters():
+                            if torch.isnan(param).any():
+                                raise ValueError(f"NaN in weights: {name}")
+                            if param.grad is not None and torch.isnan(param.grad).any():
+                                nan_in_gradients = True
+                                print(f"NaN in gradients: {name}")
 
-                    if not nan_in_gradients:
-                        self.optimizer.step()
-                        break
-                    else:
-                        if grad_retry_count < max_grad_retries - 1:
-                            printable_loss = loss.item()
-                            print(f"Retrying gradient calculation ({grad_retry_count + 1}/{max_grad_retries}) with loss {printable_loss}")
+                        if not nan_in_gradients:
+                            self.optimizer.step()
+                            break
                         else:
-                            raise ValueError(f"Exceeded maximum gradient retries!")
+                            if grad_retry_count < max_grad_retries - 1:
+                                printable_loss = loss.item()
+                                print(f"Retrying gradient calculation ({grad_retry_count + 1}/{max_grad_retries}) with loss {printable_loss}")
+                            else:
+                                raise ValueError(f"Exceeded maximum gradient retries!")
 
 
                 # We support both dicts and lists of tensors as the batch.
