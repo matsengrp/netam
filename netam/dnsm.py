@@ -154,7 +154,6 @@ class DNSMDataset(Dataset):
                 normed_subs_probs.reshape(-1, 3, 4),
             )
 
-            # TODO Assert that neutral_aa_mut_prob is finite and positive everywhere.
             if not torch.isfinite(neutral_aa_mut_prob).all():
                 print(f"Found a non-finite neutral_aa_mut_prob")
                 print(f"nt_parent: {nt_parent}")
@@ -162,7 +161,9 @@ class DNSMDataset(Dataset):
                 print(f"rates: {rates}")
                 print(f"subs_probs: {subs_probs}")
                 print(f"branch_length: {branch_length}")
-                raise ValueError(f"neutral_aa_mut_prob is not finite: {neutral_aa_mut_prob}")
+                raise ValueError(
+                    f"neutral_aa_mut_prob is not finite: {neutral_aa_mut_prob}"
+                )
 
             # Ensure that all values are positive before taking the log later
             neutral_aa_mut_prob = clamp_probability(neutral_aa_mut_prob)
@@ -226,7 +227,7 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multipli
     )
     if train_frac == 0.0:
         return None, val_dataset
-   # else: 
+    # else:
     train_dataset = DNSMDataset(
         train_parents,
         train_children,
@@ -259,9 +260,10 @@ class DNSMBurrito(framework.Burrito):
         mask = batch["mask"].to(self.device)
         log_neutral_aa_mut_probs = batch["log_neutral_aa_mut_probs"].to(self.device)
 
-        # TODO check if log_neutral_aa_mut_probs isn't finite anywhere
         if not torch.isfinite(log_neutral_aa_mut_probs[mask]).all():
-            raise ValueError(f"log_neutral_aa_mut_probs has non-finite values at relevant positions: {log_neutral_aa_mut_probs[mask]}")
+            raise ValueError(
+                f"log_neutral_aa_mut_probs has non-finite values at relevant positions: {log_neutral_aa_mut_probs[mask]}"
+            )
 
         log_selection_factors = self.model(aa_parents_idxs, mask)
         return self.complete_loss_fn(
@@ -287,7 +289,9 @@ class DNSMBurrito(framework.Burrito):
         predictions = clamp_probability(predictions)
 
         if not ((predictions >= 0.0).all() and (predictions <= 1.0).all()):
-            raise ValueError(f"Predictions out of range: {predictions.min()}, {predictions.max()}")
+            raise ValueError(
+                f"Predictions out of range: {predictions.min()}, {predictions.max()}"
+            )
 
         return self.bce_loss(predictions, aa_subs_indicator)
 
@@ -360,13 +364,15 @@ class DNSMBurrito(framework.Burrito):
         loss_history_l = []
         loss_history_l.append(self.train(3))
         self.optimize_branch_lengths()
-        self.writer.add_scalar('event/branch_length_optimization', 1, self.global_epoch)
+        self.writer.add_scalar("event/branch_length_optimization", 1, self.global_epoch)
         for cycle in range(cycle_count):
             self.reset_optimization()
             loss_history_l.append(self.train(epochs))
             if cycle < cycle_count - 1:
                 self.optimize_branch_lengths()
-                self.writer.add_scalar('event/branch_length_optimization', 1, self.global_epoch)
+                self.writer.add_scalar(
+                    "event/branch_length_optimization", 1, self.global_epoch
+                )
 
         return pd.concat(loss_history_l, ignore_index=True)
 

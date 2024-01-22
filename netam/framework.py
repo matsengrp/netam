@@ -359,7 +359,6 @@ class Burrito(ABC):
                 if train_mode:
                     max_grad_retries = 5
                     for grad_retry_count in range(max_grad_retries):
-
                         if hasattr(self.model, "regularization_loss"):
                             reg_loss = self.model.regularization_loss()
                             loss += reg_loss
@@ -373,7 +372,6 @@ class Burrito(ABC):
                                 raise ValueError(f"NaN in weights: {name}")
                             if param.grad is not None and torch.isnan(param.grad).any():
                                 nan_in_gradients = True
-                                print(f"NaN in gradients: {name}")
 
                         if not nan_in_gradients:
                             self.optimizer.step()
@@ -381,11 +379,12 @@ class Burrito(ABC):
                         else:
                             if grad_retry_count < max_grad_retries - 1:
                                 printable_loss = loss.item()
-                                print(f"Retrying gradient calculation ({grad_retry_count + 1}/{max_grad_retries}) with loss {printable_loss}")
+                                print(
+                                    f"Retrying gradient calculation ({grad_retry_count + 1}/{max_grad_retries}) with loss {printable_loss}"
+                                )
                                 loss = self.loss_of_batch(batch)
                             else:
                                 raise ValueError(f"Exceeded maximum gradient retries!")
-
 
                 # We support both dicts and lists of tensors as the batch.
                 first_value_of_batch = (
@@ -456,7 +455,7 @@ class Burrito(ABC):
 
         # Make sure that saving the best model state worked.
         if (
-            best_val_loss != float("inf") # We actually have a training step.
+            best_val_loss != float("inf")  # We actually have a training step.
             and abs(best_val_loss - self.evaluate()) > 1e-6
         ):
             print(
