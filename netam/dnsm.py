@@ -154,6 +154,16 @@ class DNSMDataset(Dataset):
                 normed_subs_probs.reshape(-1, 3, 4),
             )
 
+            # TODO Assert that neutral_aa_mut_prob is finite and positive everywhere.
+            if not torch.isfinite(neutral_aa_mut_prob).all():
+                print(f"Found a non-finite neutral_aa_mut_prob")
+                print(f"nt_parent: {nt_parent}")
+                print(f"mask: {mask}")
+                print(f"rates: {rates}")
+                print(f"subs_probs: {subs_probs}")
+                print(f"branch_length: {branch_length}")
+                raise ValueError(f"neutral_aa_mut_prob is not finite: {neutral_aa_mut_prob}")
+
             # Ensure that all values are positive before taking the log later
             neutral_aa_mut_prob = clamp_probability(neutral_aa_mut_prob)
 
@@ -248,6 +258,11 @@ class DNSMBurrito(framework.Burrito):
         aa_subs_indicator = batch["subs_indicator"].to(self.device)
         mask = batch["mask"].to(self.device)
         log_neutral_aa_mut_probs = batch["log_neutral_aa_mut_probs"].to(self.device)
+
+        # TODO check if log_neutral_aa_mut_probs isn't finite anywhere
+        if not torch.isfinite(log_neutral_aa_mut_probs).all():
+            raise ValueError(f"log_netural_aa_mut_probs is not finite: {log_neutral_aa_mut_probs}")
+
         log_selection_factors = self.model(aa_parents_idxs, mask)
         return self.complete_loss_fn(
             log_neutral_aa_mut_probs,

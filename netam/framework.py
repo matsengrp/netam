@@ -360,8 +360,17 @@ class Burrito(ABC):
                     if hasattr(self.model, "regularization_loss"):
                         reg_loss = self.model.regularization_loss()
                         loss += reg_loss
+
                     self.optimizer.zero_grad()
                     loss.backward()
+
+                    # TODO checking that the model parameters and gradients are finite.
+                    for name, param in model.named_parameters():
+                        if torch.isnan(param).any():
+                            print(f"NaN in weights: {name}")
+                        if torch.isnan(param.grad).any():
+                            print(f"NaN in gradients: {name}")
+
                     self.optimizer.step()
 
                 # We support both dicts and lists of tensors as the batch.
