@@ -155,7 +155,7 @@ class DNSMDataset(Dataset):
             )
 
             # TODO Assert that neutral_aa_mut_prob is finite and positive everywhere.
-            if not torch.isfinite(neutral_aa_mut_prob[mask]).all():
+            if not torch.isfinite(neutral_aa_mut_prob).all():
                 print(f"Found a non-finite neutral_aa_mut_prob")
                 print(f"nt_parent: {nt_parent}")
                 print(f"mask: {mask}")
