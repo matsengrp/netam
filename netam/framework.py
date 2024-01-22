@@ -365,11 +365,12 @@ class Burrito(ABC):
                     loss.backward()
 
                     # TODO checking that the model parameters and gradients are finite.
-                    for name, param in model.named_parameters():
+                    for name, param in self.model.named_parameters():
                         if torch.isnan(param).any():
                             print(f"NaN in weights: {name}")
-                        if torch.isnan(param.grad).any():
-                            print(f"NaN in gradients: {name}")
+                        if param.grad is not None:
+                            if torch.isnan(param.grad).any():
+                                print(f"NaN in gradients: {name}")
 
                     self.optimizer.step()
 
