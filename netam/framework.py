@@ -357,13 +357,13 @@ class Burrito(ABC):
                 loss = self.loss_of_batch(batch)
 
                 if train_mode:
-                    if hasattr(self.model, "regularization_loss"):
-                        reg_loss = self.model.regularization_loss()
-                        loss += reg_loss
-
                     max_grad_retries = 5
-
                     for grad_retry_count in range(max_grad_retries):
+
+                        if hasattr(self.model, "regularization_loss"):
+                            reg_loss = self.model.regularization_loss()
+                            loss += reg_loss
+
                         self.optimizer.zero_grad()
                         loss.backward()
 
@@ -382,6 +382,7 @@ class Burrito(ABC):
                             if grad_retry_count < max_grad_retries - 1:
                                 printable_loss = loss.item()
                                 print(f"Retrying gradient calculation ({grad_retry_count + 1}/{max_grad_retries}) with loss {printable_loss}")
+                                loss = self.loss_of_batch(batch)
                             else:
                                 raise ValueError(f"Exceeded maximum gradient retries!")
 
