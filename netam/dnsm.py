@@ -357,22 +357,25 @@ class DNSMBurrito(framework.Burrito):
             )
         self.model.to(device)
 
+    def mark_branch_lengths_optimized(self, cycle):
+        self.writer.add_scalar("branch length optimization", cycle, self.global_epoch)
+
     def joint_train(self, epochs=20, cycle_count=2):
         """
         Do joint optimization of model and branch lengths.
         """
         loss_history_l = []
+        self.mark_branch_lengths_optimized(0)
         loss_history_l.append(self.train(3))
         self.optimize_branch_lengths()
-        self.writer.add_scalar("event/branch_length_optimization", 1, self.global_epoch)
+        self.mark_branch_lengths_optimized(0)
         for cycle in range(cycle_count):
+            self.mark_branch_lengths_optimized(cycle + 1)
             self.reset_optimization()
             loss_history_l.append(self.train(epochs))
             if cycle < cycle_count - 1:
                 self.optimize_branch_lengths()
-                self.writer.add_scalar(
-                    "event/branch_length_optimization", 1, self.global_epoch
-                )
+            self.mark_branch_lengths_optimized(cycle + 1)
 
         return pd.concat(loss_history_l, ignore_index=True)
 
