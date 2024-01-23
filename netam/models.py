@@ -270,7 +270,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         return final_out[: len(aa_str)]
 
 
-class TransformerBinarySelectionModel(AbstractBinarySelectionModel):
+class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
     """A transformer-based model for binary selection.
 
     This is a model that takes in a batch of one-hot encoded sequences and
@@ -324,36 +324,6 @@ class TransformerBinarySelectionModel(AbstractBinarySelectionModel):
         self.linear.weight.data.uniform_(-initrange, initrange)
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        """Build a batch of binary log selection vectors from a one-hot encoded parent sequence.
-
-        Parameters:
-            amino_acid_indices: A tensor of shape (B, L) containing the indices of parent AA sequences.
-            mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.
-
-        Returns:
-            A tensor of shape (B, L) representing the log level of selection
-            for each amino acid site.
-        """
-
-        # Multiply by sqrt(d_model) to match the transformer paper.
-        embedded_amino_acids = self.amino_acid_embedding(
-            amino_acid_indices
-        ) * math.sqrt(self.d_model)
-        # Have to do the permutation because the positional encoding expects the
-        # sequence length to be the first dimension.
-        embedded_amino_acids = self.pos_encoder(
-            embedded_amino_acids.permute(1, 0, 2)
-        ).permute(1, 0, 2)
-
-        # To learn about src_key_padding_mask, see https://stackoverflow.com/q/62170439
-        out = self.encoder(embedded_amino_acids, src_key_padding_mask=~mask)
-        out = self.linear(out)
-        out = F.logsigmoid(out)
-        return out.squeeze(-1)
-
-
-class TransformerBinarySelectionModelLinAct(TransformerBinarySelectionModel):
-    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         # Multiply by sqrt(d_model) to match the transformer paper.
         embedded_amino_acids = self.amino_acid_embedding(
             amino_acid_indices
@@ -370,18 +340,29 @@ class TransformerBinarySelectionModelLinAct(TransformerBinarySelectionModel):
         return out.squeeze(-1)
 
 
-def wiggle(x):
-    output = torch.where(x < 1, 0.3 * (x - 1), 0.3 * torch.log(x))
-    if torch.isnan(output).any():
-        print(x)
-        nan_index = torch.where(torch.isnan(output))[0][0]
-        raise ValueError(f"NaN in output for input: {x[nan_index]}")
-    return output
+def wiggle(x, beta):
+    """
+    A function that when we exp it gives us a function that slopes to 0 at -inf
+    and grows sub-linearly as x increases.
+   
+    See https://github.com/matsengrp/netam/pull/5#issuecomment-1906665475 for a
+    plot.
+    """
+    return beta * torch.where(x < 1, x - 1, torch.log(x))
 
 
 class TransformerBinarySelectionModelWiggleAct(TransformerBinarySelectionModelLinAct):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Initialize the logit of beta to logit(0.3)
+        init_beta = 0.3
+        init_logit_beta = math.log(init_beta / (1 - init_beta))
+        self.logit_beta = nn.Parameter(torch.tensor([init_logit_beta], dtype=torch.float32))
+
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        return wiggle(super().forward(amino_acid_indices, mask))
+        # Apply sigmoid to transform logit_beta back to the range (0, 1)
+        beta = torch.sigmoid(self.logit_beta)
+        return wiggle(super().forward(amino_acid_indices, mask), beta)
 
 
 class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
