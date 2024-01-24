@@ -352,6 +352,19 @@ def wiggle(x, beta):
 
 
 class TransformerBinarySelectionModelWiggleAct(TransformerBinarySelectionModelLinAct):
+    """
+    Here the beta parameter is fixed at 0.3. 
+    """
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        return wiggle(super().forward(amino_acid_indices, mask), 0.3)
+
+
+class TransformerBinarySelectionModelTrainableWiggleAct(TransformerBinarySelectionModelLinAct):
+    """
+    This version of the model has a trainable parameter that controls the
+    beta in the wiggle function. It didn't work any better so I'm not using it
+    for now.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Initialize the logit of beta to logit(0.3)
