@@ -250,12 +250,13 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
     an amino-acid substitution at that site.
 
     Various submodels are implemented as subclasses of this class:
-    
+
     * LinAct: No activation function after the transformer.
     * WiggleAct: Activation that slopes to 0 at -inf and grows sub-linearly as x increases.
 
     See forward() for details.
     """
+
     def __init__(self):
         super().__init__()
 
@@ -328,19 +329,19 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
         self.linear.weight.data.uniform_(-initrange, initrange)
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        """Build a binary log selection matrix from a one-hot encoded parent sequence.	
+        """Build a binary log selection matrix from a one-hot encoded parent sequence.
 
-        Because we're predicting log of the selection factor, we don't use an	
-        activation function after the transformer.	
+        Because we're predicting log of the selection factor, we don't use an
+        activation function after the transformer.
 
-        Parameters:	
-            amino_acid_indices: A tensor of shape (B, L) containing the indices of parent AA sequences.	
-            mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.	
+        Parameters:
+            amino_acid_indices: A tensor of shape (B, L) containing the indices of parent AA sequences.
+            mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.
 
-        Returns:	
-            A tensor of shape (B, L, 1) representing the log level of selection	
-            for each amino acid site.	
-        """	
+        Returns:
+            A tensor of shape (B, L, 1) representing the log level of selection
+            for each amino acid site.
+        """
         # Multiply by sqrt(d_model) to match the transformer paper.
         embedded_amino_acids = self.amino_acid_embedding(
             amino_acid_indices
