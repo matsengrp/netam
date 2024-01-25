@@ -378,9 +378,8 @@ class Burrito(ABC):
                             break
                         else:
                             if grad_retry_count < max_grad_retries - 1:
-                                printable_loss = loss.item()
                                 print(
-                                    f"Retrying gradient calculation ({grad_retry_count + 1}/{max_grad_retries}) with loss {printable_loss}"
+                                    f"Retrying gradient calculation ({grad_retry_count + 1}/{max_grad_retries}) with loss {loss.item()}"
                                 )
                                 loss = self.loss_of_batch(batch)
                             else:
