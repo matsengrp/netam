@@ -329,11 +329,14 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         """Build a binary log selection matrix from a one-hot encoded parent sequence.	
+
         Because we're predicting log of the selection factor, we don't use an	
         activation function after the transformer.	
+
         Parameters:	
             amino_acid_indices: A tensor of shape (B, L) containing the indices of parent AA sequences.	
             mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.	
+
         Returns:	
             A tensor of shape (B, L, 1) representing the log level of selection	
             for each amino acid site.	
