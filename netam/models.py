@@ -344,7 +344,7 @@ def wiggle(x, beta):
     """
     A function that when we exp it gives us a function that slopes to 0 at -inf
     and grows sub-linearly as x increases.
-   
+
     See https://github.com/matsengrp/netam/pull/5#issuecomment-1906665475 for a
     plot.
     """
@@ -353,24 +353,30 @@ def wiggle(x, beta):
 
 class TransformerBinarySelectionModelWiggleAct(TransformerBinarySelectionModelLinAct):
     """
-    Here the beta parameter is fixed at 0.3. 
+    Here the beta parameter is fixed at 0.3.
     """
+
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         return wiggle(super().forward(amino_acid_indices, mask), 0.3)
 
 
-class TransformerBinarySelectionModelTrainableWiggleAct(TransformerBinarySelectionModelLinAct):
+class TransformerBinarySelectionModelTrainableWiggleAct(
+    TransformerBinarySelectionModelLinAct
+):
     """
     This version of the model has a trainable parameter that controls the
     beta in the wiggle function. It didn't work any better so I'm not using it
     for now.
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Initialize the logit of beta to logit(0.3)
         init_beta = 0.3
         init_logit_beta = math.log(init_beta / (1 - init_beta))
-        self.logit_beta = nn.Parameter(torch.tensor([init_logit_beta], dtype=torch.float32))
+        self.logit_beta = nn.Parameter(
+            torch.tensor([init_logit_beta], dtype=torch.float32)
+        )
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         # Apply sigmoid to transform logit_beta back to the range (0, 1)
