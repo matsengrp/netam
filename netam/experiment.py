@@ -82,6 +82,12 @@ class Experiment:
             ),
         }
 
+        # TODO decide what to do with this long-term
+        model_instances_3[f"{prename}_cnn_lrg_ps"] = models.PersiteWrapper(
+            model_instances_3[f"{prename}_cnn_lrg"], site_count=self.site_count
+        )
+        model_instances_3[f"{prename}_cnn_lrg_ps"].kmer_length = 3
+
         model_instances_5 = {
             f"{prename}_fivemer": models.FivemerModel(),
             f"{prename}_shmoof": models.SHMoofModel(
@@ -261,7 +267,9 @@ def plot_loss_difference(expt_df, baseline_model_name, scale_factor=1e4):
         axes[i, 0].axvline(0, color="black", linewidth=1)  # Add vertical line at zero
 
         # Scale x-axis and format tick labels
-        axes[i, 0].xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'{x * scale_factor:.1f}'))
+        axes[i, 0].xaxis.set_major_formatter(
+            mticker.FuncFormatter(lambda x, _: f"{x * scale_factor:.1f}")
+        )
         axes[i, 0].set_xlabel(f"Loss Difference (x 1e{int(np.log10(scale_factor))})")
 
     plt.tight_layout()

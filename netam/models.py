@@ -38,6 +38,8 @@ class ModelBase(nn.Module):
                             nn.init.constant_(sublayer.bias, 0)
             elif isinstance(layer, nn.Dropout):
                 pass
+            elif hasattr(layer, "reinitialize_weights"):
+                layer.reinitialize_weights()
             else:
                 raise ValueError(f"Unrecognized layer type: {type(layer)}")
 
@@ -210,6 +212,24 @@ class CNN1merModel(CNNModel):
         self.kmer_embedding.weight = nn.Parameter(identity_matrix, requires_grad=False)
 
 
+class WrapperHyperparameters:
+    def __init__(self, base_model_hyperparameters, site_count):
+        self.base_model_hyperparameters = base_model_hyperparameters
+        self.site_count = site_count
+
+    def __getitem__(self, key):
+        if key in self.base_model_hyperparameters:
+            return self.base_model_hyperparameters[key]
+        elif hasattr(self, key):
+            return getattr(self, key)
+        else:
+            raise KeyError(f"Key '{key}' not found in hyperparameters.")
+
+    def __str__(self):
+        hyperparameters_dict = {key: getattr(self, key) for key in self.__dict__}
+        return str(hyperparameters_dict)
+
+
 class PersiteWrapper(ModelBase):
     """
     This wraps another model, but adds a per-site rate component.
@@ -220,6 +240,7 @@ class PersiteWrapper(ModelBase):
         self.base_model = base_model
         self.site_count = site_count
         self.log_site_rates = nn.Embedding(self.site_count, 1)
+        self._hyperparameters = WrapperHyperparameters(self.base_model.hyperparameters, self.site_count)
 
     def forward(self, encoded_parents, masks):
         base_model_rates = self.base_model(encoded_parents, masks)
@@ -231,10 +252,7 @@ class PersiteWrapper(ModelBase):
 
     @property
     def hyperparameters(self):
-        return {
-            "base_model_hyperparameters": self.base_model.hyperparameters,
-            "site_count": self.site_count,
-        }
+        return self._hyperparameters
 
     @property
     def site_rates(self):
