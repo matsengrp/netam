@@ -9,7 +9,7 @@ from torch import nn, Tensor
 
 SMALL_PROB = 1e-6
 BASES = ["A", "C", "G", "T"]
-BASES_AND_N = ["A", "C", "G", "T", "N"]
+BASES_AND_N_TO_INDEX = {"A": 0, "C": 1, "G": 2, "T": 3, "N": 4}
 AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
 AA_STR_SORTED_AMBIG = AA_STR_SORTED + "X"
 MAX_AMBIG_AA_IDX = len(AA_STR_SORTED_AMBIG) - 1

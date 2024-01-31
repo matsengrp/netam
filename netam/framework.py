@@ -14,7 +14,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from tensorboardX import SummaryWriter
 
-from netam.common import generate_kmers, kmer_to_index_of, mask_tensor_of
+from netam.common import generate_kmers, kmer_to_index_of, mask_tensor_of, BASES_AND_N_TO_INDEX
 from netam import models
 
 
@@ -72,17 +72,34 @@ def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
     return train_df, val_df
 
 
-def create_mutation_indicator(parent, child, site_count):
+def create_mutation_and_base_indicator(parent, child, site_count):
+    """
+    Note that we use -1 as a placeholder for non-mutated bases in the
+    new_base_idxs tensor. This ensures that lack of masking will lead
+    to an error.
+    """
     assert len(parent) == len(child), f"{parent} and {child} are not the same length"
-    mutation_indicator = [
-        1 if parent[i] != child[i] else 0 for i in range(min(len(parent), site_count))
-    ]
 
-    # Pad the mutation indicator if necessary
+    mutation_indicator = []
+    new_base_idxs = []
+
+    for i in range(min(len(parent), site_count)):
+        if parent[i] != child[i]:
+            mutation_indicator.append(1)
+            new_base_idxs.append(BASES_AND_N_TO_INDEX[child[i]])
+        else:
+            mutation_indicator.append(0)
+            new_base_idxs.append(-1)
+
+    # Pad the lists if necessary
     if len(mutation_indicator) < site_count:
-        mutation_indicator += [0] * (site_count - len(mutation_indicator))
+        padding_length = site_count - len(mutation_indicator)
+        mutation_indicator += [0] * padding_length
+        new_base_idxs += [-1] * padding_length
 
-    return torch.tensor(mutation_indicator, dtype=torch.bool)
+    return (torch.tensor(mutation_indicator, dtype=torch.bool),
+            torch.tensor(new_base_idxs, dtype=torch.int8))
+
 
 
 class KmerSequenceEncoder:
