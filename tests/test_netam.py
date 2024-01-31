@@ -5,7 +5,7 @@ import pytest
 import torch
 
 import netam.framework as framework
-from netam.common import BASES
+from netam.common import BIG
 from netam.framework import SHMoofDataset, SHMBurrito
 from netam.models import SHMoofModel
 from netam.rsmodels import RSCNNModel, RSSHMBurrito
@@ -36,7 +36,7 @@ def tiny_burrito(tiny_dataset, tiny_val_dataset, tiny_model):
 
 
 def test_make_dataset(tiny_dataset):
-    encoded_parent, mask, mutation_indicator, new_base_idxs = tiny_dataset[0]
+    encoded_parent, mask, mutation_indicator, new_base_idxs, wt_base_multiplier = tiny_dataset[0]
     assert (mask == torch.tensor([1, 1, 1, 1, 1, 0], dtype=torch.bool)).all()
     # First kmer is NAT due to padding, but our encoding defaults this to "N".
     assert encoded_parent[0].item() == tiny_dataset.encoder.kmer_to_index["N"]
@@ -46,6 +46,9 @@ def test_make_dataset(tiny_dataset):
     assert (
         new_base_idxs == torch.tensor([-1, 1, -1, -1, -1, -1], dtype=torch.int64)
     ).all()
+    correct_wt_base_multiplier = torch.full((6, 4), 1.0)
+    correct_wt_base_multiplier[1, 3] = -BIG
+    assert (wt_base_multiplier == correct_wt_base_multiplier).all()
 
 
 def test_run_model_forward(tiny_dataset, tiny_model):
@@ -71,10 +74,6 @@ def test_crepe_roundtrip(tiny_burrito):
 @pytest.fixture
 def tiny_rsmodel():
     return RSCNNModel(kmer_length=3, embedding_dim=2, filter_count=2, kernel_size=3)
-
-
-def test_rsmodel_forward(tiny_rsmodel, tiny_dataset):
-    tiny_rsmodel.forward(tiny_dataset.encoded_parents, tiny_dataset.masks)
 
 
 @pytest.fixture

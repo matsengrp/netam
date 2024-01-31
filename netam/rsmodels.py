@@ -32,17 +32,8 @@ class RSCNNModel(KmerModel):
         # Substitution probability linear layer
         self.s_linear = nn.Linear(in_features=filter_count, out_features=4)
 
-        self.central_base_mapping = torch.tensor(
-            [BASES_AND_N_TO_INDEX[kmer[len(kmer) // 2]] for kmer in self.all_kmers],
-            dtype=torch.int64,
-        )
 
-    def to(self, device):
-        super().to(device)
-        self.central_base_mapping = self.central_base_mapping.to(device)
-        return self
-
-    def forward(self, encoded_parents, masks):
+    def forward(self, encoded_parents, masks, wt_base_multiplier):
         kmer_embeds = self.kmer_embedding(encoded_parents)
         kmer_embeds = kmer_embeds.permute(0, 2, 1)  # Transpose for Conv1D
         conv_out = F.relu(self.conv(kmer_embeds))
@@ -53,16 +44,7 @@ class RSCNNModel(KmerModel):
 
         log_rates = self.r_linear(conv_out).squeeze(-1)
         csp_raw = self.s_linear(conv_out)
-
-        # Use the kmer indices to get the central base indices
-        central_bases = self.central_base_mapping[encoded_parents]
-
-        batch_size, seq_length, _ = csp_raw.size()
-        for batch in range(batch_size):
-            for i in range(seq_length):
-                base_idx = central_bases[batch, i]
-                if base_idx < 4:  # Skip if the central base is N
-                    csp_raw[batch, i, base_idx] = -float("inf")
+        csp_raw *= wt_base_multiplier
 
         csp = F.softmax(csp_raw, dim=-1) * masks.unsqueeze(-1)
 
@@ -77,8 +59,8 @@ class RSSHMBurrito(SHMBurrito):
 
     def loss_of_batch(self, batch):
         # TODO consider a weighted sum of losses, see README
-        encoded_parents, masks, mutation_indicators, new_base_idxs = batch
-        rates, csp = self.model(encoded_parents, masks)
+        encoded_parents, masks, mutation_indicators, new_base_idxs, wt_base_multiplier = batch
+        rates, csp = self.model(encoded_parents, masks, wt_base_multiplier)
 
         # Existing mutation rate loss calculation
         mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
