@@ -159,7 +159,7 @@ class SHMoofDataset(Dataset):
         return len(self.encoded_parents)
 
     def __getitem__(self, idx):
-        return self.encoded_parents[idx], self.masks[idx], self.mutation_indicators[idx]
+        return self.encoded_parents[idx], self.masks[idx], self.mutation_indicators[idx], self.new_base_idxs[idx]
 
     def __repr__(self):
         return f"{self.__class__.__name__}(Size: {len(self)}) on {self.encoded_parents.device}"
@@ -168,6 +168,7 @@ class SHMoofDataset(Dataset):
         self.encoded_parents = self.encoded_parents.to(device)
         self.masks = self.masks.to(device)
         self.mutation_indicators = self.mutation_indicators.to(device)
+        self.new_base_idxs = self.new_base_idxs.to(device)
 
     def encode_pcps(self, dataframe):
         encoded_parents = []
@@ -530,7 +531,7 @@ class SHMBurrito(Burrito):
         )
 
     def loss_of_batch(self, batch):
-        encoded_parents, masks, mutation_indicators = batch
+        encoded_parents, masks, mutation_indicators, new_base_idxs = batch
         rates = self.model(encoded_parents, masks)
         mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
             dim=1, keepdim=True
