@@ -8,6 +8,7 @@ import netam.framework as framework
 from netam.common import BASES
 from netam.framework import SHMoofDataset, SHMBurrito
 from netam.models import SHMoofModel
+from netam.rsmodels import RSCNNModel
 
 
 @pytest.fixture
@@ -62,3 +63,12 @@ def test_crepe_roundtrip(tiny_burrito):
     assert torch.isclose(crepe.model.site_rates, tiny_burrito.model.site_rates).all()
     ## Assert that crepe.model is in eval mode
     assert not crepe.model.training
+
+
+@pytest.fixture
+def tiny_rsmodel():
+    return RSCNNModel(kmer_length=3, embedding_dim=2, filter_count=2, kernel_size=3)
+
+
+def test_rsmodel_forward(tiny_rsmodel, tiny_dataset):
+    tiny_rsmodel.forward(tiny_dataset.encoded_parents, tiny_dataset.masks)
