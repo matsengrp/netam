@@ -271,6 +271,7 @@ def plot_loss_difference(expt_df, baseline_model_name, scale_factor=1e4):
             mticker.FuncFormatter(lambda x, _: f"{x * scale_factor:.1f}")
         )
         axes[i, 0].set_xlabel(f"Loss Difference (x 1e{int(np.log10(scale_factor))})")
+        axes[i, 0].set_ylabel("")
 
     plt.tight_layout()
     return fig
