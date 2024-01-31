@@ -152,6 +152,7 @@ class SHMoofDataset(Dataset):
             self.encoded_parents,
             self.masks,
             self.mutation_indicators,
+            self.new_base_idxs,
         ) = self.encode_pcps(dataframe)
 
     def __len__(self):
@@ -172,21 +173,24 @@ class SHMoofDataset(Dataset):
         encoded_parents = []
         masks = []
         mutation_vectors = []
+        new_base_idx_vectors = []
 
         for _, row in dataframe.iterrows():
             encoded_parent, mask = self.encoder.encode_sequence(row["parent"])
-            mutation_indicator = create_mutation_indicator(
+            mutation_indicator, new_base_idxs = create_mutation_and_base_indicator(
                 row["parent"], row["child"], self.encoder.site_count
             )
 
             encoded_parents.append(encoded_parent)
             masks.append(mask)
             mutation_vectors.append(mutation_indicator)
+            new_base_idx_vectors.append(new_base_idxs)
 
         return (
             torch.stack(encoded_parents),
             torch.stack(masks),
             torch.stack(mutation_vectors),
+            torch.stack(new_base_idx_vectors),
         )
 
 

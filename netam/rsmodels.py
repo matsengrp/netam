@@ -5,7 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from netam.common import BASES_AND_N
+from netam.common import BASES_AND_N_TO_INDEX
+from netam.framework import SHMBurrito
 from netam.models import KmerModel
 
 class RSCNNModel(KmerModel):
@@ -27,7 +28,7 @@ class RSCNNModel(KmerModel):
         # Substitution probability linear layer
         self.s_linear = nn.Linear(in_features=filter_count, out_features=4)
 
-        self.central_base_mapping = torch.tensor([BASES_AND_N.index(kmer[len(kmer)//2]) for kmer in self.all_kmers], dtype=torch.int64)
+        self.central_base_mapping = torch.tensor([BASES_AND_N_TO_INDEX[kmer[len(kmer)//2]] for kmer in self.all_kmers], dtype=torch.int8)
 
 
     def forward(self, encoded_parents, masks):
@@ -54,3 +55,37 @@ class RSCNNModel(KmerModel):
 
         rates = torch.exp(log_rates * masks)
         return rates, csp
+
+
+class RSCNNBurrito(SHMBurrito):
+
+    def __init__(self, args, **kwargs):
+        super().__init__(args, **kwargs)
+        self.xent_loss = nn.CrossEntropyLoss()
+
+
+    def loss_of_batch(self, batch):
+        # TODO consider a weighted sum of losses, see README
+        encoded_parents, masks, mutation_indicators, new_base_idxs = batch
+        rates, csp = self.model(encoded_parents, masks)
+        
+        # Existing mutation rate loss calculation
+        mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(dim=1, keepdim=True)
+        mut_prob = 1 - torch.exp(-rates * mutation_freq)
+        mut_prob_masked = mut_prob[masks]
+        mutation_indicator_masked = mutation_indicators[masks].float()
+        rate_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
+
+        # CSP loss calculation
+        # Mask the new_base_idxs to focus only on positions with mutations
+        mutated_positions_mask = mutation_indicators == 1
+        csp_masked = csp[mutated_positions_mask]
+        new_base_idxs_masked = new_base_idxs[mutated_positions_mask]
+        assert (new_base_idxs_masked >= 0).all()
+
+        csp_loss = self.xent_loss(csp_masked, new_base_idxs_masked)
+
+        # Combine rate_loss and csp_loss
+        total_loss = rate_loss + csp_loss  # You can also weigh these components if necessary
+
+        return total_loss
