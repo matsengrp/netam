@@ -98,7 +98,7 @@ def create_mutation_and_base_indicator(parent, child, site_count):
         new_base_idxs += [-1] * padding_length
 
     return (torch.tensor(mutation_indicator, dtype=torch.bool),
-            torch.tensor(new_base_idxs, dtype=torch.int8))
+            torch.tensor(new_base_idxs, dtype=torch.int64))
 
 
 

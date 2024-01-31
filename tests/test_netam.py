@@ -8,7 +8,7 @@ import netam.framework as framework
 from netam.common import BASES
 from netam.framework import SHMoofDataset, SHMBurrito
 from netam.models import SHMoofModel
-from netam.rsmodels import RSCNNModel
+from netam.rsmodels import RSCNNModel, RSSHMBurrito
 
 
 @pytest.fixture
@@ -44,7 +44,7 @@ def test_make_dataset(tiny_dataset):
         mutation_indicator == torch.tensor([0, 1, 0, 0, 0, 0], dtype=torch.bool)
     ).all()
     assert (
-        new_base_idxs == torch.tensor([-1, 1, -1, -1, -1, -1], dtype=torch.int8)
+        new_base_idxs == torch.tensor([-1, 1, -1, -1, -1, -1], dtype=torch.int64)
     ).all()
 
 
@@ -75,3 +75,14 @@ def tiny_rsmodel():
 
 def test_rsmodel_forward(tiny_rsmodel, tiny_dataset):
     tiny_rsmodel.forward(tiny_dataset.encoded_parents, tiny_dataset.masks)
+
+
+@pytest.fixture
+def tiny_rsburrito(tiny_dataset, tiny_val_dataset, tiny_rsmodel):
+    burrito = RSSHMBurrito(tiny_dataset, tiny_val_dataset, tiny_rsmodel)
+    burrito.train(epochs=5)
+    return burrito
+
+def test_write_output(tiny_rsburrito):
+    tiny_rsburrito.save_crepe("_ignore/tiny_rscrepe")
+

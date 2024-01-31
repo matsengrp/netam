@@ -9,7 +9,7 @@ def test_create_mutation_and_base_indicator():
     site_count = 9
 
     expected_mutation_indi = torch.tensor([0, 1, 0, 0, 0, 0, 1, 0, 0], dtype=torch.bool)
-    expected_new_base_idxs = torch.tensor([-1, 2, -1, -1, -1, -1, 1, -1, -1], dtype=torch.int8)
+    expected_new_base_idxs = torch.tensor([-1, 2, -1, -1, -1, -1, 1, -1, -1], dtype=torch.int64)
 
     mutation_indicator, new_base_idxs = create_mutation_and_base_indicator(parent, child_, site_count)
 

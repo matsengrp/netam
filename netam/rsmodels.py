@@ -28,7 +28,7 @@ class RSCNNModel(KmerModel):
         # Substitution probability linear layer
         self.s_linear = nn.Linear(in_features=filter_count, out_features=4)
 
-        self.central_base_mapping = torch.tensor([BASES_AND_N_TO_INDEX[kmer[len(kmer)//2]] for kmer in self.all_kmers], dtype=torch.int8)
+        self.central_base_mapping = torch.tensor([BASES_AND_N_TO_INDEX[kmer[len(kmer)//2]] for kmer in self.all_kmers], dtype=torch.int64)
 
 
     def forward(self, encoded_parents, masks):
@@ -57,10 +57,10 @@ class RSCNNModel(KmerModel):
         return rates, csp
 
 
-class RSCNNBurrito(SHMBurrito):
+class RSSHMBurrito(SHMBurrito):
 
-    def __init__(self, args, **kwargs):
-        super().__init__(args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.xent_loss = nn.CrossEntropyLoss()
 
 
@@ -76,7 +76,7 @@ class RSCNNBurrito(SHMBurrito):
         mutation_indicator_masked = mutation_indicators[masks].float()
         rate_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
 
-        # CSP loss calculation
+        # Conditional substitution probability (CSP) loss calculation
         # Mask the new_base_idxs to focus only on positions with mutations
         mutated_positions_mask = mutation_indicators == 1
         csp_masked = csp[mutated_positions_mask]
@@ -85,7 +85,6 @@ class RSCNNBurrito(SHMBurrito):
 
         csp_loss = self.xent_loss(csp_masked, new_base_idxs_masked)
 
-        # Combine rate_loss and csp_loss
-        total_loss = rate_loss + csp_loss  # You can also weigh these components if necessary
+        total_loss = rate_loss + csp_loss  
 
         return total_loss
