@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import seaborn as sns
 
-from netam import framework, models
+from netam import framework, models, rsmodels
 from netam.common import pick_device, parameter_count_of_model
 
 
@@ -39,6 +39,13 @@ class Experiment:
                 dropout_prob=0.1,
             ),
             f"{prename}_cnn_med": models.CNNModel(
+                kmer_length=3,
+                kernel_size=9,
+                embedding_dim=7,
+                filter_count=16,
+                dropout_prob=0.2,
+            ),
+            f"{prename}_rscnn_med": rsmodels.RSCNNModel(
                 kmer_length=3,
                 kernel_size=9,
                 embedding_dim=7,

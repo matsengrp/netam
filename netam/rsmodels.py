@@ -37,6 +37,11 @@ class RSCNNModel(KmerModel):
             dtype=torch.int64,
         )
 
+    def to(self, device):
+        super().to(device)
+        self.central_base_mapping = self.central_base_mapping.to(device)
+        return self
+
     def forward(self, encoded_parents, masks):
         kmer_embeds = self.kmer_embedding(encoded_parents)
         kmer_embeds = kmer_embeds.permute(0, 2, 1)  # Transpose for Conv1D
