@@ -10,6 +10,7 @@ import seaborn as sns
 
 from netam import framework, models, rsmodels
 from netam.common import pick_device, parameter_count_of_model
+from netam.rsmodels import burrito_class_of_model
 
 
 class Experiment:
@@ -135,7 +136,8 @@ class Experiment:
 
         our_burrito_params = deepcopy(self.burrito_params)
         our_burrito_params.update(training_params)
-        burrito = framework.SHMBurrito(
+        burrito_class = burrito_class_of_model(model)
+        burrito = burrito_class(
             train_dataset, val_dataset, model, verbose=False, **our_burrito_params
         )
         train_history = burrito.multi_train(epochs=self.epochs)

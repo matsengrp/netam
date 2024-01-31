@@ -101,3 +101,9 @@ class RSSHMBurrito(SHMBurrito):
         total_loss = rate_loss + csp_loss
 
         return total_loss
+
+def burrito_class_of_model(model):
+    if isinstance(model, RSCNNModel):
+        return RSSHMBurrito
+    else:
+        return SHMBurrito
