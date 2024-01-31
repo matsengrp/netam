@@ -212,6 +212,7 @@ class CNN1merModel(CNNModel):
         self.kmer_embedding.weight = nn.Parameter(identity_matrix, requires_grad=False)
 
 
+# Issue #8
 class WrapperHyperparameters:
     def __init__(self, base_model_hyperparameters, site_count):
         self.base_model_hyperparameters = base_model_hyperparameters

@@ -82,11 +82,11 @@ class Experiment:
             ),
         }
 
-        # TODO decide what to do with this long-term
-        model_instances_3[f"{prename}_cnn_lrg_ps"] = models.PersiteWrapper(
-            model_instances_3[f"{prename}_cnn_lrg"], site_count=self.site_count
-        )
-        model_instances_3[f"{prename}_cnn_lrg_ps"].kmer_length = 3
+        # Issue #8
+        # model_instances_3[f"{prename}_cnn_lrg_ps"] = models.PersiteWrapper(
+        #     model_instances_3[f"{prename}_cnn_lrg"], site_count=self.site_count
+        # )
+        # model_instances_3[f"{prename}_cnn_lrg_ps"].kmer_length = 3
 
         model_instances_5 = {
             f"{prename}_fivemer": models.FivemerModel(),
