@@ -14,7 +14,12 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from tensorboardX import SummaryWriter
 
-from netam.common import generate_kmers, kmer_to_index_of, mask_tensor_of, BASES_AND_N_TO_INDEX
+from netam.common import (
+    generate_kmers,
+    kmer_to_index_of,
+    mask_tensor_of,
+    BASES_AND_N_TO_INDEX,
+)
 from netam import models
 
 
@@ -97,9 +102,10 @@ def create_mutation_and_base_indicator(parent, child, site_count):
         mutation_indicator += [0] * padding_length
         new_base_idxs += [-1] * padding_length
 
-    return (torch.tensor(mutation_indicator, dtype=torch.bool),
-            torch.tensor(new_base_idxs, dtype=torch.int64))
-
+    return (
+        torch.tensor(mutation_indicator, dtype=torch.bool),
+        torch.tensor(new_base_idxs, dtype=torch.int64),
+    )
 
 
 class KmerSequenceEncoder:
@@ -159,7 +165,12 @@ class SHMoofDataset(Dataset):
         return len(self.encoded_parents)
 
     def __getitem__(self, idx):
-        return self.encoded_parents[idx], self.masks[idx], self.mutation_indicators[idx], self.new_base_idxs[idx]
+        return (
+            self.encoded_parents[idx],
+            self.masks[idx],
+            self.mutation_indicators[idx],
+            self.new_base_idxs[idx],
+        )
 
     def __repr__(self):
         return f"{self.__class__.__name__}(Size: {len(self)}) on {self.encoded_parents.device}"

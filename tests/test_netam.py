@@ -83,6 +83,6 @@ def tiny_rsburrito(tiny_dataset, tiny_val_dataset, tiny_rsmodel):
     burrito.train(epochs=5)
     return burrito
 
+
 def test_write_output(tiny_rsburrito):
     tiny_rsburrito.save_crepe("_ignore/tiny_rscrepe")
-
