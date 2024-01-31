@@ -18,7 +18,9 @@ from netam.common import (
     generate_kmers,
     kmer_to_index_of,
     mask_tensor_of,
+    BASES,
     BASES_AND_N_TO_INDEX,
+    BIG,
 )
 from netam import models
 
@@ -79,6 +81,16 @@ def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
 
 def create_mutation_and_base_indicator(parent, child, site_count):
     """
+    This function takes a parent and child sequence and returns a tuple of
+    tensors: (mutation_indicator, new_base_idxs, wt_base_multiplier).
+    The mutation_indicator tensor is a boolean tensor indicating whether
+    each site is mutated. The new_base_idxs tensor is an integer tensor
+    that gives the index of the new base at each site. The wt_base_multiplier
+    tensor is all 1s except for the wt base at each site, which is -BIG.
+    
+    We will use wt_base_multiplier to zero out the prediction of WT at each
+    site.
+    
     Note that we use -1 as a placeholder for non-mutated bases in the
     new_base_idxs tensor. This ensures that lack of masking will lead
     to an error.
@@ -94,7 +106,7 @@ def create_mutation_and_base_indicator(parent, child, site_count):
             new_base_idxs.append(BASES_AND_N_TO_INDEX[child[i]])
         else:
             mutation_indicator.append(0)
-            new_base_idxs.append(-1)
+            new_base_idxs.append(-1)  # No mutation, so set to -1
 
     # Pad the lists if necessary
     if len(mutation_indicator) < site_count:
@@ -102,9 +114,16 @@ def create_mutation_and_base_indicator(parent, child, site_count):
         mutation_indicator += [0] * padding_length
         new_base_idxs += [-1] * padding_length
 
+    # Create the wt_base_multiplier tensor
+    wt_base_multiplier = torch.full((site_count, 4), 1.0)  # Second dim is 4 for A, C, G, T
+    for i, is_mutated in enumerate(mutation_indicator):
+        if is_mutated and parent[i] in BASES:
+            wt_base_multiplier[i, BASES_AND_N_TO_INDEX[parent[i]]] = -BIG
+
     return (
         torch.tensor(mutation_indicator, dtype=torch.bool),
         torch.tensor(new_base_idxs, dtype=torch.int64),
+        wt_base_multiplier
     )
 
 
@@ -159,6 +178,7 @@ class SHMoofDataset(Dataset):
             self.masks,
             self.mutation_indicators,
             self.new_base_idxs,
+            self.wt_base_multiplier,
         ) = self.encode_pcps(dataframe)
 
     def __len__(self):
@@ -170,6 +190,7 @@ class SHMoofDataset(Dataset):
             self.masks[idx],
             self.mutation_indicators[idx],
             self.new_base_idxs[idx],
+            self.wt_base_multiplier[idx],
         )
 
     def __repr__(self):
@@ -180,16 +201,18 @@ class SHMoofDataset(Dataset):
         self.masks = self.masks.to(device)
         self.mutation_indicators = self.mutation_indicators.to(device)
         self.new_base_idxs = self.new_base_idxs.to(device)
+        self.wt_base_multiplier = self.wt_base_multiplier.to(device)
 
     def encode_pcps(self, dataframe):
         encoded_parents = []
         masks = []
         mutation_vectors = []
         new_base_idx_vectors = []
+        wt_base_multiplier_vectors = []
 
         for _, row in dataframe.iterrows():
             encoded_parent, mask = self.encoder.encode_sequence(row["parent"])
-            mutation_indicator, new_base_idxs = create_mutation_and_base_indicator(
+            mutation_indicator, new_base_idxs, wt_base_multiplier = create_mutation_and_base_indicator(
                 row["parent"], row["child"], self.encoder.site_count
             )
 
@@ -197,12 +220,14 @@ class SHMoofDataset(Dataset):
             masks.append(mask)
             mutation_vectors.append(mutation_indicator)
             new_base_idx_vectors.append(new_base_idxs)
+            wt_base_multiplier_vectors.append(wt_base_multiplier)
 
         return (
             torch.stack(encoded_parents),
             torch.stack(masks),
             torch.stack(mutation_vectors),
             torch.stack(new_base_idx_vectors),
+            torch.stack(wt_base_multiplier_vectors),
         )
 
 
@@ -542,7 +567,7 @@ class SHMBurrito(Burrito):
         )
 
     def loss_of_batch(self, batch):
-        encoded_parents, masks, mutation_indicators, new_base_idxs = batch
+        encoded_parents, masks, mutation_indicators, _, _ = batch
         rates = self.model(encoded_parents, masks)
         mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
             dim=1, keepdim=True

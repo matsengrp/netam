@@ -7,6 +7,7 @@ import torch
 import torch.optim as optim
 from torch import nn, Tensor
 
+BIG = 1e9
 SMALL_PROB = 1e-6
 BASES = ["A", "C", "G", "T"]
 BASES_AND_N_TO_INDEX = {"A": 0, "C": 1, "G": 2, "T": 3, "N": 4}

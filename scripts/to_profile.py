@@ -8,7 +8,7 @@ expt = experiment.Experiment()
 shmoof_path = "/Users/matsen/data/shmoof_pcp_2023-11-30_MASKED.csv"
 val_nickname = 'small'
 
-train_df, val_df = load_shmoof_dataframes(shmoof_path, val_nickname=val_nickname, sample_count=1000)
+train_df, val_df = load_shmoof_dataframes(shmoof_path, val_nickname=val_nickname) #, sample_count=1000)
 
 train_data_by_kmer_length = expt.data_by_kmer_length_of(train_df)
 val_data_by_kmer_length = expt.data_by_kmer_length_of(val_df)
@@ -23,10 +23,10 @@ model = rsmodels.RSCNNModel(
                 filter_count=16,
                 dropout_prob=0.2,
             )
-train_data.to("cpu")
-val_data.to("cpu")
-# model.to(pick_device())
+# train_data.to("cpu")
+# val_data.to("cpu")
+model.to(pick_device())
 
 burrito = rsmodels.RSSHMBurrito(train_data, val_data, model)
-burrito.train(epochs=5)
+burrito.train(epochs=10)
  
