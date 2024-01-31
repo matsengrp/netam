@@ -35,7 +35,13 @@ def tiny_burrito(tiny_dataset, tiny_val_dataset, tiny_model):
 
 
 def test_make_dataset(tiny_dataset):
-    encoded_parent, mask, mutation_indicator, new_base_idxs, wt_base_multiplier = tiny_dataset[0]
+    (
+        encoded_parent,
+        mask,
+        mutation_indicator,
+        new_base_idxs,
+        wt_base_multiplier,
+    ) = tiny_dataset[0]
     assert (mask == torch.tensor([1, 1, 1, 1, 1, 0], dtype=torch.bool)).all()
     # First kmer is NAT due to padding, but our encoding defaults this to "N".
     assert encoded_parent[0].item() == tiny_dataset.encoder.kmer_to_index["N"]

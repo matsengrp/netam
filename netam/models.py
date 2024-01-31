@@ -236,7 +236,6 @@ class RSCNNModel(CNNModel):
         # Substitution probability linear layer
         self.s_linear = nn.Linear(in_features=filter_count, out_features=4)
 
-
     def forward(self, encoded_parents, masks, wt_base_multiplier):
         kmer_embeds = self.kmer_embedding(encoded_parents)
         kmer_embeds = kmer_embeds.permute(0, 2, 1)  # Transpose for Conv1D

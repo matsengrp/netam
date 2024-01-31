@@ -87,10 +87,10 @@ def create_mutation_and_base_indicator(parent, child, site_count):
     each site is mutated. The new_base_idxs tensor is an integer tensor
     that gives the index of the new base at each site. The wt_base_multiplier
     tensor is all 1s except for the wt base at each site, which is -BIG.
-    
+
     We will use wt_base_multiplier to zero out the prediction of WT at each
     site.
-    
+
     Note that we use -1 as a placeholder for non-mutated bases in the
     new_base_idxs tensor. This ensures that lack of masking will lead
     to an error.
@@ -115,7 +115,9 @@ def create_mutation_and_base_indicator(parent, child, site_count):
         new_base_idxs += [-1] * padding_length
 
     # Create the wt_base_multiplier tensor
-    wt_base_multiplier = torch.full((site_count, 4), 1.0)  # Second dim is 4 for A, C, G, T
+    wt_base_multiplier = torch.full(
+        (site_count, 4), 1.0
+    )  # Second dim is 4 for A, C, G, T
     for i, is_mutated in enumerate(mutation_indicator):
         if is_mutated and parent[i] in BASES:
             wt_base_multiplier[i, BASES_AND_N_TO_INDEX[parent[i]]] = -BIG
@@ -123,7 +125,7 @@ def create_mutation_and_base_indicator(parent, child, site_count):
     return (
         torch.tensor(mutation_indicator, dtype=torch.bool),
         torch.tensor(new_base_idxs, dtype=torch.int64),
-        wt_base_multiplier
+        wt_base_multiplier,
     )
 
 
@@ -212,7 +214,11 @@ class SHMoofDataset(Dataset):
 
         for _, row in dataframe.iterrows():
             encoded_parent, mask = self.encoder.encode_sequence(row["parent"])
-            mutation_indicator, new_base_idxs, wt_base_multiplier = create_mutation_and_base_indicator(
+            (
+                mutation_indicator,
+                new_base_idxs,
+                wt_base_multiplier,
+            ) = create_mutation_and_base_indicator(
                 row["parent"], row["child"], self.encoder.site_count
             )
 
@@ -604,7 +610,13 @@ class RSSHMBurrito(SHMBurrito):
 
     def loss_of_batch(self, batch):
         # TODO consider a weighted sum of losses, see README
-        encoded_parents, masks, mutation_indicators, new_base_idxs, wt_base_multiplier = batch
+        (
+            encoded_parents,
+            masks,
+            mutation_indicators,
+            new_base_idxs,
+            wt_base_multiplier,
+        ) = batch
         rates, csp = self.model(encoded_parents, masks, wt_base_multiplier)
 
         # Existing mutation rate loss calculation
@@ -628,6 +640,7 @@ class RSSHMBurrito(SHMBurrito):
         total_loss = rate_loss + csp_loss
 
         return total_loss
+
 
 def burrito_class_of_model(model):
     if isinstance(model, models.RSCNNModel):
