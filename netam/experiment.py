@@ -38,13 +38,6 @@ class Experiment:
                 filter_count=14,
                 dropout_prob=0.1,
             ),
-            f"{prename}_cnn_med_orig": models.CNNModel(
-                kmer_length=3,
-                kernel_size=11,
-                embedding_dim=9,
-                filter_count=9,
-                dropout_prob=0.1,
-            ),
             f"{prename}_cnn_med": models.CNNModel(
                 kmer_length=3,
                 kernel_size=9,
