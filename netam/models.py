@@ -1,4 +1,6 @@
+from abc import ABC, abstractmethod
 import math
+
 import pandas as pd
 
 import torch
@@ -6,12 +8,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from epam import sequences
 from netam.common import (
     MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
     PositionalEncoding,
     generate_kmers,
+    mask_tensor_of,
 )
 
 
@@ -36,6 +38,8 @@ class ModelBase(nn.Module):
                             nn.init.constant_(sublayer.bias, 0)
             elif isinstance(layer, nn.Dropout):
                 pass
+            elif hasattr(layer, "reinitialize_weights"):
+                layer.reinitialize_weights()
             else:
                 raise ValueError(f"Unrecognized layer type: {type(layer)}")
 
@@ -60,7 +64,7 @@ class FivemerModel(KmerModel):
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
 
     def forward(self, encoded_parents, masks):
-        log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze()
+        log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze(-1)
         rates = torch.exp(log_kmer_rates)
         return rates
 
@@ -77,7 +81,7 @@ class SHMoofModel(KmerModel):
         self.log_site_rates = nn.Embedding(self.site_count, 1)
 
     def forward(self, encoded_parents, masks):
-        log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze()
+        log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze(-1)
         sequence_length = encoded_parents.size(1)
         positions = torch.arange(sequence_length, device=encoded_parents.device)
         # When we transpose we get a tensor of shape [sequence_length, 1], which will broadcast
@@ -208,6 +212,25 @@ class CNN1merModel(CNNModel):
         self.kmer_embedding.weight = nn.Parameter(identity_matrix, requires_grad=False)
 
 
+# Issue #8
+class WrapperHyperparameters:
+    def __init__(self, base_model_hyperparameters, site_count):
+        self.base_model_hyperparameters = base_model_hyperparameters
+        self.site_count = site_count
+
+    def __getitem__(self, key):
+        if key in self.base_model_hyperparameters:
+            return self.base_model_hyperparameters[key]
+        elif hasattr(self, key):
+            return getattr(self, key)
+        else:
+            raise KeyError(f"Key '{key}' not found in hyperparameters.")
+
+    def __str__(self):
+        hyperparameters_dict = {key: getattr(self, key) for key in self.__dict__}
+        return str(hyperparameters_dict)
+
+
 class PersiteWrapper(ModelBase):
     """
     This wraps another model, but adds a per-site rate component.
@@ -218,6 +241,9 @@ class PersiteWrapper(ModelBase):
         self.base_model = base_model
         self.site_count = site_count
         self.log_site_rates = nn.Embedding(self.site_count, 1)
+        self._hyperparameters = WrapperHyperparameters(
+            self.base_model.hyperparameters, self.site_count
+        )
 
     def forward(self, encoded_parents, masks):
         base_model_rates = self.base_model(encoded_parents, masks)
@@ -229,24 +255,58 @@ class PersiteWrapper(ModelBase):
 
     @property
     def hyperparameters(self):
-        return {
-            "base_model_hyperparameters": self.base_model.hyperparameters,
-            "site_count": self.site_count,
-        }
+        return self._hyperparameters
 
     @property
     def site_rates(self):
         return torch.exp(self.log_site_rates.weight).squeeze()
 
 
-class TransformerBinarySelectionModel(nn.Module):
+class AbstractBinarySelectionModel(ABC, nn.Module):
     """A transformer-based model for binary selection.
 
-    This is a model that takes in a batch of one-hot encoded sequences and outputs a binary selection matrix.
+    This is a model that takes in a batch of one-hot encoded sequences and
+    outputs a vector that represents the log level of selection for each amino
+    acid site, which after exponentiating is a multiplier on the probability of
+    an amino-acid substitution at that site.
+
+    Various submodels are implemented as subclasses of this class:
+
+    * LinAct: No activation function after the transformer.
+    * WiggleAct: Activation that slopes to 0 at -inf and grows sub-linearly as x increases.
 
     See forward() for details.
     """
 
+    def __init__(self):
+        super().__init__()
+
+    def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
+        """Do the forward method without gradients from an amino acid string.
+
+        Parameters:
+            aa_str: A string of amino acids.
+
+        Returns:
+            A numpy array of the same length as the input string representing
+            the level of selection for wildtype at each amino acid site.
+        """
+
+        model_device = next(self.parameters()).device
+
+        aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
+        aa_idxs = aa_idxs.to(model_device)
+        mask = mask_tensor_of(aa_str)
+        mask = mask.to(model_device)
+
+        with torch.no_grad():
+            model_out = self(aa_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
+            final_out = torch.exp(model_out)
+
+        return final_out[: len(aa_str)]
+
+
+class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
     def __init__(
         self,
         nhead: int,
@@ -303,7 +363,6 @@ class TransformerBinarySelectionModel(nn.Module):
             A tensor of shape (B, L, 1) representing the log level of selection
             for each amino acid site.
         """
-
         # Multiply by sqrt(d_model) to match the transformer paper.
         embedded_amino_acids = self.amino_acid_embedding(
             amino_acid_indices
@@ -317,29 +376,65 @@ class TransformerBinarySelectionModel(nn.Module):
         # To learn about src_key_padding_mask, see https://stackoverflow.com/q/62170439
         out = self.encoder(embedded_amino_acids, src_key_padding_mask=~mask)
         out = self.linear(out)
-        out = F.logsigmoid(out)
         return out.squeeze(-1)
 
-    def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
-        """Do the forward method without gradients from an amino acid string and convert to numpy.
 
-        Parameters:
-            aa_str: A string of amino acids.
+def wiggle(x, beta):
+    """
+    A function that when we exp it gives us a function that slopes to 0 at -inf
+    and grows sub-linearly as x increases.
 
-        Returns:
-            A numpy array of the same length as the input string representing
-            the level of selection for each amino acid site.
-        """
+    See https://github.com/matsengrp/netam/pull/5#issuecomment-1906665475 for a
+    plot.
+    """
+    return beta * torch.where(x < 1, x - 1, torch.log(x))
 
-        model_device = next(self.parameters()).device
 
-        aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
-        aa_idxs = aa_idxs.to(model_device)
-        mask = sequences.mask_tensor_of(aa_str)
-        mask = mask.to(model_device)
+class TransformerBinarySelectionModelWiggleAct(TransformerBinarySelectionModelLinAct):
+    """
+    Here the beta parameter is fixed at 0.3.
+    """
 
-        with torch.no_grad():
-            model_out = self(aa_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
-            final_out = torch.exp(model_out)
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        return wiggle(super().forward(amino_acid_indices, mask), 0.3)
 
-        return final_out[: len(aa_str)]
+
+class TransformerBinarySelectionModelTrainableWiggleAct(
+    TransformerBinarySelectionModelLinAct
+):
+    """
+    This version of the model has a trainable parameter that controls the
+    beta in the wiggle function. It didn't work any better so I'm not using it
+    for now.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Initialize the logit of beta to logit(0.3)
+        init_beta = 0.3
+        init_logit_beta = math.log(init_beta / (1 - init_beta))
+        self.logit_beta = nn.Parameter(
+            torch.tensor([init_logit_beta], dtype=torch.float32)
+        )
+
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        # Apply sigmoid to transform logit_beta back to the range (0, 1)
+        beta = torch.sigmoid(self.logit_beta)
+        return wiggle(super().forward(amino_acid_indices, mask), beta)
+
+
+class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
+    """A one parameter selection model as a baseline."""
+
+    def __init__(self):
+        super().__init__()
+        self.single_value = nn.Parameter(torch.tensor(0.0))
+
+    @property
+    def hyperparameters(self):
+        return {}
+
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        """Build a binary log selection matrix from a one-hot encoded parent sequence."""
+        replicated_value = self.single_value.expand_as(amino_acid_indices)
+        return replicated_value

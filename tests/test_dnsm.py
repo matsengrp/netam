@@ -2,7 +2,7 @@ import pandas as pd
 import torch
 import pytest
 
-from netam.framework import load_crepe
+from netam.framework import crepe_exists, load_crepe
 from netam.common import aa_idx_tensor_of_str_ambig, MAX_AMBIG_AA_IDX
 from netam.models import TransformerBinarySelectionModel
 from netam.dnsm import DNSMBurrito, train_test_datasets_of_pcp_df
@@ -17,14 +17,19 @@ def test_aa_idx_tensor_of_str_ambig():
 
 
 @pytest.fixture
-def dnsm_burrito():
-    """Fixture that returns the DNSM Burrito object."""
-    pcp_df = load_and_convert_to_tensors(
+def pcp_df():
+    df = load_and_convert_to_tensors(
         "/Users/matsen/data/wyatt-10x-1p5m_pcp_2023-10-07.first100.shmple.hdf5"
     )
 
-    pcp_df = pcp_df[pcp_df["parent"] != pcp_df["child"]]
-    print(f"After filtering out identical PCPs, we have {len(pcp_df)} PCPs.")
+    df = df[df["parent"] != df["child"]]
+    print(f"After filtering out identical PCPs, we have {len(df)} PCPs.")
+    return df
+
+
+@pytest.fixture
+def dnsm_burrito(pcp_df):
+    """Fixture that returns the DNSM Burrito object."""
     train_dataset, val_dataset = train_test_datasets_of_pcp_df(pcp_df)
 
     model = TransformerBinarySelectionModel(
@@ -40,14 +45,15 @@ def dnsm_burrito():
         min_learning_rate=0.0001,
         device="cpu",
     )
-    burrito.train(2)
-    burrito.optimize_branch_lengths()
+    burrito.joint_train(epochs=1, cycle_count=2)
     return burrito
 
 
 def test_crepe_roundtrip(dnsm_burrito):
-    dnsm_burrito.save_crepe("_ignore/dnsm")
-    crepe = load_crepe("_ignore/dnsm")
+    crepe_path = "_ignore/dnsm"
+    dnsm_burrito.save_crepe(crepe_path)
+    assert crepe_exists(crepe_path)
+    crepe = load_crepe(crepe_path)
     model = crepe.model
     assert isinstance(model, TransformerBinarySelectionModel)
     assert dnsm_burrito.model.hyperparameters == model.hyperparameters

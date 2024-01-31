@@ -7,10 +7,9 @@ import torch
 import torch.optim as optim
 from torch import nn, Tensor
 
-from epam.sequences import AA_STR_SORTED
-
-SMALL_PROB = 1e-8
+SMALL_PROB = 1e-6
 BASES = ["A", "C", "G", "T"]
+AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
 AA_STR_SORTED_AMBIG = AA_STR_SORTED + "X"
 MAX_AMBIG_AA_IDX = len(AA_STR_SORTED_AMBIG) - 1
 
@@ -38,6 +37,20 @@ def aa_idx_tensor_of_str_ambig(aa_str):
     except ValueError:
         print(f"Found an invalid amino acid in the string: {aa_str}")
         raise
+
+
+def mask_tensor_of(seq_str, length=None):
+    """Return a mask tensor indicating non-empty and non-"N" sites. Sites
+    beyond the length of the sequence are masked."""
+    if length is None:
+        length = len(seq_str)
+    mask = torch.zeros(length, dtype=torch.bool)
+    if len(seq_str) < length:
+        seq_str += "N" * (length - len(seq_str))
+    else:
+        seq_str = seq_str[:length]
+    mask[[c != "N" for c in seq_str]] = 1
+    return mask
 
 
 def clamp_probability(x: Tensor) -> Tensor:

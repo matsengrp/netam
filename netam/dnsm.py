@@ -14,25 +14,30 @@ from torch import Tensor
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 
+# Amazingly, using one thread makes things 50x faster for branch length
+# optimization on our server.
+torch.set_num_threads(1)
+
 import numpy as np
 import pandas as pd
 
-from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 from epam.torch_common import optimize_branch_length
+from epam.models import WrappedBinaryMutSel
 import epam.molevol as molevol
 import epam.sequences as sequences
 from epam.sequences import (
-    mask_tensor_of,
     subs_indicator_tensor_of,
     translate_sequence,
     translate_sequences,
 )
+
 from netam.common import (
     MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
     clamp_probability,
+    mask_tensor_of,
     stack_heterogeneous,
     pick_device,
 )
@@ -41,7 +46,14 @@ from netam.hyper_burrito import HyperBurrito
 
 
 class DNSMDataset(Dataset):
-    def __init__(self, nt_parents, nt_children, all_rates, all_subs_probs):
+    def __init__(
+        self,
+        nt_parents,
+        nt_children,
+        all_rates,
+        all_subs_probs,
+        branch_length_multiplier=5.0,
+    ):
         self.nt_parents = nt_parents
         self.nt_children = nt_children
         self.all_rates = stack_heterogeneous(all_rates.reset_index(drop=True))
@@ -81,10 +93,12 @@ class DNSMDataset(Dataset):
         assert torch.max(self.aa_parents_idxs) <= MAX_AMBIG_AA_IDX
 
         # Make initial branch lengths (will get optimized later).
-        self._branch_lengths = [
-            sequences.mutation_frequency(parent, child)
-            for parent, child in zip(self.nt_parents, self.nt_children)
-        ]
+        self._branch_lengths = np.array(
+            [
+                sequences.mutation_frequency(parent, child) * branch_length_multiplier
+                for parent, child in zip(self.nt_parents, self.nt_children)
+            ]
+        )
         self.update_neutral_aa_mut_probs()
 
     @property
@@ -93,8 +107,21 @@ class DNSMDataset(Dataset):
 
     @branch_lengths.setter
     def branch_lengths(self, new_branch_lengths):
+        assert len(new_branch_lengths) == len(self._branch_lengths), (
+            f"Expected {len(self._branch_lengths)} branch lengths, "
+            f"got {len(new_branch_lengths)}"
+        )
+        assert np.all(np.isfinite(new_branch_lengths) & (new_branch_lengths > 0))
         self._branch_lengths = new_branch_lengths
         self.update_neutral_aa_mut_probs()
+
+    def export_branch_lengths(self, out_csv_path):
+        pd.DataFrame({"branch_length": self.branch_lengths}).to_csv(
+            out_csv_path, index=False
+        )
+
+    def load_branch_lengths(self, in_csv_path):
+        self.branch_lengths = pd.read_csv(in_csv_path)["branch_length"].values
 
     def update_neutral_aa_mut_probs(self):
         print("consolidating shmple rates into substitution probabilities...")
@@ -126,6 +153,17 @@ class DNSMDataset(Dataset):
                 mut_probs.reshape(-1, 3),
                 normed_subs_probs.reshape(-1, 3, 4),
             )
+
+            if not torch.isfinite(neutral_aa_mut_prob).all():
+                print(f"Found a non-finite neutral_aa_mut_prob")
+                print(f"nt_parent: {nt_parent}")
+                print(f"mask: {mask}")
+                print(f"rates: {rates}")
+                print(f"subs_probs: {subs_probs}")
+                print(f"branch_length: {branch_length}")
+                raise ValueError(
+                    f"neutral_aa_mut_prob is not finite: {neutral_aa_mut_prob}"
+                )
 
             # Ensure that all values are positive before taking the log later
             neutral_aa_mut_prob = clamp_probability(neutral_aa_mut_prob)
@@ -166,7 +204,7 @@ class DNSMDataset(Dataset):
         self.all_subs_probs = self.all_subs_probs.to(device)
 
 
-def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8):
+def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multiplier=5.0):
     nt_parents = pcp_df["parent"].reset_index(drop=True)
     nt_children = pcp_df["child"].reset_index(drop=True)
     rates = pcp_df["rates"].reset_index(drop=True)
@@ -180,12 +218,23 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8):
         subs_probs[:train_len],
         subs_probs[train_len:],
     )
-
-    train_dataset = DNSMDataset(
-        train_parents, train_children, train_rates, train_subs_probs
+    val_dataset = DNSMDataset(
+        val_parents,
+        val_children,
+        val_rates,
+        val_subs_probs,
+        branch_length_multiplier=branch_length_multiplier,
     )
-    val_dataset = DNSMDataset(val_parents, val_children, val_rates, val_subs_probs)
-
+    if train_frac == 0.0:
+        return None, val_dataset
+    # else:
+    train_dataset = DNSMDataset(
+        train_parents,
+        train_children,
+        train_rates,
+        train_subs_probs,
+        branch_length_multiplier=branch_length_multiplier,
+    )
     return train_dataset, val_dataset
 
 
@@ -194,12 +243,28 @@ class DNSMBurrito(framework.Burrito):
         super().__init__(*args, **kwargs)
         self.device = device
         self.model.to(self.device)
+        self.wrapped_model = WrappedBinaryMutSel(self.model, weights_directory=None)
+
+    def load_branch_lengths(self, in_csv_prefix):
+        if self.train_loader is not None:
+            self.train_loader.dataset.load_branch_lengths(
+                in_csv_prefix + ".train_branch_lengths.csv"
+            )
+        self.val_loader.dataset.load_branch_lengths(
+            in_csv_prefix + ".val_branch_lengths.csv"
+        )
 
     def loss_of_batch(self, batch):
         aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
         aa_subs_indicator = batch["subs_indicator"].to(self.device)
         mask = batch["mask"].to(self.device)
         log_neutral_aa_mut_probs = batch["log_neutral_aa_mut_probs"].to(self.device)
+
+        if not torch.isfinite(log_neutral_aa_mut_probs[mask]).all():
+            raise ValueError(
+                f"log_neutral_aa_mut_probs has non-finite values at relevant positions: {log_neutral_aa_mut_probs[mask]}"
+            )
+
         log_selection_factors = self.model(aa_parents_idxs, mask)
         return self.complete_loss_fn(
             log_neutral_aa_mut_probs,
@@ -221,62 +286,17 @@ class DNSMBurrito(framework.Burrito):
         predictions = predictions.masked_select(mask)
         aa_subs_indicator = aa_subs_indicator.masked_select(mask)
 
-        # Because the neutral mutation probabilities should be normalized, and
-        # log_selection_factors comes from a logsigmoid, we should have
-        # predictions <= 1.
-        assert torch.all(predictions <= 1)
+        assert torch.isfinite(predictions).all()
+        predictions = clamp_probability(predictions)
 
         return self.bce_loss(predictions, aa_subs_indicator)
-
-    def _build_log_pcp_probability(
-        self, parent: str, child: str, rates: Tensor, subs_probs: Tensor
-    ):
-        """
-        This version of _build_log_pcp_probability directly expresses BCELoss
-        so that we're minimizing the same loss as the NN when we're optimizing
-        branch length.
-        """
-
-        assert len(parent) % 3 == 0
-
-        # Note we are replacing all Ns with As, which means that we need to be careful
-        # with masking out these positions later. We do this below.
-        parent_idxs = sequences.nt_idx_tensor_of_str(parent.replace("N", "A"))
-        aa_parent = translate_sequence(parent)
-        aa_child = translate_sequence(child)
-        aa_subs_indicator = subs_indicator_tensor_of(aa_parent, aa_child)
-        mask = mask_tensor_of(aa_parent)
-        selection_factors = self.model.selection_factors_of_aa_str(aa_parent).to("cpu")
-        rates = rates.to("cpu")
-        subs_probs = subs_probs.to("cpu")
-        bce_loss = nn.BCELoss()
-
-        def log_pcp_probability(log_branch_length: torch.Tensor):
-            branch_length = torch.exp(log_branch_length)
-            mut_probs = 1.0 - torch.exp(-branch_length * rates)
-            normed_subs_probs = molevol.normalize_sub_probs(parent_idxs, subs_probs)
-
-            neutral_aa_mut_prob = molevol.neutral_aa_mut_probs(
-                parent_idxs.reshape(-1, 3),
-                mut_probs.reshape(-1, 3),
-                normed_subs_probs.reshape(-1, 3, 4),
-            )
-
-            predictions = neutral_aa_mut_prob * selection_factors
-            predictions = predictions.masked_select(mask)
-            assert torch.all((predictions >= 0) & (predictions <= 1))
-            masked_indicator = aa_subs_indicator.masked_select(mask)
-            # Negative because BCELoss is negative log likelihood.
-            return -bce_loss(predictions, masked_indicator)
-
-        return log_pcp_probability
 
     def _find_optimal_branch_length(
         self, parent, child, rates, subs_probs, starting_branch_length
     ):
         if parent == child:
             return 0.0
-        log_pcp_probability = self._build_log_pcp_probability(
+        log_pcp_probability = self.wrapped_model._build_log_pcp_probability(
             parent, child, rates, subs_probs
         )
         return optimize_branch_length(log_pcp_probability, starting_branch_length)
@@ -315,7 +335,15 @@ class DNSMBurrito(framework.Burrito):
         return np.array(optimal_lengths)
 
     def optimize_branch_lengths(self):
-        for dataset in [self.train_loader.dataset, self.val_loader.dataset]:
+        # We do the branch length optimization on CPU but want to restore the
+        # model to the device it was on before.
+        device = next(self.model.parameters()).device
+        self.model.to("cpu")
+        for loader in [self.train_loader, self.val_loader]:
+            if loader is None:
+                continue
+            dataset = loader.dataset
+            assert dataset.all_rates.device.type == "cpu"
             dataset.branch_lengths = self.find_optimal_branch_lengths(
                 dataset.nt_parents,
                 dataset.nt_children,
@@ -323,21 +351,32 @@ class DNSMBurrito(framework.Burrito):
                 dataset.all_subs_probs,
                 dataset.branch_lengths,
             )
+        self.model.to(device)
 
-    def full_train(self, epochs=20, cycle_count=2):
+    def mark_branch_lengths_optimized(self, cycle):
+        self.writer.add_scalar("branch length optimization", cycle, self.global_epoch)
+
+    def joint_train(self, epochs=20, cycle_count=2):
+        """
+        Do joint optimization of model and branch lengths.
+        """
         loss_history_l = []
+        self.mark_branch_lengths_optimized(0)
         loss_history_l.append(self.train(3))
         self.optimize_branch_lengths()
-        # We double branch lengths and then retrain to avoid the best parameter
-        # values hitting the boundary of 1.
-        self.train_loader.dataset.branch_lengths *= 2
-        self.val_loader.dataset.branch_lengths *= 2
-        self.reset_optimization()
+        self.mark_branch_lengths_optimized(0)
         for cycle in range(cycle_count):
+            self.mark_branch_lengths_optimized(cycle + 1)
+            self.reset_optimization()
             loss_history_l.append(self.train(epochs))
             if cycle < cycle_count - 1:
                 self.optimize_branch_lengths()
+            self.mark_branch_lengths_optimized(cycle + 1)
+
         return pd.concat(loss_history_l, ignore_index=True)
+
+    def full_train(self, epochs=100):
+        return self.joint_train(epochs=epochs)
 
     def to_crepe(self):
         training_hyperparameters = {

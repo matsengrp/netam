@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import seaborn as sns
 
 from netam import framework, models
@@ -80,6 +81,12 @@ class Experiment:
                 dropout_prob=0.0,
             ),
         }
+
+        # Issue #8
+        # model_instances_3[f"{prename}_cnn_lrg_ps"] = models.PersiteWrapper(
+        #     model_instances_3[f"{prename}_cnn_lrg"], site_count=self.site_count
+        # )
+        # model_instances_3[f"{prename}_cnn_lrg_ps"].kmer_length = 3
 
         model_instances_5 = {
             f"{prename}_fivemer": models.FivemerModel(),
@@ -217,9 +224,10 @@ class Experiment:
         ]
 
 
-def plot_loss_difference(expt_df, baseline_model_name):
+def plot_loss_difference(expt_df, baseline_model_name, scale_factor=1e4):
     df = expt_df
     assert baseline_model_name in df["model_name"].values, "Baseline model not found"
+
     # Identify loss columns (ending with '_loss')
     loss_columns = [col for col in df.columns if col.endswith("_loss")]
     assert len(loss_columns) > 0, "No loss columns found"
@@ -258,5 +266,12 @@ def plot_loss_difference(expt_df, baseline_model_name):
         axes[i, 0].set_title(loss_type.replace("_loss", "").replace("_", " ").title())
         axes[i, 0].axvline(0, color="black", linewidth=1)  # Add vertical line at zero
 
+        # Scale x-axis and format tick labels
+        axes[i, 0].xaxis.set_major_formatter(
+            mticker.FuncFormatter(lambda x, _: f"{x * scale_factor:.1f}")
+        )
+        axes[i, 0].set_xlabel(f"Loss Difference (x 1e{int(np.log10(scale_factor))})")
+        axes[i, 0].set_ylabel("")
+
     plt.tight_layout()
-    plt.show()
+    return fig

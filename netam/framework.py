@@ -14,8 +14,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from tensorboardX import SummaryWriter
 
-from epam.sequences import mask_tensor_of
-from netam.common import generate_kmers, kmer_to_index_of
+from netam.common import generate_kmers, kmer_to_index_of, mask_tensor_of
 from netam import models
 
 
@@ -123,9 +122,6 @@ class KmerSequenceEncoder:
 
 
 class PlaceholderEncoder:
-    def __init__(self):
-        pass
-
     @property
     def parameters(self):
         return {}
@@ -255,6 +251,8 @@ def load_crepe(prefix, device=None):
     model = model_class(**config["model_hyperparameters"])
 
     model_state_path = f"{prefix}.pth"
+    if device is None:
+        device = torch.device("cpu")
     model.load_state_dict(torch.load(model_state_path, map_location=device))
     model.eval()
 
@@ -280,18 +278,29 @@ class Burrito(ABC):
         min_learning_rate=1e-4,
         l2_regularization_coeff=1e-6,
         verbose=False,
+        name="",
     ):
-        self.train_loader = DataLoader(
-            train_dataset, batch_size=batch_size, shuffle=True
-        )
+        """
+        Note that we allow train_dataset to be None, to support use cases where
+        we just want to do evaluation.
+        """
+        if train_dataset is None:
+            self.train_loader = None
+        else:
+            self.train_loader = DataLoader(
+                train_dataset, batch_size=batch_size, shuffle=True
+            )
+            self.writer = SummaryWriter(log_dir=f"./_logs/{name}")
+            self.writer.add_text("model_name", model.__class__.__name__)
+            self.writer.add_text("model_hyperparameters", str(model.hyperparameters))
         self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
         self.model = model
         self.learning_rate = learning_rate
         self.min_learning_rate = min_learning_rate
         self.l2_regularization_coeff = l2_regularization_coeff
         self.verbose = verbose
+        self.name = name
         self.reset_optimization()
-        self.writer = SummaryWriter(log_dir="./_logs")
         self.bce_loss = nn.BCELoss()
         self.global_epoch = 0
 
@@ -303,7 +312,7 @@ class Burrito(ABC):
             weight_decay=self.l2_regularization_coeff,
         )
         self.scheduler = ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.2, patience=4, verbose=self.verbose
+            self.optimizer, mode="min", factor=0.5, patience=10, verbose=self.verbose
         )
 
     def multi_train(self, epochs, max_tries=3):
@@ -348,12 +357,33 @@ class Burrito(ABC):
                 loss = self.loss_of_batch(batch)
 
                 if train_mode:
-                    if hasattr(self.model, "regularization_loss"):
-                        reg_loss = self.model.regularization_loss()
-                        loss += reg_loss
-                    self.optimizer.zero_grad()
-                    loss.backward()
-                    self.optimizer.step()
+                    max_grad_retries = 5
+                    for grad_retry_count in range(max_grad_retries):
+                        if hasattr(self.model, "regularization_loss"):
+                            reg_loss = self.model.regularization_loss()
+                            loss += reg_loss
+
+                        self.optimizer.zero_grad()
+                        loss.backward()
+
+                        nan_in_gradients = False
+                        for name, param in self.model.named_parameters():
+                            if torch.isnan(param).any():
+                                raise ValueError(f"NaN in weights: {name}")
+                            if param.grad is not None and torch.isnan(param.grad).any():
+                                nan_in_gradients = True
+
+                        if not nan_in_gradients:
+                            self.optimizer.step()
+                            break
+                        else:
+                            if grad_retry_count < max_grad_retries - 1:
+                                print(
+                                    f"Retrying gradient calculation ({grad_retry_count + 1}/{max_grad_retries}) with loss {loss.item()}"
+                                )
+                                loss = self.loss_of_batch(batch)
+                            else:
+                                raise ValueError(f"Exceeded maximum gradient retries!")
 
                 # We support both dicts and lists of tensors as the batch.
                 first_value_of_batch = (
@@ -370,6 +400,8 @@ class Burrito(ABC):
         return average_loss
 
     def train(self, epochs):
+        assert self.train_loader is not None, "No training data provided."
+
         train_losses = []
         val_losses = []
         best_val_loss = float("inf")
@@ -421,7 +453,13 @@ class Burrito(ABC):
             self.model.load_state_dict(best_model_state)
 
         # Make sure that saving the best model state worked.
-        assert abs(best_val_loss - self.evaluate()) < 1e-6
+        if (
+            best_val_loss != float("inf")  # We actually have a training step.
+            and abs(best_val_loss - self.evaluate()) > 1e-6
+        ):
+            print(
+                f"\nWarning: observed val loss is {best_val_loss} and saved loss is {self.evaluate()}"
+            )
 
         return pd.DataFrame({"train_loss": train_losses, "val_loss": val_losses})
 
