@@ -231,9 +231,7 @@ class RSCNNModel(CNNModel):
             padding="same",
         )
         self.dropout = nn.Dropout(dropout_prob)
-        # Rate linear layer
         self.r_linear = nn.Linear(in_features=filter_count, out_features=1)
-        # Substitution probability linear layer
         self.s_linear = nn.Linear(in_features=filter_count, out_features=4)
 
     def forward(self, encoded_parents, masks, wt_base_multiplier):
@@ -250,7 +248,6 @@ class RSCNNModel(CNNModel):
         csp_raw *= wt_base_multiplier
 
         csp = F.softmax(csp_raw, dim=-1) * masks.unsqueeze(-1)
-
         rates = torch.exp(log_rates * masks)
         return rates, csp
 

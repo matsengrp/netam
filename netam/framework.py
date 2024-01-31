@@ -609,7 +609,7 @@ class RSSHMBurrito(SHMBurrito):
         self.xent_loss = nn.CrossEntropyLoss()
 
     def loss_of_batch(self, batch):
-        # TODO consider a weighted sum of losses, see README
+        csp_loss_weight = 1./20
         (
             encoded_parents,
             masks,
@@ -635,7 +635,8 @@ class RSSHMBurrito(SHMBurrito):
         new_base_idxs_masked = new_base_idxs[mutated_positions_mask]
         assert (new_base_idxs_masked >= 0).all()
 
-        csp_loss = self.xent_loss(csp_masked, new_base_idxs_masked)
+        csp_loss = csp_loss_weight * self.xent_loss(csp_masked, new_base_idxs_masked)
+        # print(f"rate_loss: {rate_loss}, csp_loss: {csp_loss}")
 
         total_loss = rate_loss + csp_loss
 
