@@ -241,7 +241,9 @@ class PersiteWrapper(ModelBase):
         self.base_model = base_model
         self.site_count = site_count
         self.log_site_rates = nn.Embedding(self.site_count, 1)
-        self._hyperparameters = WrapperHyperparameters(self.base_model.hyperparameters, self.site_count)
+        self._hyperparameters = WrapperHyperparameters(
+            self.base_model.hyperparameters, self.site_count
+        )
 
     def forward(self, encoded_parents, masks):
         base_model_rates = self.base_model(encoded_parents, masks)
