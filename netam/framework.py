@@ -595,3 +595,42 @@ class SHMBurrito(Burrito):
             self.train_loader.dataset.encoder.site_count,
         )
         return Crepe(encoder, self.model, training_hyperparameters)
+
+
+class RSSHMBurrito(SHMBurrito):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.xent_loss = nn.CrossEntropyLoss()
+
+    def loss_of_batch(self, batch):
+        # TODO consider a weighted sum of losses, see README
+        encoded_parents, masks, mutation_indicators, new_base_idxs, wt_base_multiplier = batch
+        rates, csp = self.model(encoded_parents, masks, wt_base_multiplier)
+
+        # Existing mutation rate loss calculation
+        mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
+            dim=1, keepdim=True
+        )
+        mut_prob = 1 - torch.exp(-rates * mutation_freq)
+        mut_prob_masked = mut_prob[masks]
+        mutation_indicator_masked = mutation_indicators[masks].float()
+        rate_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
+
+        # Conditional substitution probability (CSP) loss calculation
+        # Mask the new_base_idxs to focus only on positions with mutations
+        mutated_positions_mask = mutation_indicators == 1
+        csp_masked = csp[mutated_positions_mask]
+        new_base_idxs_masked = new_base_idxs[mutated_positions_mask]
+        assert (new_base_idxs_masked >= 0).all()
+
+        csp_loss = self.xent_loss(csp_masked, new_base_idxs_masked)
+
+        total_loss = rate_loss + csp_loss
+
+        return total_loss
+
+def burrito_class_of_model(model):
+    if isinstance(model, models.RSCNNModel):
+        return RSSHMBurrito
+    else:
+        return SHMBurrito

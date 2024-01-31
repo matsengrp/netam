@@ -8,9 +8,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import seaborn as sns
 
-from netam import framework, models, rsmodels
+from netam import framework, models
 from netam.common import pick_device, parameter_count_of_model
-from netam.rsmodels import burrito_class_of_model
 
 
 class Experiment:
@@ -46,7 +45,7 @@ class Experiment:
                 filter_count=16,
                 dropout_prob=0.2,
             ),
-            f"{prename}_rscnn_med": rsmodels.RSCNNModel(
+            f"{prename}_rscnn_med": models.RSCNNModel(
                 kmer_length=3,
                 kernel_size=9,
                 embedding_dim=7,
@@ -136,7 +135,7 @@ class Experiment:
 
         our_burrito_params = deepcopy(self.burrito_params)
         our_burrito_params.update(training_params)
-        burrito_class = burrito_class_of_model(model)
+        burrito_class = framework.burrito_class_of_model(model)
         burrito = burrito_class(
             train_dataset, val_dataset, model, verbose=False, **our_burrito_params
         )
@@ -213,7 +212,8 @@ class Experiment:
 
     def calculate_loss(self, model, dataset):
         model.eval()
-        burrito = framework.SHMBurrito(
+        burrito_class = framework.burrito_class_of_model(model)
+        burrito = burrito_class(
             dataset, dataset, model, verbose=False, **self.burrito_params
         )
         loss = burrito.evaluate()

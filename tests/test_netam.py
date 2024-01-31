@@ -6,9 +6,8 @@ import torch
 
 import netam.framework as framework
 from netam.common import BIG
-from netam.framework import SHMoofDataset, SHMBurrito
-from netam.models import SHMoofModel
-from netam.rsmodels import RSCNNModel, RSSHMBurrito
+from netam.framework import SHMoofDataset, SHMBurrito, RSSHMBurrito
+from netam.models import SHMoofModel, RSCNNModel
 
 
 @pytest.fixture

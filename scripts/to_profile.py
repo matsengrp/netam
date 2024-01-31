@@ -1,6 +1,6 @@
-from netam import experiment, rsmodels
+from netam import experiment, models
 from netam.common import pick_device
-from netam.framework import load_shmoof_dataframes
+from netam.framework import RSSHMBurrito
 
 expt = experiment.Experiment()
 
@@ -16,7 +16,7 @@ val_data_by_kmer_length = expt.data_by_kmer_length_of(val_df)
 train_data = train_data_by_kmer_length[3]
 val_data = val_data_by_kmer_length[3]
 
-model = rsmodels.RSCNNModel(
+model = models.CNNModel(
                 kmer_length=3,
                 kernel_size=9,
                 embedding_dim=7,
@@ -27,6 +27,6 @@ model = rsmodels.RSCNNModel(
 # val_data.to("cpu")
 model.to(pick_device())
 
-burrito = rsmodels.RSSHMBurrito(train_data, val_data, model)
+burrito = RSSHMBurrito(train_data, val_data, model)
 burrito.train(epochs=10)
  
