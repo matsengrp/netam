@@ -63,7 +63,7 @@ class FivemerModel(KmerModel):
         super().__init__(kmer_length=5)
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
 
-    def forward(self, encoded_parents, masks):
+    def forward(self, encoded_parents, masks, wt_base_multiplier):
         log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze(-1)
         rates = torch.exp(log_kmer_rates)
         return rates
@@ -80,7 +80,7 @@ class SHMoofModel(KmerModel):
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
         self.log_site_rates = nn.Embedding(self.site_count, 1)
 
-    def forward(self, encoded_parents, masks):
+    def forward(self, encoded_parents, masks, wt_base_multiplier):
         log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze(-1)
         sequence_length = encoded_parents.size(1)
         positions = torch.arange(sequence_length, device=encoded_parents.device)
@@ -151,7 +151,7 @@ class CNNModel(KmerModel):
         self.dropout = nn.Dropout(dropout_prob)
         self.linear = nn.Linear(in_features=filter_count, out_features=1)
 
-    def forward(self, encoded_parents, masks):
+    def forward(self, encoded_parents, masks, wt_base_multiplier):
         kmer_embeds = self.kmer_embedding(encoded_parents)
         kmer_embeds = kmer_embeds.permute(0, 2, 1)  # Transpose for Conv1D
         conv_out = F.relu(self.conv(kmer_embeds))
@@ -181,7 +181,7 @@ class CNNPEModel(CNNModel):
         )
         self.pos_encoder = PositionalEncoding(embedding_dim, dropout=dropout_prob)
 
-    def forward(self, encoded_parents, masks):
+    def forward(self, encoded_parents, masks, wt_base_multiplier):
         kmer_embeds = self.kmer_embedding(encoded_parents)
         kmer_embeds = self.pos_encoder(kmer_embeds)
         kmer_embeds = kmer_embeds.permute(0, 2, 1)  # Transpose for Conv1D
