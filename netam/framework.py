@@ -409,7 +409,7 @@ class Burrito(ABC):
         Returns:
             float: Average loss.
         """
-        total_loss = 0.0
+        total_loss = None
         total_samples = 0
 
         if train_mode:
@@ -419,17 +419,20 @@ class Burrito(ABC):
 
         with torch.set_grad_enabled(train_mode):
             for batch in data_loader:
-                loss = torch.sum(self.loss_of_batch(batch))
+                loss = self.loss_of_batch(batch)
+                if total_loss is None:
+                    total_loss = torch.zeros_like(loss)
 
                 if train_mode:
                     max_grad_retries = 5
                     for grad_retry_count in range(max_grad_retries):
+                        summed_loss = torch.sum(loss) 
                         if hasattr(self.model, "regularization_loss"):
                             reg_loss = self.model.regularization_loss()
-                            loss += reg_loss
+                            summed_loss += reg_loss
 
                         self.optimizer.zero_grad()
-                        loss.backward()
+                        summed_loss.backward()
 
                         nan_in_gradients = False
                         for name, param in self.model.named_parameters():
@@ -446,7 +449,7 @@ class Burrito(ABC):
                                 print(
                                     f"Retrying gradient calculation ({grad_retry_count + 1}/{max_grad_retries}) with loss {loss.item()}"
                                 )
-                                loss = torch.sum(self.loss_of_batch(batch))
+                                loss = self.loss_of_batch(batch)
                             else:
                                 raise ValueError(f"Exceeded maximum gradient retries!")
 
@@ -458,11 +461,13 @@ class Burrito(ABC):
                 # If we multiply the loss by the batch size, then the loss will be the sum of the
                 # losses for each example in the batch. Then, when we divide by the number of
                 # examples in the dataset below, we will get the average loss per example.
-                total_loss += loss.item() * batch_size
+                total_loss += loss.detach() * batch_size
                 total_samples += batch_size
 
         average_loss = total_loss / total_samples
-        return average_loss
+        # TODO return multiple losses
+        return torch.sum(average_loss).item()
+
 
     def train(self, epochs):
         assert self.train_loader is not None, "No training data provided."
