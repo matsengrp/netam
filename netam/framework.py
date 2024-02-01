@@ -114,19 +114,18 @@ def create_mutation_and_base_indicator(parent, child, site_count):
         mutation_indicator += [0] * padding_length
         new_base_idxs += [-1] * padding_length
 
-    # Create the wt_base_multiplier tensor
-    wt_base_multiplier = torch.full(
-        (site_count, 4), 1.0
-    )  # Second dim is 4 for A, C, G, T
-    for i, is_mutated in enumerate(mutation_indicator):
-        if is_mutated and parent[i] in BASES:
-            wt_base_multiplier[i, BASES_AND_N_TO_INDEX[parent[i]]] = -BIG
-
     return (
         torch.tensor(mutation_indicator, dtype=torch.bool),
         torch.tensor(new_base_idxs, dtype=torch.int64),
-        wt_base_multiplier,
     )
+
+def wt_base_multiplier_of(parent, site_count):
+    wt_base_multiplier = torch.full((site_count, 4), 1.0)
+    for i, base in enumerate(parent):
+        if base in BASES:
+            wt_base_multiplier[i, BASES_AND_N_TO_INDEX[base]] = -BIG
+    return wt_base_multiplier
+
 
 
 class KmerSequenceEncoder:
@@ -162,7 +161,9 @@ class KmerSequenceEncoder:
 
         mask = mask_tensor_of(sequence, self.site_count)
 
-        return torch.tensor(kmer_indices, dtype=torch.int32), mask
+        wt_base_multiplier = wt_base_multiplier_of(sequence, self.site_count)
+
+        return torch.tensor(kmer_indices, dtype=torch.int32), mask, wt_base_multiplier
 
 
 class PlaceholderEncoder:
@@ -213,11 +214,10 @@ class SHMoofDataset(Dataset):
         wt_base_multiplier_vectors = []
 
         for _, row in dataframe.iterrows():
-            encoded_parent, mask = self.encoder.encode_sequence(row["parent"])
+            encoded_parent, mask, wt_base_multiplier = self.encoder.encode_sequence(row["parent"])
             (
                 mutation_indicator,
                 new_base_idxs,
-                wt_base_multiplier,
             ) = create_mutation_and_base_indicator(
                 row["parent"], row["child"], self.encoder.site_count
             )
@@ -257,17 +257,18 @@ class Crepe:
         self.model.to(device)
 
     def encode_sequences(self, sequences):
-        encoded_parents, masks = zip(
+        encoded_parents, masks, wt_base_multipliers = zip(
             *[self.encoder.encode_sequence(sequence) for sequence in sequences]
         )
-        return torch.stack(encoded_parents), torch.stack(masks)
+        return torch.stack(encoded_parents), torch.stack(masks), torch.stack(wt_base_multipliers)
 
     def __call__(self, sequences):
-        encoded_parents, masks = self.encode_sequences(sequences)
+        encoded_parents, masks, wt_base_multipliers = self.encode_sequences(sequences)
         if self.device is not None:
             encoded_parents = encoded_parents.to(self.device)
             masks = masks.to(self.device)
-        return self.model(encoded_parents, masks)
+            wt_base_multipliers = wt_base_multipliers.to(self.device)
+        return self.model(encoded_parents, masks, wt_base_multipliers)
 
     def save(self, prefix):
         torch.save(self.model.state_dict(), f"{prefix}.pth")

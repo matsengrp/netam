@@ -212,7 +212,13 @@ class CNN1merModel(CNNModel):
         self.kmer_embedding.weight = nn.Parameter(identity_matrix, requires_grad=False)
 
 
-class RSCNNModel(CNNModel):
+class RSCNNModel(CNNModel, ABC):
+    @abstractmethod
+    def forward(self, encoded_parents, masks, wt_base_multiplier):
+        pass
+
+
+class JoinedRSCNNModel(RSCNNModel):
     """
     This is a CNN model that uses k-mers as input and trains an embedding layer.
     """
@@ -249,6 +255,58 @@ class RSCNNModel(CNNModel):
 
         csp = F.softmax(csp_raw, dim=-1) * masks.unsqueeze(-1)
         rates = torch.exp(log_rates * masks)
+        return rates, csp
+
+
+class IndepRSCNNModel(RSCNNModel):
+    def __init__(self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1):
+        super().__init__(kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob)
+
+        # Duplicate the layers for the r_ component
+        self.r_kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
+        self.r_conv = nn.Conv1d(
+            in_channels=embedding_dim, 
+            out_channels=filter_count, 
+            kernel_size=kernel_size, 
+            padding="same"
+        )
+        self.r_dropout = nn.Dropout(dropout_prob)
+        self.r_linear = nn.Linear(in_features=filter_count, out_features=1)
+
+        # Duplicate the layers for the s_ component
+        self.s_kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
+        self.s_conv = nn.Conv1d(
+            in_channels=embedding_dim, 
+            out_channels=filter_count, 
+            kernel_size=kernel_size, 
+            padding="same"
+        )
+        self.s_dropout = nn.Dropout(dropout_prob)
+        self.s_linear = nn.Linear(in_features=filter_count, out_features=4)
+
+
+    def forward(self, encoded_parents, masks, wt_base_multiplier):
+        # Process for r_ component
+        r_kmer_embeds = self.r_kmer_embedding(encoded_parents)
+        r_kmer_embeds = r_kmer_embeds.permute(0, 2, 1)
+        r_conv_out = F.relu(self.r_conv(r_kmer_embeds))
+        r_conv_out = self.r_dropout(r_conv_out)
+        r_conv_out = r_conv_out.permute(0, 2, 1)
+
+        log_rates = self.r_linear(r_conv_out).squeeze(-1)
+        rates = torch.exp(log_rates * masks)
+
+        # Process for s_ component
+        s_kmer_embeds = self.s_kmer_embedding(encoded_parents)
+        s_kmer_embeds = s_kmer_embeds.permute(0, 2, 1)
+        s_conv_out = F.relu(self.s_conv(s_kmer_embeds))
+        s_conv_out = self.s_dropout(s_conv_out)
+        s_conv_out = s_conv_out.permute(0, 2, 1)
+
+        csp_raw = self.s_linear(s_conv_out)
+        csp_raw *= wt_base_multiplier
+        csp = F.softmax(csp_raw, dim=-1) * masks.unsqueeze(-1)
+
         return rates, csp
 
 
