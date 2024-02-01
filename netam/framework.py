@@ -419,7 +419,7 @@ class Burrito(ABC):
 
         with torch.set_grad_enabled(train_mode):
             for batch in data_loader:
-                loss = self.loss_of_batch(batch)
+                loss = torch.sum(self.loss_of_batch(batch))
 
                 if train_mode:
                     max_grad_retries = 5
@@ -446,7 +446,7 @@ class Burrito(ABC):
                                 print(
                                     f"Retrying gradient calculation ({grad_retry_count + 1}/{max_grad_retries}) with loss {loss.item()}"
                                 )
-                                loss = self.loss_of_batch(batch)
+                                loss = torch.sum(self.loss_of_batch(batch))
                             else:
                                 raise ValueError(f"Exceeded maximum gradient retries!")
 
@@ -574,8 +574,8 @@ class SHMBurrito(Burrito):
         )
 
     def loss_of_batch(self, batch):
-        encoded_parents, masks, mutation_indicators, _, _ = batch
-        rates = self.model(encoded_parents, masks)
+        encoded_parents, masks, mutation_indicators, _, wt_base_multiplier = batch
+        rates = self.model(encoded_parents, masks, wt_base_multiplier)
         mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
             dim=1, keepdim=True
         )
@@ -639,9 +639,7 @@ class RSSHMBurrito(SHMBurrito):
         csp_loss = csp_loss_weight * self.xent_loss(csp_masked, new_base_idxs_masked)
         # print(f"rate_loss: {rate_loss}, csp_loss: {csp_loss}")
 
-        total_loss = rate_loss + csp_loss
-
-        return total_loss
+        return torch.stack([rate_loss, csp_loss])
 
 
 def burrito_class_of_model(model):

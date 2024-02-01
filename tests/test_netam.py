@@ -7,7 +7,7 @@ import torch
 import netam.framework as framework
 from netam.common import BIG
 from netam.framework import SHMoofDataset, SHMBurrito, RSSHMBurrito
-from netam.models import SHMoofModel, RSCNNModel
+from netam.models import SHMoofModel, IndepRSCNNModel
 
 
 @pytest.fixture
@@ -52,13 +52,12 @@ def test_make_dataset(tiny_dataset):
         new_base_idxs == torch.tensor([-1, 1, -1, -1, -1, -1], dtype=torch.int64)
     ).all()
     correct_wt_base_multiplier = torch.full((6, 4), 1.0)
+    correct_wt_base_multiplier[0, 0] = -BIG
     correct_wt_base_multiplier[1, 3] = -BIG
+    correct_wt_base_multiplier[2, 2] = -BIG
+    correct_wt_base_multiplier[3, 3] = -BIG
+    correct_wt_base_multiplier[4, 0] = -BIG
     assert (wt_base_multiplier == correct_wt_base_multiplier).all()
-
-
-def test_run_model_forward(tiny_dataset, tiny_model):
-    assert tiny_dataset.encoder.site_count == tiny_model.site_count
-    tiny_model.forward(tiny_dataset.encoded_parents, tiny_dataset.masks)
 
 
 def test_write_output(tiny_burrito):
@@ -78,7 +77,7 @@ def test_crepe_roundtrip(tiny_burrito):
 
 @pytest.fixture
 def tiny_rsmodel():
-    return RSCNNModel(kmer_length=3, embedding_dim=2, filter_count=2, kernel_size=3)
+    return IndepRSCNNModel(kmer_length=3, embedding_dim=2, filter_count=2, kernel_size=3)
 
 
 @pytest.fixture

@@ -218,46 +218,6 @@ class RSCNNModel(CNNModel, ABC):
         pass
 
 
-class JoinedRSCNNModel(RSCNNModel):
-    """
-    This is a CNN model that uses k-mers as input and trains an embedding layer.
-    """
-
-    def __init__(
-        self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
-    ):
-        super().__init__(
-            kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
-        )
-        self.kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
-        self.conv = nn.Conv1d(
-            in_channels=embedding_dim,
-            out_channels=filter_count,
-            kernel_size=kernel_size,
-            padding="same",
-        )
-        self.dropout = nn.Dropout(dropout_prob)
-        self.r_linear = nn.Linear(in_features=filter_count, out_features=1)
-        self.s_linear = nn.Linear(in_features=filter_count, out_features=4)
-
-    def forward(self, encoded_parents, masks, wt_base_multiplier):
-        kmer_embeds = self.kmer_embedding(encoded_parents)
-        kmer_embeds = kmer_embeds.permute(0, 2, 1)  # Transpose for Conv1D
-        conv_out = F.relu(self.conv(kmer_embeds))
-        conv_out = self.dropout(conv_out)
-        conv_out = conv_out.permute(
-            0, 2, 1
-        )  # Transpose back for applying linear layers
-
-        log_rates = self.r_linear(conv_out).squeeze(-1)
-        csp_raw = self.s_linear(conv_out)
-        csp_raw *= wt_base_multiplier
-
-        csp = F.softmax(csp_raw, dim=-1) * masks.unsqueeze(-1)
-        rates = torch.exp(log_rates * masks)
-        return rates, csp
-
-
 class IndepRSCNNModel(RSCNNModel):
     def __init__(self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1):
         super().__init__(kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob)
@@ -304,8 +264,9 @@ class IndepRSCNNModel(RSCNNModel):
         s_conv_out = s_conv_out.permute(0, 2, 1)
 
         csp_raw = self.s_linear(s_conv_out)
-        csp_raw *= wt_base_multiplier
-        csp = F.softmax(csp_raw, dim=-1) * masks.unsqueeze(-1)
+        csp_raw *= masks.unsqueeze(-1)
+        # csp_raw *= wt_base_multiplier
+        csp = F.softmax(csp_raw, dim=-1)
 
         return rates, csp
 
