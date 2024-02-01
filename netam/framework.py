@@ -85,8 +85,8 @@ def create_mutation_and_base_indicator(parent, child, site_count):
     tensors: (mutation_indicator, new_base_idxs).
     The mutation_indicator tensor is a boolean tensor indicating whether
     each site is mutated. The new_base_idxs tensor is an integer tensor
-    that gives the index of the new base at each site. 
-    
+    that gives the index of the new base at each site.
+
     Note that we use -1 as a placeholder for non-mutated bases in the
     new_base_idxs tensor. This ensures that lack of masking will lead
     to an error.
@@ -115,6 +115,7 @@ def create_mutation_and_base_indicator(parent, child, site_count):
         torch.tensor(new_base_idxs, dtype=torch.int64),
     )
 
+
 def wt_base_modifier_of(parent, site_count):
     """
     The wt_base_modifier tensor is all 0s except for the wt base at each site,
@@ -129,7 +130,6 @@ def wt_base_modifier_of(parent, site_count):
         if base in BASES:
             wt_base_modifier[i, BASES_AND_N_TO_INDEX[base]] = -BIG
     return wt_base_modifier
-
 
 
 class KmerSequenceEncoder:
@@ -218,7 +218,9 @@ class SHMoofDataset(Dataset):
         wt_base_modifier_vectors = []
 
         for _, row in dataframe.iterrows():
-            encoded_parent, mask, wt_base_modifier = self.encoder.encode_sequence(row["parent"])
+            encoded_parent, mask, wt_base_modifier = self.encoder.encode_sequence(
+                row["parent"]
+            )
             (
                 mutation_indicator,
                 new_base_idxs,
@@ -264,7 +266,11 @@ class Crepe:
         encoded_parents, masks, wt_base_modifiers = zip(
             *[self.encoder.encode_sequence(sequence) for sequence in sequences]
         )
-        return torch.stack(encoded_parents), torch.stack(masks), torch.stack(wt_base_modifiers)
+        return (
+            torch.stack(encoded_parents),
+            torch.stack(masks),
+            torch.stack(wt_base_modifiers),
+        )
 
     def __call__(self, sequences):
         encoded_parents, masks, wt_base_modifiers = self.encode_sequences(sequences)
@@ -433,7 +439,7 @@ class Burrito(ABC):
                 if train_mode:
                     max_grad_retries = 5
                     for grad_retry_count in range(max_grad_retries):
-                        summed_loss = torch.sum(loss) 
+                        summed_loss = torch.sum(loss)
                         if hasattr(self.model, "regularization_loss"):
                             reg_loss = self.model.regularization_loss()
                             summed_loss += reg_loss
@@ -623,7 +629,7 @@ class RSSHMBurrito(SHMBurrito):
         self.xent_loss = nn.CrossEntropyLoss()
 
     def loss_of_batch(self, batch):
-        csp_loss_weight = 1./20
+        csp_loss_weight = 1.0 / 20
         (
             encoded_parents,
             masks,
@@ -656,8 +662,8 @@ class RSSHMBurrito(SHMBurrito):
 
     def write_loss(self, loss_name, loss, step):
         rate_loss, csp_loss = loss.unbind()
-        self.writer.add_scalar("Rate "+loss_name, rate_loss.item(), step)
-        self.writer.add_scalar("CSP "+loss_name, csp_loss.item(), step)
+        self.writer.add_scalar("Rate " + loss_name, rate_loss.item(), step)
+        self.writer.add_scalar("CSP " + loss_name, csp_loss.item(), step)
 
 
 def burrito_class_of_model(model):

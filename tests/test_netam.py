@@ -77,7 +77,9 @@ def test_crepe_roundtrip(tiny_burrito):
 
 @pytest.fixture
 def tiny_rsmodel():
-    return IndepRSCNNModel(kmer_length=3, embedding_dim=2, filter_count=2, kernel_size=3)
+    return IndepRSCNNModel(
+        kmer_length=3, embedding_dim=2, filter_count=2, kernel_size=3
+    )
 
 
 @pytest.fixture

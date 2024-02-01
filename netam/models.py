@@ -219,16 +219,20 @@ class RSCNNModel(CNNModel, ABC):
 
 
 class IndepRSCNNModel(RSCNNModel):
-    def __init__(self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1):
-        super().__init__(kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob)
+    def __init__(
+        self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
+    ):
+        super().__init__(
+            kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
+        )
 
         # Duplicate the layers for the r_ component
         self.r_kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
         self.r_conv = nn.Conv1d(
-            in_channels=embedding_dim, 
-            out_channels=filter_count, 
-            kernel_size=kernel_size, 
-            padding="same"
+            in_channels=embedding_dim,
+            out_channels=filter_count,
+            kernel_size=kernel_size,
+            padding="same",
         )
         self.r_dropout = nn.Dropout(dropout_prob)
         self.r_linear = nn.Linear(in_features=filter_count, out_features=1)
@@ -236,14 +240,13 @@ class IndepRSCNNModel(RSCNNModel):
         # Duplicate the layers for the s_ component
         self.s_kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
         self.s_conv = nn.Conv1d(
-            in_channels=embedding_dim, 
-            out_channels=filter_count, 
-            kernel_size=kernel_size, 
-            padding="same"
+            in_channels=embedding_dim,
+            out_channels=filter_count,
+            kernel_size=kernel_size,
+            padding="same",
         )
         self.s_dropout = nn.Dropout(dropout_prob)
         self.s_linear = nn.Linear(in_features=filter_count, out_features=4)
-
 
     def forward(self, encoded_parents, masks, wt_base_modifier):
         # Process for r_ component
