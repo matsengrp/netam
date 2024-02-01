@@ -395,6 +395,9 @@ class Burrito(ABC):
         print(f"Failed to train model to min_learning_rate after {max_tries} tries.")
         return train_history
 
+    def write_loss(self, loss_name, loss, step):
+        self.writer.add_scalar(loss_name, loss, step)
+
     def process_data_loader(self, data_loader, train_mode=False):
         """
         Process data through the model using the given data loader.
@@ -465,9 +468,13 @@ class Burrito(ABC):
                 total_samples += batch_size
 
         average_loss = total_loss / total_samples
+        if hasattr(self, "writer"):
+            if train_mode:
+                self.write_loss("Training loss", average_loss, self.global_epoch)
+            else:
+                self.write_loss("Validation loss", average_loss, self.global_epoch)
         # TODO return multiple losses
         return torch.sum(average_loss).item()
-
 
     def train(self, epochs):
         assert self.train_loader is not None, "No training data provided."
@@ -480,9 +487,6 @@ class Burrito(ABC):
         def record_losses(train_loss, val_loss):
             train_losses.append(train_loss)
             val_losses.append(val_loss)
-
-            self.writer.add_scalar("Training loss", train_loss, self.global_epoch)
-            self.writer.add_scalar("Validation loss", val_loss, self.global_epoch)
 
         # Record the initial loss before training.
         train_loss = self.process_data_loader(self.train_loader, train_mode=False)
@@ -645,6 +649,11 @@ class RSSHMBurrito(SHMBurrito):
         # print(f"rate_loss: {rate_loss}, csp_loss: {csp_loss}")
 
         return torch.stack([rate_loss, csp_loss])
+
+    def write_loss(self, loss_name, loss, step):
+        rate_loss, csp_loss = loss.unbind()
+        self.writer.add_scalar("Rate "+loss_name, rate_loss.item(), step)
+        self.writer.add_scalar("CSP "+loss_name, csp_loss.item(), step)
 
 
 def burrito_class_of_model(model):

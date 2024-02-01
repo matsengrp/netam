@@ -1,6 +1,6 @@
 from netam import experiment, models
 from netam.common import pick_device
-from netam.framework import RSSHMBurrito
+from netam.framework import load_shmoof_dataframes, RSSHMBurrito
 
 expt = experiment.Experiment()
 
@@ -16,7 +16,7 @@ val_data_by_kmer_length = expt.data_by_kmer_length_of(val_df)
 train_data = train_data_by_kmer_length[3]
 val_data = val_data_by_kmer_length[3]
 
-model = models.CNNModel(
+model = models.IndepRSCNNModel(
                 kmer_length=3,
                 kernel_size=9,
                 embedding_dim=7,
