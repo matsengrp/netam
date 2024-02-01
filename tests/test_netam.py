@@ -40,7 +40,7 @@ def test_make_dataset(tiny_dataset):
         mask,
         mutation_indicator,
         new_base_idxs,
-        wt_base_multiplier,
+        wt_base_modifier,
     ) = tiny_dataset[0]
     assert (mask == torch.tensor([1, 1, 1, 1, 1, 0], dtype=torch.bool)).all()
     # First kmer is NAT due to padding, but our encoding defaults this to "N".
@@ -51,13 +51,13 @@ def test_make_dataset(tiny_dataset):
     assert (
         new_base_idxs == torch.tensor([-1, 1, -1, -1, -1, -1], dtype=torch.int64)
     ).all()
-    correct_wt_base_multiplier = torch.full((6, 4), 1.0)
-    correct_wt_base_multiplier[0, 0] = -BIG
-    correct_wt_base_multiplier[1, 3] = -BIG
-    correct_wt_base_multiplier[2, 2] = -BIG
-    correct_wt_base_multiplier[3, 3] = -BIG
-    correct_wt_base_multiplier[4, 0] = -BIG
-    assert (wt_base_multiplier == correct_wt_base_multiplier).all()
+    correct_wt_base_modifier = torch.zeros((6, 4))
+    correct_wt_base_modifier[0, 0] = -BIG
+    correct_wt_base_modifier[1, 3] = -BIG
+    correct_wt_base_modifier[2, 2] = -BIG
+    correct_wt_base_modifier[3, 3] = -BIG
+    correct_wt_base_modifier[4, 0] = -BIG
+    assert (wt_base_modifier == correct_wt_base_modifier).all()
 
 
 def test_write_output(tiny_burrito):

@@ -82,15 +82,11 @@ def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
 def create_mutation_and_base_indicator(parent, child, site_count):
     """
     This function takes a parent and child sequence and returns a tuple of
-    tensors: (mutation_indicator, new_base_idxs, wt_base_multiplier).
+    tensors: (mutation_indicator, new_base_idxs).
     The mutation_indicator tensor is a boolean tensor indicating whether
     each site is mutated. The new_base_idxs tensor is an integer tensor
-    that gives the index of the new base at each site. The wt_base_multiplier
-    tensor is all 1s except for the wt base at each site, which is -BIG.
-
-    We will use wt_base_multiplier to zero out the prediction of WT at each
-    site.
-
+    that gives the index of the new base at each site. 
+    
     Note that we use -1 as a placeholder for non-mutated bases in the
     new_base_idxs tensor. This ensures that lack of masking will lead
     to an error.
@@ -119,12 +115,20 @@ def create_mutation_and_base_indicator(parent, child, site_count):
         torch.tensor(new_base_idxs, dtype=torch.int64),
     )
 
-def wt_base_multiplier_of(parent, site_count):
-    wt_base_multiplier = torch.full((site_count, 4), 1.0)
+def wt_base_modifier_of(parent, site_count):
+    """
+    The wt_base_modifier tensor is all 0s except for the wt base at each site,
+    which is -BIG.
+
+    We will use wt_base_modifier to zero out the prediction of WT at each
+    site.
+
+    """
+    wt_base_modifier = torch.zeros((site_count, 4))
     for i, base in enumerate(parent):
         if base in BASES:
-            wt_base_multiplier[i, BASES_AND_N_TO_INDEX[base]] = -BIG
-    return wt_base_multiplier
+            wt_base_modifier[i, BASES_AND_N_TO_INDEX[base]] = -BIG
+    return wt_base_modifier
 
 
 
@@ -161,9 +165,9 @@ class KmerSequenceEncoder:
 
         mask = mask_tensor_of(sequence, self.site_count)
 
-        wt_base_multiplier = wt_base_multiplier_of(sequence, self.site_count)
+        wt_base_modifier = wt_base_modifier_of(sequence, self.site_count)
 
-        return torch.tensor(kmer_indices, dtype=torch.int32), mask, wt_base_multiplier
+        return torch.tensor(kmer_indices, dtype=torch.int32), mask, wt_base_modifier
 
 
 class PlaceholderEncoder:
@@ -181,7 +185,7 @@ class SHMoofDataset(Dataset):
             self.masks,
             self.mutation_indicators,
             self.new_base_idxs,
-            self.wt_base_multiplier,
+            self.wt_base_modifier,
         ) = self.encode_pcps(dataframe)
 
     def __len__(self):
@@ -193,7 +197,7 @@ class SHMoofDataset(Dataset):
             self.masks[idx],
             self.mutation_indicators[idx],
             self.new_base_idxs[idx],
-            self.wt_base_multiplier[idx],
+            self.wt_base_modifier[idx],
         )
 
     def __repr__(self):
@@ -204,17 +208,17 @@ class SHMoofDataset(Dataset):
         self.masks = self.masks.to(device)
         self.mutation_indicators = self.mutation_indicators.to(device)
         self.new_base_idxs = self.new_base_idxs.to(device)
-        self.wt_base_multiplier = self.wt_base_multiplier.to(device)
+        self.wt_base_modifier = self.wt_base_modifier.to(device)
 
     def encode_pcps(self, dataframe):
         encoded_parents = []
         masks = []
         mutation_vectors = []
         new_base_idx_vectors = []
-        wt_base_multiplier_vectors = []
+        wt_base_modifier_vectors = []
 
         for _, row in dataframe.iterrows():
-            encoded_parent, mask, wt_base_multiplier = self.encoder.encode_sequence(row["parent"])
+            encoded_parent, mask, wt_base_modifier = self.encoder.encode_sequence(row["parent"])
             (
                 mutation_indicator,
                 new_base_idxs,
@@ -226,14 +230,14 @@ class SHMoofDataset(Dataset):
             masks.append(mask)
             mutation_vectors.append(mutation_indicator)
             new_base_idx_vectors.append(new_base_idxs)
-            wt_base_multiplier_vectors.append(wt_base_multiplier)
+            wt_base_modifier_vectors.append(wt_base_modifier)
 
         return (
             torch.stack(encoded_parents),
             torch.stack(masks),
             torch.stack(mutation_vectors),
             torch.stack(new_base_idx_vectors),
-            torch.stack(wt_base_multiplier_vectors),
+            torch.stack(wt_base_modifier_vectors),
         )
 
 
@@ -257,18 +261,18 @@ class Crepe:
         self.model.to(device)
 
     def encode_sequences(self, sequences):
-        encoded_parents, masks, wt_base_multipliers = zip(
+        encoded_parents, masks, wt_base_modifiers = zip(
             *[self.encoder.encode_sequence(sequence) for sequence in sequences]
         )
-        return torch.stack(encoded_parents), torch.stack(masks), torch.stack(wt_base_multipliers)
+        return torch.stack(encoded_parents), torch.stack(masks), torch.stack(wt_base_modifiers)
 
     def __call__(self, sequences):
-        encoded_parents, masks, wt_base_multipliers = self.encode_sequences(sequences)
+        encoded_parents, masks, wt_base_modifiers = self.encode_sequences(sequences)
         if self.device is not None:
             encoded_parents = encoded_parents.to(self.device)
             masks = masks.to(self.device)
-            wt_base_multipliers = wt_base_multipliers.to(self.device)
-        return self.model(encoded_parents, masks, wt_base_multipliers)
+            wt_base_modifiers = wt_base_modifiers.to(self.device)
+        return self.model(encoded_parents, masks, wt_base_modifiers)
 
     def save(self, prefix):
         torch.save(self.model.state_dict(), f"{prefix}.pth")
@@ -583,8 +587,8 @@ class SHMBurrito(Burrito):
         )
 
     def loss_of_batch(self, batch):
-        encoded_parents, masks, mutation_indicators, _, wt_base_multiplier = batch
-        rates = self.model(encoded_parents, masks, wt_base_multiplier)
+        encoded_parents, masks, mutation_indicators, _, wt_base_modifier = batch
+        rates = self.model(encoded_parents, masks, wt_base_modifier)
         mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
             dim=1, keepdim=True
         )
@@ -625,9 +629,9 @@ class RSSHMBurrito(SHMBurrito):
             masks,
             mutation_indicators,
             new_base_idxs,
-            wt_base_multiplier,
+            wt_base_modifier,
         ) = batch
-        rates, csp = self.model(encoded_parents, masks, wt_base_multiplier)
+        rates, csp = self.model(encoded_parents, masks, wt_base_modifier)
 
         # Existing mutation rate loss calculation
         mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
