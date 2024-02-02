@@ -1,6 +1,6 @@
 import torch
 
-from netam.framework import create_mutation_and_base_indicator
+from netam.framework import create_mutation_and_base_indicators
 
 
 # Pytest test function
@@ -14,7 +14,7 @@ def test_create_mutation_and_base_indicator():
         [-1, 2, -1, -1, -1, -1, 1, -1, -1], dtype=torch.int64
     )
 
-    mutation_indicator, new_base_idxs = create_mutation_and_base_indicator(
+    mutation_indicator, new_base_idxs = create_mutation_and_base_indicators(
         parent, child_, site_count
     )
 

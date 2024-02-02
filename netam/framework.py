@@ -79,7 +79,7 @@ def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
     return train_df, val_df
 
 
-def create_mutation_and_base_indicator(parent, child, site_count):
+def create_mutation_and_base_indicators(parent, child, site_count):
     """
     This function takes a parent and child sequence and returns a tuple of
     tensors: (mutation_indicator, new_base_idxs).
@@ -224,7 +224,7 @@ class SHMoofDataset(Dataset):
             (
                 mutation_indicator,
                 new_base_idxs,
-            ) = create_mutation_and_base_indicator(
+            ) = create_mutation_and_base_indicators(
                 row["parent"], row["child"], self.encoder.site_count
             )
 
@@ -637,7 +637,7 @@ class RSSHMBurrito(SHMBurrito):
             new_base_idxs,
             wt_base_modifier,
         ) = batch
-        rates, csp = self.model(encoded_parents, masks, wt_base_modifier)
+        rates, csp_logits = self.model(encoded_parents, masks, wt_base_modifier)
 
         # Existing mutation rate loss calculation
         mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
@@ -651,11 +651,11 @@ class RSSHMBurrito(SHMBurrito):
         # Conditional substitution probability (CSP) loss calculation
         # Mask the new_base_idxs to focus only on positions with mutations
         mutated_positions_mask = mutation_indicators == 1
-        csp_masked = csp[mutated_positions_mask]
+        csp_logits_masked = csp_logits[mutated_positions_mask]
         new_base_idxs_masked = new_base_idxs[mutated_positions_mask]
         assert (new_base_idxs_masked >= 0).all()
 
-        csp_loss = csp_loss_weight * self.xent_loss(csp_masked, new_base_idxs_masked)
+        csp_loss = csp_loss_weight * self.xent_loss(csp_logits_masked, new_base_idxs_masked)
         # print(f"rate_loss: {rate_loss}, csp_loss: {csp_loss}")
 
         return torch.stack([rate_loss, csp_loss])

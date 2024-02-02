@@ -266,12 +266,11 @@ class IndepRSCNNModel(RSCNNModel):
         s_conv_out = self.s_dropout(s_conv_out)
         s_conv_out = s_conv_out.permute(0, 2, 1)
 
-        csp_raw = self.s_linear(s_conv_out)
-        csp_raw *= masks.unsqueeze(-1)
-        csp_raw += wt_base_modifier
-        csp = F.softmax(csp_raw, dim=-1)
+        csp_logits = self.s_linear(s_conv_out)
+        csp_logits *= masks.unsqueeze(-1)
+        csp_logits += wt_base_modifier
 
-        return rates, csp
+        return rates, csp_logits
 
 
 # Issue #8
