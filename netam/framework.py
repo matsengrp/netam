@@ -395,7 +395,10 @@ class Burrito(ABC):
         )
 
     def multi_train(self, epochs, max_tries=3):
-        """Train the model. If lr isn't below min_lr, reset the optimizer and scheduler, and reset the model and resume training."""
+        """
+        Train the model. If lr isn't below min_lr, reset the optimizer and
+        scheduler, and reset the model and resume training.
+        """
         for i in range(max_tries):
             train_history = self.train(epochs)
             if self.optimizer.param_groups[0]["lr"] < self.min_learning_rate:
@@ -412,7 +415,7 @@ class Burrito(ABC):
     def write_loss(self, loss_name, loss, step):
         self.writer.add_scalar(loss_name, loss, step)
 
-    def process_data_loader(self, data_loader, train_mode=False, loss_weights=None):
+    def process_data_loader(self, data_loader, train_mode=False, loss_reduction=None):
         """
         Process data through the model using the given data loader.
         If train_mode is True, performs optimization steps.
@@ -422,8 +425,8 @@ class Burrito(ABC):
             train_mode (bool, optional): Whether to do optimization as part of
                 the forward pass. Defaults to False.
                 Note that this also applies the regularization loss if set to True.
-            loss_weights (Tensor, optional): Multiplicative weights for the
-                loss. Defaults to None.
+            loss_reduction (callable, optional): Function to reduce the loss
+                tensor to a scalar. If None, uses torch.sum. Defaults to None.
 
         Returns:
             float: Average loss.
@@ -436,10 +439,7 @@ class Burrito(ABC):
         else:
             self.model.eval()
 
-        if loss_weights is not None:
-            loss_weights = loss_weights.to(self.device)
-            loss_reduction = lambda x: torch.sum(x * loss_weights)
-        else:
+        if loss_reduction is None:
             loss_reduction = torch.sum
 
         with torch.set_grad_enabled(train_mode):
@@ -495,8 +495,7 @@ class Burrito(ABC):
                 self.write_loss("Training loss", average_loss, self.global_epoch)
             else:
                 self.write_loss("Validation loss", average_loss, self.global_epoch)
-        # TODO return multiple losses
-        return torch.sum(average_loss).item()
+        return loss_reduction(average_loss).to("cpu")
 
     def train(self, epochs):
         assert self.train_loader is not None, "No training data provided."
@@ -511,8 +510,8 @@ class Burrito(ABC):
             val_losses.append(val_loss)
 
         # Record the initial loss before training.
-        train_loss = self.process_data_loader(self.train_loader, train_mode=False)
-        val_loss = self.process_data_loader(self.val_loader, train_mode=False)
+        train_loss = self.process_data_loader(self.train_loader, train_mode=False).item()
+        val_loss = self.process_data_loader(self.val_loader, train_mode=False).item()
         record_losses(train_loss, val_loss)
 
         with tqdm(range(1, epochs + 1), desc="Epoch") as pbar:
@@ -523,8 +522,8 @@ class Burrito(ABC):
 
                 train_loss = self.process_data_loader(
                     self.train_loader, train_mode=True
-                )
-                val_loss = self.process_data_loader(self.val_loader, train_mode=False)
+                ).item()
+                val_loss = self.process_data_loader(self.val_loader, train_mode=False).item()
                 self.scheduler.step(val_loss)
                 record_losses(train_loss, val_loss)
                 self.global_epoch += 1
@@ -548,22 +547,13 @@ class Burrito(ABC):
         if best_model_state is not None:
             self.model.load_state_dict(best_model_state)
 
-        # Make sure that saving the best model state worked.
-        if (
-            best_val_loss != float("inf")  # We actually have a training step.
-            and abs(best_val_loss - self.evaluate()) > 1e-6
-        ):
-            print(
-                f"\nWarning: observed val loss is {best_val_loss} and saved loss is {self.evaluate()}"
-            )
-
         return pd.DataFrame({"train_loss": train_losses, "val_loss": val_losses})
 
     def evaluate(self):
         """
         Evaluate the model on the validation set.
         """
-        return self.process_data_loader(self.val_loader, train_mode=False)
+        return self.process_data_loader(self.val_loader, train_mode=False).item()
 
     def save_crepe(self, prefix):
         self.to_crepe().save(prefix)
@@ -639,11 +629,16 @@ class RSSHMBurrito(SHMBurrito):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.xent_loss = nn.CrossEntropyLoss()
+        self.loss_weights = torch.tensor([1.0, 0.05]).to(self.device)
 
-    def process_data_loader(self, data_loader, train_mode=False, loss_weights=None):
-        if loss_weights is None:
-            loss_weights = torch.tensor([1.0, 0.05])
-        return super().process_data_loader(data_loader, train_mode, loss_weights)
+    def process_data_loader(self, data_loader, train_mode=False, loss_reduction=None):
+        if loss_reduction is None:
+            loss_reduction = lambda x: torch.sum(x * self.loss_weights)
+
+        return super().process_data_loader(data_loader, train_mode, loss_reduction)
+
+    def evaluate(self):
+        return super().process_data_loader(self.val_loader, train_mode=False, loss_reduction=lambda x: x)
 
     def loss_of_batch(self, batch):
         (
