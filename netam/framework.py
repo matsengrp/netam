@@ -25,60 +25,6 @@ from netam.common import (
 from netam import models
 
 
-def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
-    """Load the shmoof dataframes from the csv_path and return train and validation dataframes.
-
-    Args:
-        csv_path (str): Path to the csv file containing the shmoof data.
-        sample_count (int, optional): Number of samples to use. Defaults to None.
-        val_nickname (str, optional): Nickname of the sample to use for validation. Defaults to "13".
-
-    Returns:
-        tuple: Tuple of train and validation dataframes.
-
-    Notes:
-
-    The sample nicknames are: `51` is the biggest one, `13` is the second biggest,
-    and `small` is the rest of the repertoires merged together.
-
-    If the nickname is `split`, then we do a random 80/20 split of the data.
-
-    Here are the value_counts:
-    51       22424
-    13       13186
-    59        4686
-    88        3067
-    97        3028
-    small     2625
-    """
-    full_shmoof_df = pd.read_csv(csv_path, index_col=0).reset_index(drop=True)
-
-    # only keep rows where parent is different than child
-    full_shmoof_df = full_shmoof_df[full_shmoof_df["parent"] != full_shmoof_df["child"]]
-
-    if sample_count is not None:
-        full_shmoof_df = full_shmoof_df.sample(sample_count)
-
-    if val_nickname == "split":
-        train_df = full_shmoof_df.sample(frac=0.8)
-        val_df = full_shmoof_df.drop(train_df.index)
-        return train_df, val_df
-
-    # else
-    full_shmoof_df["nickname"] = full_shmoof_df["sample_id"].astype(str).str[-2:]
-    for small_nickname in ["80", "37", "50", "07"]:
-        full_shmoof_df.loc[
-            full_shmoof_df["nickname"] == small_nickname, "nickname"
-        ] = "small"
-
-    val_df = full_shmoof_df[full_shmoof_df["nickname"] == val_nickname]
-    train_df = full_shmoof_df.drop(val_df.index)
-
-    assert len(val_df) > 0, f"No validation samples found with nickname {val_nickname}"
-
-    return train_df, val_df
-
-
 def create_mutation_and_base_indicators(parent, child, site_count):
     """
     This function takes a parent and child sequence and returns a tuple of
@@ -278,7 +224,7 @@ class Crepe:
             encoded_parents = encoded_parents.to(self.device)
             masks = masks.to(self.device)
             wt_base_modifiers = wt_base_modifiers.to(self.device)
-        return self.model(encoded_parents, masks, wt_base_modifiers)
+        return tuple(t.detach().cpu() for t in self.model(encoded_parents, masks, wt_base_modifiers))
 
     def save(self, prefix):
         torch.save(self.model.state_dict(), f"{prefix}.pth")
