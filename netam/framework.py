@@ -379,6 +379,10 @@ class Burrito(ABC):
         self.bce_loss = nn.BCELoss()
         self.global_epoch = 0
 
+    @property
+    def device(self):
+        return next(self.model.parameters()).device
+
     def reset_optimization(self):
         """Reset the optimizer and scheduler."""
         self.optimizer = torch.optim.Adam(
@@ -408,7 +412,7 @@ class Burrito(ABC):
     def write_loss(self, loss_name, loss, step):
         self.writer.add_scalar(loss_name, loss, step)
 
-    def process_data_loader(self, data_loader, train_mode=False):
+    def process_data_loader(self, data_loader, train_mode=False, loss_weights=None):
         """
         Process data through the model using the given data loader.
         If train_mode is True, performs optimization steps.
@@ -418,6 +422,8 @@ class Burrito(ABC):
             train_mode (bool, optional): Whether to do optimization as part of
                 the forward pass. Defaults to False.
                 Note that this also applies the regularization loss if set to True.
+            loss_weights (Tensor, optional): Multiplicative weights for the
+                loss. Defaults to None.
 
         Returns:
             float: Average loss.
@@ -430,6 +436,12 @@ class Burrito(ABC):
         else:
             self.model.eval()
 
+        if loss_weights is not None:
+            loss_weights = loss_weights.to(self.device)
+            loss_reduction = lambda x: torch.sum(x * loss_weights)
+        else:
+            loss_reduction = torch.sum
+
         with torch.set_grad_enabled(train_mode):
             for batch in data_loader:
                 loss = self.loss_of_batch(batch)
@@ -439,7 +451,7 @@ class Burrito(ABC):
                 if train_mode:
                     max_grad_retries = 5
                     for grad_retry_count in range(max_grad_retries):
-                        summed_loss = torch.sum(loss)
+                        summed_loss = loss_reduction(loss)
                         if hasattr(self.model, "regularization_loss"):
                             reg_loss = self.model.regularization_loss()
                             summed_loss += reg_loss
@@ -628,8 +640,12 @@ class RSSHMBurrito(SHMBurrito):
         super().__init__(*args, **kwargs)
         self.xent_loss = nn.CrossEntropyLoss()
 
+    def process_data_loader(self, data_loader, train_mode=False, loss_weights=None):
+        if loss_weights is None:
+            loss_weights = torch.tensor([1.0, 0.05])
+        return super().process_data_loader(data_loader, train_mode, loss_weights)
+
     def loss_of_batch(self, batch):
-        csp_loss_weight = 1.0 / 20
         (
             encoded_parents,
             masks,
@@ -655,8 +671,7 @@ class RSSHMBurrito(SHMBurrito):
         new_base_idxs_masked = new_base_idxs[mutated_positions_mask]
         assert (new_base_idxs_masked >= 0).all()
 
-        csp_loss = csp_loss_weight * self.xent_loss(csp_logits_masked, new_base_idxs_masked)
-        # print(f"rate_loss: {rate_loss}, csp_loss: {csp_loss}")
+        csp_loss = self.xent_loss(csp_logits_masked, new_base_idxs_masked)
 
         return torch.stack([rate_loss, csp_loss])
 
