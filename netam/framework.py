@@ -537,6 +537,7 @@ class SHMBurrito(Burrito):
         min_learning_rate=1e-4,
         l2_regularization_coeff=1e-6,
         verbose=False,
+        name="",
     ):
         super().__init__(
             train_dataset,
@@ -547,6 +548,7 @@ class SHMBurrito(Burrito):
             min_learning_rate,
             l2_regularization_coeff,
             verbose,
+            name,
         )
 
     def loss_of_batch(self, batch):
