@@ -30,8 +30,10 @@ def create_mutation_and_base_indicators(parent, child, site_count):
     This function takes a parent and child sequence and returns a tuple of
     tensors: (mutation_indicator, new_base_idxs).
     The mutation_indicator tensor is a boolean tensor indicating whether
-    each site is mutated. The new_base_idxs tensor is an integer tensor
-    that gives the index of the new base at each site.
+    each site is mutated. Both the parent and the child must be one of
+    A, C, G, T, to be considered a mutation.
+    The new_base_idxs tensor is an integer tensor that gives the index of the
+    new base at each site.
 
     Note that we use -1 as a placeholder for non-mutated bases in the
     new_base_idxs tensor. This ensures that lack of masking will lead
@@ -43,7 +45,7 @@ def create_mutation_and_base_indicators(parent, child, site_count):
     new_base_idxs = []
 
     for i in range(min(len(parent), site_count)):
-        if parent[i] != child[i]:
+        if parent[i] != child[i] and parent[i] in BASES and child[i] in BASES:
             mutation_indicator.append(1)
             new_base_idxs.append(BASES_AND_N_TO_INDEX[child[i]])
         else:
@@ -224,7 +226,10 @@ class Crepe:
             encoded_parents = encoded_parents.to(self.device)
             masks = masks.to(self.device)
             wt_base_modifiers = wt_base_modifiers.to(self.device)
-        return tuple(t.detach().cpu() for t in self.model(encoded_parents, masks, wt_base_modifiers))
+        return tuple(
+            t.detach().cpu()
+            for t in self.model(encoded_parents, masks, wt_base_modifiers)
+        )
 
     def save(self, prefix):
         torch.save(self.model.state_dict(), f"{prefix}.pth")
@@ -456,7 +461,9 @@ class Burrito(ABC):
             val_losses.append(val_loss)
 
         # Record the initial loss before training.
-        train_loss = self.process_data_loader(self.train_loader, train_mode=False).item()
+        train_loss = self.process_data_loader(
+            self.train_loader, train_mode=False
+        ).item()
         val_loss = self.process_data_loader(self.val_loader, train_mode=False).item()
         record_losses(train_loss, val_loss)
 
@@ -469,7 +476,9 @@ class Burrito(ABC):
                 train_loss = self.process_data_loader(
                     self.train_loader, train_mode=True
                 ).item()
-                val_loss = self.process_data_loader(self.val_loader, train_mode=False).item()
+                val_loss = self.process_data_loader(
+                    self.val_loader, train_mode=False
+                ).item()
                 self.scheduler.step(val_loss)
                 record_losses(train_loss, val_loss)
                 self.global_epoch += 1
@@ -584,7 +593,9 @@ class RSSHMBurrito(SHMBurrito):
         return super().process_data_loader(data_loader, train_mode, loss_reduction)
 
     def evaluate(self):
-        return super().process_data_loader(self.val_loader, train_mode=False, loss_reduction=lambda x: x)
+        return super().process_data_loader(
+            self.val_loader, train_mode=False, loss_reduction=lambda x: x
+        )
 
     def loss_of_batch(self, batch):
         (
