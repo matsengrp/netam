@@ -83,8 +83,7 @@ class RSFivemerModel(KmerModel):
 
     def forward(self, encoded_parents, masks, wt_base_modifier):
         log_kmer_rates = self.r_kmer_embedding(encoded_parents).squeeze(-1)
-        # TODO why not use log_rates times masks?
-        rates = torch.exp(log_kmer_rates)
+        rates = torch.exp(log_kmer_rates * masks)
         csp_logits = self.s_kmer_embedding(encoded_parents)
         csp_logits *= masks.unsqueeze(-1)
         csp_logits += wt_base_modifier
