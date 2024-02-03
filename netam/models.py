@@ -95,7 +95,6 @@ class RSFivemerModel(KmerModel):
         return torch.exp(self.r_kmer_embedding.weight).squeeze()
 
 
-
 class SHMoofModel(KmerModel):
     def __init__(self, kmer_length, site_count):
         super().__init__(kmer_length)
