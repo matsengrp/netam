@@ -59,6 +59,7 @@ class KmerModel(ModelBase):
 
 
 class FivemerModel(KmerModel):
+    # TODO shouldn't we do kmer length as below?
     def __init__(self):
         super().__init__(kmer_length=5)
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
@@ -71,6 +72,28 @@ class FivemerModel(KmerModel):
     @property
     def kmer_rates(self):
         return torch.exp(self.kmer_embedding.weight).squeeze()
+
+
+class RSFivemerModel(KmerModel):
+    def __init__(self, kmer_length=5):
+        assert kmer_length == 5
+        super().__init__(kmer_length=5)
+        self.r_kmer_embedding = nn.Embedding(self.kmer_count, 1)
+        self.s_kmer_embedding = nn.Embedding(self.kmer_count, 4)
+
+    def forward(self, encoded_parents, masks, wt_base_modifier):
+        log_kmer_rates = self.r_kmer_embedding(encoded_parents).squeeze(-1)
+        # TODO why not use log_rates times masks?
+        rates = torch.exp(log_kmer_rates)
+        csp_logits = self.s_kmer_embedding(encoded_parents)
+        csp_logits *= masks.unsqueeze(-1)
+        csp_logits += wt_base_modifier
+        return rates, csp_logits
+
+    @property
+    def kmer_rates(self):
+        return torch.exp(self.r_kmer_embedding.weight).squeeze()
+
 
 
 class SHMoofModel(KmerModel):
