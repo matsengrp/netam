@@ -165,7 +165,10 @@ class RSSHMoofModel(KmerModel):
         # Set WT base to have rate of 0 in log space.
         log_kmer_rates_per_base += wt_base_modifier
         log_kmer_rates = torch.logsumexp(log_kmer_rates_per_base, dim=-1)
-        assert log_kmer_rates.shape == (encoded_parents.size(0), encoded_parents.size(1))
+        assert log_kmer_rates.shape == (
+            encoded_parents.size(0),
+            encoded_parents.size(1),
+        )
 
         sequence_length = encoded_parents.size(1)
         positions = torch.arange(sequence_length, device=encoded_parents.device)
@@ -273,10 +276,12 @@ class RSCNNModel(CNNModel, ABC):
     def forward(self, encoded_parents, masks, wt_base_modifier):
         pass
 
+
 class JoinedRSCNNModel(RSCNNModel):
     """
     This is a CNN model that uses k-mers as input and trains an embedding layer.
     """
+
     def __init__(
         self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
     ):
@@ -299,7 +304,7 @@ class JoinedRSCNNModel(RSCNNModel):
         kmer_embeds = kmer_embeds.permute(0, 2, 1)  # Transpose for Conv1D
         conv_out = F.relu(self.conv(kmer_embeds))
         conv_out = self.dropout(conv_out)
-        conv_out = conv_out.permute(0, 2, 1)  
+        conv_out = conv_out.permute(0, 2, 1)
 
         log_rates = self.r_linear(conv_out).squeeze(-1)
         rates = torch.exp(log_rates * masks)
