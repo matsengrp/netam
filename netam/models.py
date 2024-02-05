@@ -153,6 +153,41 @@ class SHMoofModel(KmerModel):
         )
 
 
+class RSSHMoofModel(KmerModel):
+    def __init__(self, kmer_length, site_count):
+        super().__init__(kmer_length)
+        self.site_count = site_count
+        self.kmer_embedding = nn.Embedding(self.kmer_count, 4)
+        self.log_site_rates = nn.Embedding(self.site_count, 1)
+
+    def forward(self, encoded_parents, masks, wt_base_modifier):
+        log_kmer_rates_per_base = self.kmer_embedding(encoded_parents)
+        # Set WT base to have rate of 0 in log space.
+        log_kmer_rates_per_base += wt_base_modifier
+        log_kmer_rates = torch.logsumexp(log_kmer_rates_per_base, dim=-1)
+        assert log_kmer_rates.shape == (encoded_parents.size(0), encoded_parents.size(1))
+
+        sequence_length = encoded_parents.size(1)
+        positions = torch.arange(sequence_length, device=encoded_parents.device)
+        # When we transpose we get a tensor of shape [sequence_length, 1], which will broadcast
+        # to the shape of log_kmer_rates, repeating over the batch dimension.
+        log_site_rates = self.log_site_rates(positions).T
+        # Rates are the product of kmer and site rates.
+        rates = torch.exp(log_kmer_rates + log_site_rates)
+
+        csp_logits = log_kmer_rates_per_base * masks.unsqueeze(-1)
+        csp_logits += wt_base_modifier
+
+        return rates, csp_logits
+
+    @property
+    def hyperparameters(self):
+        return {
+            "kmer_length": self.kmer_length,
+            "site_count": self.site_count,
+        }
+
+
 class CNNModel(KmerModel):
     """
     This is a CNN model that uses k-mers as input and trains an embedding layer.
