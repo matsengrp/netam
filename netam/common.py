@@ -55,6 +55,10 @@ def mask_tensor_of(seq_str, length=None):
     return mask
 
 
+def informative_site_count(seq_str):
+    return sum(c != "N" for c in seq_str)
+
+
 def clamp_probability(x: Tensor) -> Tensor:
     return torch.clamp(x, min=SMALL_PROB, max=(1.0 - SMALL_PROB))
 
