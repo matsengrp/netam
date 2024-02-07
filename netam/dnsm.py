@@ -239,10 +239,8 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multipli
 
 
 class DNSMBurrito(framework.Burrito):
-    def __init__(self, *args, device=pick_device(), **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.device = device
-        self.model.to(self.device)
         self.wrapped_model = WrappedBinaryMutSel(self.model, weights_directory=None)
 
     def load_branch_lengths(self, in_csv_prefix):
@@ -401,11 +399,11 @@ class DNSMHyperBurrito(HyperBurrito):
         l2_regularization_coeff=1e-6,
         verbose=False,
     ):
+        model.to(device)
         burrito = DNSMBurrito(
             self.train_dataset,
             self.val_dataset,
             model,
-            device=device,
             batch_size=batch_size,
             learning_rate=learning_rate,
             min_learning_rate=min_learning_rate,

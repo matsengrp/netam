@@ -226,10 +226,10 @@ class Crepe:
             encoded_parents = encoded_parents.to(self.device)
             masks = masks.to(self.device)
             wt_base_modifiers = wt_base_modifiers.to(self.device)
-        return tuple(
-            t.detach().cpu()
-            for t in self.model(encoded_parents, masks, wt_base_modifiers)
-        )
+        with torch.no_grad():
+            outputs = self.model(encoded_parents, masks, wt_base_modifiers)
+            return tuple(t.detach().cpu() for t in outputs)
+
 
     def save(self, prefix):
         torch.save(self.model.state_dict(), f"{prefix}.pth")
@@ -248,6 +248,7 @@ class Crepe:
 
 
 def load_crepe(prefix, device=None):
+    assert crepe_exists(prefix), f"Crepe {prefix} not found."
     with open(f"{prefix}.yml", "r") as f:
         config = yaml.safe_load(f)
 
@@ -291,6 +292,19 @@ def load_crepe(prefix, device=None):
 
 def crepe_exists(prefix):
     return os.path.exists(f"{prefix}.yml") and os.path.exists(f"{prefix}.pth")
+
+
+def load_and_add_shm_model_outputs_to_pcp_df(pcp_df_path, crepe_prefix, device=None):
+    pcp_df = pd.read_csv(pcp_df_path, index_col=0).reset_index(drop=True)
+    crepe = load_crepe(crepe_prefix, device)
+    rates, csp_logits = crepe(pcp_df["parent"])
+    rates = rates.cpu().detach()
+    csps = torch.softmax(csp_logits, dim=-1).cpu().detach()
+    pcp_df["rates"] = [rates[i, : len(row["parent"])] for i, row in pcp_df.iterrows()]
+    pcp_df["subs_probs"] = [
+        csps[i, : len(row["parent"])] for i, row in pcp_df.iterrows()
+    ]
+    return pcp_df
 
 
 class Burrito(ABC):

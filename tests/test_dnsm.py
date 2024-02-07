@@ -4,7 +4,7 @@ import pytest
 
 from netam.framework import crepe_exists, load_crepe
 from netam.common import aa_idx_tensor_of_str_ambig, MAX_AMBIG_AA_IDX
-from netam.models import TransformerBinarySelectionModel
+from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dnsm import DNSMBurrito, train_test_datasets_of_pcp_df
 from epam.shmple_precompute import load_and_convert_to_tensors
 
@@ -32,7 +32,7 @@ def dnsm_burrito(pcp_df):
     """Fixture that returns the DNSM Burrito object."""
     train_dataset, val_dataset = train_test_datasets_of_pcp_df(pcp_df)
 
-    model = TransformerBinarySelectionModel(
+    model = TransformerBinarySelectionModelWiggleAct(
         nhead=2, d_model_per_head=4, dim_feedforward=256, layer_count=2
     )
 
@@ -43,7 +43,6 @@ def dnsm_burrito(pcp_df):
         batch_size=32,
         learning_rate=0.001,
         min_learning_rate=0.0001,
-        device="cpu",
     )
     burrito.joint_train(epochs=1, cycle_count=2)
     return burrito
@@ -55,7 +54,7 @@ def test_crepe_roundtrip(dnsm_burrito):
     assert crepe_exists(crepe_path)
     crepe = load_crepe(crepe_path)
     model = crepe.model
-    assert isinstance(model, TransformerBinarySelectionModel)
+    assert isinstance(model, TransformerBinarySelectionModelWiggleAct)
     assert dnsm_burrito.model.hyperparameters == model.hyperparameters
     model.to(dnsm_burrito.device)
     for t1, t2 in zip(
