@@ -236,7 +236,6 @@ class Crepe:
             outputs = self.model(encoded_parents, masks, wt_base_modifiers)
             return tuple(t.detach().cpu() for t in outputs)
 
-
     def save(self, prefix):
         torch.save(self.model.state_dict(), f"{prefix}.pth")
         with open(f"{prefix}.yml", "w") as f:
