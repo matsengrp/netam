@@ -25,7 +25,7 @@ from netam.common import (
 from netam import models
 
 
-def create_mutation_and_base_indicators(parent, child, site_count):
+def create_mutation_and_base_indicators(parent, child, site_count=None):
     """
     This function takes a parent and child sequence and returns a tuple of
     tensors: (mutation_indicator, new_base_idxs).
@@ -38,8 +38,14 @@ def create_mutation_and_base_indicators(parent, child, site_count):
     Note that we use -1 as a placeholder for non-mutated bases in the
     new_base_idxs tensor. This ensures that lack of masking will lead
     to an error.
+
+    If site_count is not None, then the tensors will be trimmed & padded to the
+    provided length.
     """
     assert len(parent) == len(child), f"{parent} and {child} are not the same length"
+
+    if site_count is None:
+        site_count = len(parent)
 
     mutation_indicator = []
     new_base_idxs = []
@@ -294,16 +300,21 @@ def crepe_exists(prefix):
     return os.path.exists(f"{prefix}.yml") and os.path.exists(f"{prefix}.pth")
 
 
+def trimmed_shm_model_outputs_of_crepe(crepe, parents):
+    rates, csp_logits = crepe(parents)
+    rates = rates.cpu().detach()
+    csps = torch.softmax(csp_logits, dim=-1).cpu().detach()
+    trimmed_rates = [rates[i, : len(parent)] for i, parent in enumerate(parents)]
+    trimmed_csps = [csps[i, : len(parent)] for i, parent in enumerate(parents)]
+    return trimmed_rates, trimmed_csps
+
+
 def load_and_add_shm_model_outputs_to_pcp_df(pcp_df_path, crepe_prefix, device=None):
     pcp_df = pd.read_csv(pcp_df_path, index_col=0).reset_index(drop=True)
     crepe = load_crepe(crepe_prefix, device)
-    rates, csp_logits = crepe(pcp_df["parent"])
-    rates = rates.cpu().detach()
-    csps = torch.softmax(csp_logits, dim=-1).cpu().detach()
-    pcp_df["rates"] = [rates[i, : len(row["parent"])] for i, row in pcp_df.iterrows()]
-    pcp_df["subs_probs"] = [
-        csps[i, : len(row["parent"])] for i, row in pcp_df.iterrows()
-    ]
+    rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent"])
+    pcp_df["rates"] = rates
+    pcp_df["subs_probs"] = csps
     return pcp_df
 
 
@@ -600,6 +611,7 @@ class RSSHMBurrito(SHMBurrito):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.xent_loss = nn.CrossEntropyLoss()
+        # TODO consider loss weights
         self.loss_weights = torch.tensor([1.0, 0.05]).to(self.device)
 
     def process_data_loader(self, data_loader, train_mode=False, loss_reduction=None):
