@@ -59,7 +59,6 @@ class KmerModel(ModelBase):
 
 
 class FivemerModel(KmerModel):
-    # TODO shouldn't we do kmer length as below?
     def __init__(self):
         super().__init__(kmer_length=5)
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
