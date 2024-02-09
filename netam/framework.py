@@ -25,7 +25,7 @@ from netam.common import (
 from netam import models
 
 
-def create_mutation_and_base_indicators(parent, child, site_count=None):
+def encode_mut_pos_and_base(parent, child, site_count=None):
     """
     This function takes a parent and child sequence and returns a tuple of
     tensors: (mutation_indicator, new_base_idxs).
@@ -177,7 +177,7 @@ class SHMoofDataset(Dataset):
             (
                 mutation_indicator,
                 new_base_idxs,
-            ) = create_mutation_and_base_indicators(
+            ) = encode_mut_pos_and_base(
                 row["parent"], row["child"], self.encoder.site_count
             )
 
