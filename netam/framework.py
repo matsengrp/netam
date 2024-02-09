@@ -77,10 +77,9 @@ def wt_base_modifier_of(parent, site_count):
 
     We will use wt_base_modifier to zero out the prediction of WT at each
     site.
-
     """
     wt_base_modifier = torch.zeros((site_count, 4))
-    for i, base in enumerate(parent):
+    for i, base in enumerate(parent[:site_count]):
         if base in BASES:
             wt_base_modifier[i, BASES_AND_N_TO_INDEX[base]] = -BIG
     return wt_base_modifier
