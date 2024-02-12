@@ -45,13 +45,6 @@ class Experiment:
                 filter_count=16,
                 dropout_prob=0.2,
             ),
-            #             f"{prename}_joi_rscnn_med": models.JoinedRSCNNModel(
-            #                 kmer_length=3,
-            #                 kernel_size=9,
-            #                 embedding_dim=7,
-            #                 filter_count=16,
-            #                 dropout_prob=0.2,
-            #             ),
             f"{prename}_ind_rscnn_med": models.IndepRSCNNModel(
                 kmer_length=3,
                 kernel_size=9,
