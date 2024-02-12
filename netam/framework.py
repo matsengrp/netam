@@ -609,8 +609,7 @@ class RSSHMBurrito(SHMBurrito):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.xent_loss = nn.CrossEntropyLoss()
-        # TODO consider loss weights
-        self.loss_weights = torch.tensor([1.0, 0.05]).to(self.device)
+        self.loss_weights = torch.tensor([1.0, 0.01]).to(self.device)
 
     def process_data_loader(self, data_loader, train_mode=False, loss_reduction=None):
         if loss_reduction is None:
