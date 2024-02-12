@@ -271,6 +271,15 @@ class CNN1merModel(CNNModel):
 
 
 class RSCNNModel(CNNModel, ABC):
+    """
+    The base class for all RSCNN models. These are CNN models that predict both
+    rates and CSP logits.
+
+    They differ in how much they share the weights between the r_ components
+    that predict rates, and the s_ components that predict CSP logits.
+
+    https://github.com/matsengrp/netam/pull/9#issuecomment-1939097576
+    """
     @abstractmethod
     def forward(self, encoded_parents, masks, wt_base_modifier):
         pass
@@ -278,7 +287,7 @@ class RSCNNModel(CNNModel, ABC):
 
 class JoinedRSCNNModel(RSCNNModel):
     """
-    This is a CNN model that uses k-mers as input and trains an embedding layer.
+    This model shares everything except the final linear layers.
     """
 
     def __init__(
@@ -316,6 +325,9 @@ class JoinedRSCNNModel(RSCNNModel):
 
 
 class HybridRSCNNModel(RSCNNModel):
+    """
+    This model shares the kmer_embedding only.
+    """
     def __init__(
         self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
     ):
@@ -364,6 +376,9 @@ class HybridRSCNNModel(RSCNNModel):
 
 
 class IndepRSCNNModel(RSCNNModel):
+    """
+    This model does not share any weights between the r_ and s_ components.
+    """
     def __init__(
         self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
     ):
