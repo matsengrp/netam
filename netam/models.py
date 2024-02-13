@@ -65,7 +65,7 @@ class FivemerModel(KmerModel):
 
     def forward(self, encoded_parents, masks, wt_base_modifier):
         log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze(-1)
-        rates = torch.exp(log_kmer_rates)
+        rates = torch.exp(log_kmer_rates * masks)
         return rates
 
     @property
@@ -110,7 +110,7 @@ class SHMoofModel(KmerModel):
         # to the shape of log_kmer_rates, repeating over the batch dimension.
         log_site_rates = self.log_site_rates.weight.T
         # Rates are the product of kmer and site rates.
-        rates = torch.exp(log_kmer_rates + log_site_rates)
+        rates = torch.exp((log_kmer_rates + log_site_rates) * masks)
         return rates
 
     @property
@@ -177,7 +177,7 @@ class RSSHMoofModel(KmerModel):
         # to the shape of log_kmer_rates, repeating over the batch dimension.
         log_site_rates = self.log_site_rates.weight.T
         # Rates are the product of kmer and site rates.
-        rates = torch.exp(log_kmer_rates + log_site_rates)
+        rates = torch.exp((log_kmer_rates + log_site_rates) * masks)
 
         csp_logits = log_kmer_rates_per_base * masks.unsqueeze(-1)
         csp_logits += wt_base_modifier
