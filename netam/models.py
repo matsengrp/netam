@@ -280,7 +280,8 @@ class RSCNNModel(CNNModel, ABC):
     They differ in how much they share the weights between the r_ components
     that predict rates, and the s_ components that predict CSP logits.
 
-    https://github.com/matsengrp/netam/pull/9#issuecomment-1939097576
+    See https://github.com/matsengrp/netam/pull/9#issuecomment-1939097576
+    for diagrams about the various models.
     """
     @abstractmethod
     def forward(self, encoded_parents, masks, wt_base_modifier):
