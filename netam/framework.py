@@ -425,13 +425,13 @@ class Burrito(ABC):
                 if train_mode:
                     max_grad_retries = 5
                     for grad_retry_count in range(max_grad_retries):
-                        summed_loss = loss_reduction(loss)
+                        scalar_loss = loss_reduction(loss)
                         if hasattr(self.model, "regularization_loss"):
                             reg_loss = self.model.regularization_loss()
-                            summed_loss += reg_loss
+                            scalar_loss += reg_loss
 
                         self.optimizer.zero_grad()
-                        summed_loss.backward()
+                        scalar_loss.backward()
 
                         nan_in_gradients = False
                         for name, param in self.model.named_parameters():
