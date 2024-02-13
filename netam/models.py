@@ -84,7 +84,11 @@ class RSFivemerModel(KmerModel):
         log_kmer_rates = self.r_kmer_embedding(encoded_parents).squeeze(-1)
         rates = torch.exp(log_kmer_rates * masks)
         csp_logits = self.s_kmer_embedding(encoded_parents)
+        # When we have an N, set all the CSP logits to 0, resulting in a uniform
+        # prediction. There is nothing to predict here.
         csp_logits *= masks.unsqueeze(-1)
+        # As described elsewhere, this makes the WT base have a probability of 0
+        # after softmax.
         csp_logits += wt_base_modifier
         return rates, csp_logits
 
@@ -163,6 +167,8 @@ class RSSHMoofModel(KmerModel):
         log_kmer_rates_per_base = self.kmer_embedding(encoded_parents)
         # Set WT base to have rate of 0 in log space.
         log_kmer_rates_per_base += wt_base_modifier
+        # Here we are summing over the per-base dimensions to get the per-kmer
+        # rates. We want to do so in linear, not log space.
         log_kmer_rates = torch.logsumexp(log_kmer_rates_per_base, dim=-1)
         assert log_kmer_rates.shape == (
             encoded_parents.size(0),
