@@ -75,8 +75,8 @@ def wt_base_modifier_of(parent, site_count):
     The wt_base_modifier tensor is all 0s except for the wt base at each site,
     which is -BIG.
 
-    We will use wt_base_modifier to zero out the prediction of WT at each
-    site.
+    We will add wt_base_modifier to the CSP logits. This will zero out the
+    prediction of WT at each site after softmax.
     """
     wt_base_modifier = torch.zeros((site_count, 4))
     for i, base in enumerate(parent[:site_count]):
