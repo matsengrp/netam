@@ -106,11 +106,9 @@ class SHMoofModel(KmerModel):
 
     def forward(self, encoded_parents, masks, wt_base_modifier):
         log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze(-1)
-        sequence_length = encoded_parents.size(1)
-        positions = torch.arange(sequence_length, device=encoded_parents.device)
-        # When we transpose we get a tensor of shape [sequence_length, 1], which will broadcast
+        # When we transpose we get a tensor of shape [site_count, 1], which will broadcast
         # to the shape of log_kmer_rates, repeating over the batch dimension.
-        log_site_rates = self.log_site_rates(positions).T
+        log_site_rates = self.log_site_rates.weight.T
         # Rates are the product of kmer and site rates.
         rates = torch.exp(log_kmer_rates + log_site_rates)
         return rates
@@ -175,11 +173,9 @@ class RSSHMoofModel(KmerModel):
             encoded_parents.size(1),
         )
 
-        sequence_length = encoded_parents.size(1)
-        positions = torch.arange(sequence_length, device=encoded_parents.device)
-        # When we transpose we get a tensor of shape [sequence_length, 1], which will broadcast
+        # When we transpose we get a tensor of shape [site_count, 1], which will broadcast
         # to the shape of log_kmer_rates, repeating over the batch dimension.
-        log_site_rates = self.log_site_rates(positions).T
+        log_site_rates = self.log_site_rates.weight.T
         # Rates are the product of kmer and site rates.
         rates = torch.exp(log_kmer_rates + log_site_rates)
 
@@ -474,9 +470,7 @@ class PersiteWrapper(ModelBase):
 
     def forward(self, encoded_parents, masks):
         base_model_rates = self.base_model(encoded_parents, masks)
-        sequence_length = encoded_parents.size(1)
-        positions = torch.arange(sequence_length, device=encoded_parents.device)
-        log_site_rates = self.log_site_rates(positions).T
+        log_site_rates = self.log_site_rates.weight.T
         rates = base_model_rates * torch.exp(log_site_rates)
         return rates
 
