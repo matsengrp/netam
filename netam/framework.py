@@ -646,8 +646,9 @@ class RSSHMBurrito(SHMBurrito):
         mutated_positions_mask = mutation_indicators == 1
         csp_logits_masked = csp_logits[mutated_positions_mask]
         new_base_idxs_masked = new_base_idxs[mutated_positions_mask]
+        # Recall that WT bases are encoded as -1 in new_base_idxs_masked, so
+        # this assert makes sure that the loss is masked out for WT bases.
         assert (new_base_idxs_masked >= 0).all()
-
         csp_loss = self.xent_loss(csp_logits_masked, new_base_idxs_masked)
 
         return torch.stack([rate_loss, csp_loss])
