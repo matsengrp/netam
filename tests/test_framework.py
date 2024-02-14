@@ -1,10 +1,9 @@
 import torch
 
-from netam.framework import create_mutation_and_base_indicators
+from netam.framework import encode_mut_pos_and_base
 
 
-# Pytest test function
-def test_create_mutation_and_base_indicator():
+def test_encode_mut_pos_and_base():
     parent = "ACGTACTG"
     child_ = "AGGTACCG"
     site_count = 9
@@ -14,7 +13,7 @@ def test_create_mutation_and_base_indicator():
         [-1, 2, -1, -1, -1, -1, 1, -1, -1], dtype=torch.int64
     )
 
-    mutation_indicator, new_base_idxs = create_mutation_and_base_indicators(
+    mutation_indicator, new_base_idxs = encode_mut_pos_and_base(
         parent, child_, site_count
     )
 
