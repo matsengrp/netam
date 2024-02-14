@@ -61,10 +61,12 @@ def test_make_dataset(tiny_dataset):
 
 
 def test_write_output(tiny_burrito):
+    os.makedirs("_ignore", exist_ok=True)
     tiny_burrito.model.write_shmoof_output("_ignore")
 
 
 def test_crepe_roundtrip(tiny_burrito):
+    os.makedirs("_ignore", exist_ok=True)
     tiny_burrito.save_crepe("_ignore/tiny_crepe")
     crepe = framework.load_crepe("_ignore/tiny_crepe")
     assert crepe.encoder.parameters["site_count"] == tiny_burrito.model.site_count
@@ -90,4 +92,5 @@ def tiny_rsburrito(tiny_dataset, tiny_val_dataset, tiny_rsmodel):
 
 
 def test_write_output(tiny_rsburrito):
+    os.makedirs("_ignore", exist_ok=True)
     tiny_rsburrito.save_crepe("_ignore/tiny_rscrepe")
