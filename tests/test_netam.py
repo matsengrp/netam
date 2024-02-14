@@ -59,7 +59,7 @@ def test_make_dataset(tiny_dataset):
     correct_wt_base_modifier[3, 3] = -BIG
     correct_wt_base_modifier[4, 0] = -BIG
     assert (wt_base_modifier == correct_wt_base_modifier).all()
-    assert branch_length == 1/5
+    assert branch_length == 1 / 5
 
 
 def test_write_output(tiny_burrito):

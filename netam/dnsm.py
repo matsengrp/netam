@@ -300,7 +300,6 @@ class DNSMBurrito(framework.Burrito):
         return optimize_branch_length(log_pcp_probability, starting_branch_length)
 
     def find_optimal_branch_lengths(self, dataset):
-        
         optimal_lengths = []
 
         for parent, child, rates, subs_probs, starting_length in tqdm(
@@ -325,7 +324,6 @@ class DNSMBurrito(framework.Burrito):
             )
 
         return np.array(optimal_lengths)
-
 
     def to_crepe(self):
         training_hyperparameters = {

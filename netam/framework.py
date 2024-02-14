@@ -324,7 +324,9 @@ def trimmed_shm_model_outputs_of_crepe(crepe, parents):
 
 
 def load_and_add_shm_model_outputs_to_pcp_df(pcp_df_path_gz, crepe_prefix, device=None):
-    pcp_df = pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0).reset_index(drop=True)
+    pcp_df = pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0).reset_index(
+        drop=True
+    )
     crepe = load_crepe(crepe_prefix, device)
     rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent"])
     pcp_df["rates"] = rates
@@ -590,7 +592,7 @@ class Burrito(ABC):
 
     def full_train(self, epochs=100):
         return self.joint_train(epochs=epochs)
-        
+
     @abstractmethod
     def loss_of_batch(self, batch):
         pass
@@ -626,7 +628,14 @@ class SHMBurrito(Burrito):
         )
 
     def loss_of_batch(self, batch):
-        encoded_parents, masks, mutation_indicators, _, wt_base_modifier, branch_lengths = batch
+        (
+            encoded_parents,
+            masks,
+            mutation_indicators,
+            _,
+            wt_base_modifier,
+            branch_lengths,
+        ) = batch
         rates = self.model(encoded_parents, masks, wt_base_modifier)
         mut_prob = 1 - torch.exp(-rates * branch_lengths.unsqueeze(-1))
         mut_prob_masked = mut_prob[masks]
