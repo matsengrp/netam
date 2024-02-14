@@ -299,25 +299,19 @@ class DNSMBurrito(framework.Burrito):
         )
         return optimize_branch_length(log_pcp_probability, starting_branch_length)
 
-    def find_optimal_branch_lengths(
-        self,
-        nt_parents,
-        nt_children,
-        all_rates,
-        all_subs_probs,
-        starting_branch_lengths,
-    ):
+    def find_optimal_branch_lengths(self, dataset):
+        
         optimal_lengths = []
 
         for parent, child, rates, subs_probs, starting_length in tqdm(
             zip(
-                nt_parents,
-                nt_children,
-                all_rates,
-                all_subs_probs,
-                starting_branch_lengths,
+                dataset.nt_parents,
+                dataset.nt_children,
+                dataset.all_rates,
+                dataset.all_subs_probs,
+                dataset.branch_lengths,
             ),
-            total=len(nt_parents),
+            total=len(dataset.nt_parents),
             desc="Finding optimal branch lengths",
         ):
             optimal_lengths.append(

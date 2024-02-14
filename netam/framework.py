@@ -563,13 +563,7 @@ class Burrito(ABC):
                 continue
             dataset = loader.dataset
             assert dataset.all_rates.device.type == "cpu"
-            dataset.branch_lengths = self.find_optimal_branch_lengths(
-                dataset.nt_parents,
-                dataset.nt_children,
-                dataset.all_rates,
-                dataset.all_subs_probs,
-                dataset.branch_lengths,
-            )
+            dataset.branch_lengths = self.find_optimal_branch_lengths(dataset)
         self.model.to(device)
 
     def mark_branch_lengths_optimized(self, cycle):
