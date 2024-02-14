@@ -203,6 +203,14 @@ class SHMoofDataset(Dataset):
             torch.tensor(branch_lengths),
         )
 
+    def export_branch_lengths(self, out_csv_path):
+        pd.DataFrame({"branch_length": self.branch_lengths}).to_csv(
+            out_csv_path, index=False
+        )
+
+    def load_branch_lengths(self, in_csv_path):
+        self.branch_lengths = pd.read_csv(in_csv_path)["branch_length"].values
+
 
 class Crepe:
     """
@@ -477,6 +485,7 @@ class Burrito(ABC):
                 self.write_loss("Training loss", average_loss, self.global_epoch)
             else:
                 self.write_loss("Validation loss", average_loss, self.global_epoch)
+        # TODO do we really want cpu here? Why?
         return loss_reduction(average_loss).to("cpu")
 
     def train(self, epochs):
@@ -544,12 +553,52 @@ class Burrito(ABC):
     def save_crepe(self, prefix):
         self.to_crepe().save(prefix)
 
+    def optimize_branch_lengths(self):
+        # We do the branch length optimization on CPU but want to restore the
+        # model to the device it was on before.
+        device = next(self.model.parameters()).device
+        self.model.to("cpu")
+        for loader in [self.train_loader, self.val_loader]:
+            if loader is None:
+                continue
+            dataset = loader.dataset
+            assert dataset.all_rates.device.type == "cpu"
+            dataset.branch_lengths = self.find_optimal_branch_lengths(
+                dataset.nt_parents,
+                dataset.nt_children,
+                dataset.all_rates,
+                dataset.all_subs_probs,
+                dataset.branch_lengths,
+            )
+        self.model.to(device)
+
+    def mark_branch_lengths_optimized(self, cycle):
+        self.writer.add_scalar("branch length optimization", cycle, self.global_epoch)
+
+    def joint_train(self, epochs=20, cycle_count=2):
+        """
+        Do joint optimization of model and branch lengths.
+        """
+        loss_history_l = []
+        self.mark_branch_lengths_optimized(0)
+        loss_history_l.append(self.train(3))
+        self.optimize_branch_lengths()
+        self.mark_branch_lengths_optimized(0)
+        for cycle in range(cycle_count):
+            self.mark_branch_lengths_optimized(cycle + 1)
+            self.reset_optimization()
+            loss_history_l.append(self.train(epochs))
+            if cycle < cycle_count - 1:
+                self.optimize_branch_lengths()
+            self.mark_branch_lengths_optimized(cycle + 1)
+
+        return pd.concat(loss_history_l, ignore_index=True)
+
+    def full_train(self, epochs=100):
+        return self.joint_train(epochs=epochs)
+        
     @abstractmethod
     def loss_of_batch(self, batch):
-        pass
-
-    @abstractmethod
-    def full_train(self, *args, **kwargs):
         pass
 
     @abstractmethod

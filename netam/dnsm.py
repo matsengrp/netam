@@ -332,49 +332,6 @@ class DNSMBurrito(framework.Burrito):
 
         return np.array(optimal_lengths)
 
-    def optimize_branch_lengths(self):
-        # We do the branch length optimization on CPU but want to restore the
-        # model to the device it was on before.
-        device = next(self.model.parameters()).device
-        self.model.to("cpu")
-        for loader in [self.train_loader, self.val_loader]:
-            if loader is None:
-                continue
-            dataset = loader.dataset
-            assert dataset.all_rates.device.type == "cpu"
-            dataset.branch_lengths = self.find_optimal_branch_lengths(
-                dataset.nt_parents,
-                dataset.nt_children,
-                dataset.all_rates,
-                dataset.all_subs_probs,
-                dataset.branch_lengths,
-            )
-        self.model.to(device)
-
-    def mark_branch_lengths_optimized(self, cycle):
-        self.writer.add_scalar("branch length optimization", cycle, self.global_epoch)
-
-    def joint_train(self, epochs=20, cycle_count=2):
-        """
-        Do joint optimization of model and branch lengths.
-        """
-        loss_history_l = []
-        self.mark_branch_lengths_optimized(0)
-        loss_history_l.append(self.train(3))
-        self.optimize_branch_lengths()
-        self.mark_branch_lengths_optimized(0)
-        for cycle in range(cycle_count):
-            self.mark_branch_lengths_optimized(cycle + 1)
-            self.reset_optimization()
-            loss_history_l.append(self.train(epochs))
-            if cycle < cycle_count - 1:
-                self.optimize_branch_lengths()
-            self.mark_branch_lengths_optimized(cycle + 1)
-
-        return pd.concat(loss_history_l, ignore_index=True)
-
-    def full_train(self, epochs=100):
-        return self.joint_train(epochs=epochs)
 
     def to_crepe(self):
         training_hyperparameters = {
