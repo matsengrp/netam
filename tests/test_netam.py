@@ -5,9 +5,9 @@ import pytest
 import torch
 
 import netam.framework as framework
-from netam.common import BASES
-from netam.framework import SHMoofDataset, SHMBurrito
-from netam.models import SHMoofModel
+from netam.common import BIG
+from netam.framework import SHMoofDataset, SHMBurrito, RSSHMBurrito
+from netam.models import SHMoofModel, IndepRSCNNModel
 
 
 @pytest.fixture
@@ -35,25 +35,38 @@ def tiny_burrito(tiny_dataset, tiny_val_dataset, tiny_model):
 
 
 def test_make_dataset(tiny_dataset):
-    encoded_parent, mask, mutation_indicator = tiny_dataset[0]
+    (
+        encoded_parent,
+        mask,
+        mutation_indicator,
+        new_base_idxs,
+        wt_base_modifier,
+    ) = tiny_dataset[0]
     assert (mask == torch.tensor([1, 1, 1, 1, 1, 0], dtype=torch.bool)).all()
     # First kmer is NAT due to padding, but our encoding defaults this to "N".
     assert encoded_parent[0].item() == tiny_dataset.encoder.kmer_to_index["N"]
     assert (
         mutation_indicator == torch.tensor([0, 1, 0, 0, 0, 0], dtype=torch.bool)
     ).all()
-
-
-def test_run_model_forward(tiny_dataset, tiny_model):
-    assert tiny_dataset.encoder.site_count == tiny_model.site_count
-    tiny_model.forward(tiny_dataset.encoded_parents, tiny_dataset.masks)
+    assert (
+        new_base_idxs == torch.tensor([-1, 1, -1, -1, -1, -1], dtype=torch.int64)
+    ).all()
+    correct_wt_base_modifier = torch.zeros((6, 4))
+    correct_wt_base_modifier[0, 0] = -BIG
+    correct_wt_base_modifier[1, 3] = -BIG
+    correct_wt_base_modifier[2, 2] = -BIG
+    correct_wt_base_modifier[3, 3] = -BIG
+    correct_wt_base_modifier[4, 0] = -BIG
+    assert (wt_base_modifier == correct_wt_base_modifier).all()
 
 
 def test_write_output(tiny_burrito):
+    os.makedirs("_ignore", exist_ok=True)
     tiny_burrito.model.write_shmoof_output("_ignore")
 
 
 def test_crepe_roundtrip(tiny_burrito):
+    os.makedirs("_ignore", exist_ok=True)
     tiny_burrito.save_crepe("_ignore/tiny_crepe")
     crepe = framework.load_crepe("_ignore/tiny_crepe")
     assert crepe.encoder.parameters["site_count"] == tiny_burrito.model.site_count
@@ -62,3 +75,22 @@ def test_crepe_roundtrip(tiny_burrito):
     assert torch.isclose(crepe.model.site_rates, tiny_burrito.model.site_rates).all()
     ## Assert that crepe.model is in eval mode
     assert not crepe.model.training
+
+
+@pytest.fixture
+def tiny_rsmodel():
+    return IndepRSCNNModel(
+        kmer_length=3, embedding_dim=2, filter_count=2, kernel_size=3
+    )
+
+
+@pytest.fixture
+def tiny_rsburrito(tiny_dataset, tiny_val_dataset, tiny_rsmodel):
+    burrito = RSSHMBurrito(tiny_dataset, tiny_val_dataset, tiny_rsmodel)
+    burrito.train(epochs=5)
+    return burrito
+
+
+def test_write_output(tiny_rsburrito):
+    os.makedirs("_ignore", exist_ok=True)
+    tiny_rsburrito.save_crepe("_ignore/tiny_rscrepe")

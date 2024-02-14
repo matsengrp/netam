@@ -38,14 +38,14 @@ class Experiment:
                 filter_count=14,
                 dropout_prob=0.1,
             ),
-            f"{prename}_cnn_med_orig": models.CNNModel(
-                kmer_length=3,
-                kernel_size=11,
-                embedding_dim=9,
-                filter_count=9,
-                dropout_prob=0.1,
-            ),
             f"{prename}_cnn_med": models.CNNModel(
+                kmer_length=3,
+                kernel_size=9,
+                embedding_dim=7,
+                filter_count=16,
+                dropout_prob=0.2,
+            ),
+            f"{prename}_ind_rscnn_med": models.IndepRSCNNModel(
                 kmer_length=3,
                 kernel_size=9,
                 embedding_dim=7,
@@ -135,7 +135,8 @@ class Experiment:
 
         our_burrito_params = deepcopy(self.burrito_params)
         our_burrito_params.update(training_params)
-        burrito = framework.SHMBurrito(
+        burrito_class = framework.burrito_class_of_model(model)
+        burrito = burrito_class(
             train_dataset, val_dataset, model, verbose=False, **our_burrito_params
         )
         train_history = burrito.multi_train(epochs=self.epochs)
@@ -211,7 +212,8 @@ class Experiment:
 
     def calculate_loss(self, model, dataset):
         model.eval()
-        burrito = framework.SHMBurrito(
+        burrito_class = framework.burrito_class_of_model(model)
+        burrito = burrito_class(
             dataset, dataset, model, verbose=False, **self.burrito_params
         )
         loss = burrito.evaluate()

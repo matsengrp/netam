@@ -7,8 +7,10 @@ import torch
 import torch.optim as optim
 from torch import nn, Tensor
 
+BIG = 1e9
 SMALL_PROB = 1e-6
 BASES = ["A", "C", "G", "T"]
+BASES_AND_N_TO_INDEX = {"A": 0, "C": 1, "G": 2, "T": 3, "N": 4}
 AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
 AA_STR_SORTED_AMBIG = AA_STR_SORTED + "X"
 MAX_AMBIG_AA_IDX = len(AA_STR_SORTED_AMBIG) - 1
@@ -51,6 +53,10 @@ def mask_tensor_of(seq_str, length=None):
         seq_str = seq_str[:length]
     mask[[c != "N" for c in seq_str]] = 1
     return mask
+
+
+def informative_site_count(seq_str):
+    return sum(c != "N" for c in seq_str)
 
 
 def clamp_probability(x: Tensor) -> Tensor:

@@ -14,75 +14,75 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from tensorboardX import SummaryWriter
 
-from netam.common import generate_kmers, kmer_to_index_of, mask_tensor_of
+from netam.common import (
+    generate_kmers,
+    kmer_to_index_of,
+    mask_tensor_of,
+    BASES,
+    BASES_AND_N_TO_INDEX,
+    BIG,
+)
 from netam import models
 
 
-def load_shmoof_dataframes(csv_path, sample_count=None, val_nickname="13"):
-    """Load the shmoof dataframes from the csv_path and return train and validation dataframes.
-
-    Args:
-        csv_path (str): Path to the csv file containing the shmoof data.
-        sample_count (int, optional): Number of samples to use. Defaults to None.
-        val_nickname (str, optional): Nickname of the sample to use for validation. Defaults to "13".
-
-    Returns:
-        tuple: Tuple of train and validation dataframes.
-
-    Notes:
-
-    The sample nicknames are: `51` is the biggest one, `13` is the second biggest,
-    and `small` is the rest of the repertoires merged together.
-
-    If the nickname is `split`, then we do a random 80/20 split of the data.
-
-    Here are the value_counts:
-    51       22424
-    13       13186
-    59        4686
-    88        3067
-    97        3028
-    small     2625
+def encode_mut_pos_and_base(parent, child, site_count=None):
     """
-    full_shmoof_df = pd.read_csv(csv_path, index_col=0).reset_index(drop=True)
+    This function takes a parent and child sequence and returns a tuple of
+    tensors: (mutation_indicator, new_base_idxs).
+    The mutation_indicator tensor is a boolean tensor indicating whether
+    each site is mutated. Both the parent and the child must be one of
+    A, C, G, T, to be considered a mutation.
+    The new_base_idxs tensor is an integer tensor that gives the index of the
+    new base at each site.
 
-    # only keep rows where parent is different than child
-    full_shmoof_df = full_shmoof_df[full_shmoof_df["parent"] != full_shmoof_df["child"]]
+    Note that we use -1 as a placeholder for non-mutated bases in the
+    new_base_idxs tensor. This ensures that lack of masking will lead
+    to an error.
 
-    if sample_count is not None:
-        full_shmoof_df = full_shmoof_df.sample(sample_count)
-
-    if val_nickname == "split":
-        train_df = full_shmoof_df.sample(frac=0.8)
-        val_df = full_shmoof_df.drop(train_df.index)
-        return train_df, val_df
-
-    # else
-    full_shmoof_df["nickname"] = full_shmoof_df["sample_id"].astype(str).str[-2:]
-    for small_nickname in ["80", "37", "50", "07"]:
-        full_shmoof_df.loc[
-            full_shmoof_df["nickname"] == small_nickname, "nickname"
-        ] = "small"
-
-    val_df = full_shmoof_df[full_shmoof_df["nickname"] == val_nickname]
-    train_df = full_shmoof_df.drop(val_df.index)
-
-    assert len(val_df) > 0, f"No validation samples found with nickname {val_nickname}"
-
-    return train_df, val_df
-
-
-def create_mutation_indicator(parent, child, site_count):
+    If site_count is not None, then the tensors will be trimmed & padded to the
+    provided length.
+    """
     assert len(parent) == len(child), f"{parent} and {child} are not the same length"
-    mutation_indicator = [
-        1 if parent[i] != child[i] else 0 for i in range(min(len(parent), site_count))
-    ]
 
-    # Pad the mutation indicator if necessary
+    if site_count is None:
+        site_count = len(parent)
+
+    mutation_indicator = []
+    new_base_idxs = []
+
+    for i in range(min(len(parent), site_count)):
+        if parent[i] != child[i] and parent[i] in BASES and child[i] in BASES:
+            mutation_indicator.append(1)
+            new_base_idxs.append(BASES_AND_N_TO_INDEX[child[i]])
+        else:
+            mutation_indicator.append(0)
+            new_base_idxs.append(-1)  # No mutation, so set to -1
+
+    # Pad the lists if necessary
     if len(mutation_indicator) < site_count:
-        mutation_indicator += [0] * (site_count - len(mutation_indicator))
+        padding_length = site_count - len(mutation_indicator)
+        mutation_indicator += [0] * padding_length
+        new_base_idxs += [-1] * padding_length
 
-    return torch.tensor(mutation_indicator, dtype=torch.bool)
+    return (
+        torch.tensor(mutation_indicator, dtype=torch.bool),
+        torch.tensor(new_base_idxs, dtype=torch.int64),
+    )
+
+
+def wt_base_modifier_of(parent, site_count):
+    """
+    The wt_base_modifier tensor is all 0s except for the wt base at each site,
+    which is -BIG.
+
+    We will add wt_base_modifier to the CSP logits. This will zero out the
+    prediction of WT at each site after softmax.
+    """
+    wt_base_modifier = torch.zeros((site_count, 4))
+    for i, base in enumerate(parent[:site_count]):
+        if base in BASES:
+            wt_base_modifier[i, BASES_AND_N_TO_INDEX[base]] = -BIG
+    return wt_base_modifier
 
 
 class KmerSequenceEncoder:
@@ -118,7 +118,9 @@ class KmerSequenceEncoder:
 
         mask = mask_tensor_of(sequence, self.site_count)
 
-        return torch.tensor(kmer_indices, dtype=torch.int32), mask
+        wt_base_modifier = wt_base_modifier_of(sequence, self.site_count)
+
+        return torch.tensor(kmer_indices, dtype=torch.int32), mask, wt_base_modifier
 
 
 class PlaceholderEncoder:
@@ -135,13 +137,21 @@ class SHMoofDataset(Dataset):
             self.encoded_parents,
             self.masks,
             self.mutation_indicators,
+            self.new_base_idxs,
+            self.wt_base_modifier,
         ) = self.encode_pcps(dataframe)
 
     def __len__(self):
         return len(self.encoded_parents)
 
     def __getitem__(self, idx):
-        return self.encoded_parents[idx], self.masks[idx], self.mutation_indicators[idx]
+        return (
+            self.encoded_parents[idx],
+            self.masks[idx],
+            self.mutation_indicators[idx],
+            self.new_base_idxs[idx],
+            self.wt_base_modifier[idx],
+        )
 
     def __repr__(self):
         return f"{self.__class__.__name__}(Size: {len(self)}) on {self.encoded_parents.device}"
@@ -150,26 +160,39 @@ class SHMoofDataset(Dataset):
         self.encoded_parents = self.encoded_parents.to(device)
         self.masks = self.masks.to(device)
         self.mutation_indicators = self.mutation_indicators.to(device)
+        self.new_base_idxs = self.new_base_idxs.to(device)
+        self.wt_base_modifier = self.wt_base_modifier.to(device)
 
     def encode_pcps(self, dataframe):
         encoded_parents = []
         masks = []
         mutation_vectors = []
+        new_base_idx_vectors = []
+        wt_base_modifier_vectors = []
 
         for _, row in dataframe.iterrows():
-            encoded_parent, mask = self.encoder.encode_sequence(row["parent"])
-            mutation_indicator = create_mutation_indicator(
+            encoded_parent, mask, wt_base_modifier = self.encoder.encode_sequence(
+                row["parent"]
+            )
+            (
+                mutation_indicator,
+                new_base_idxs,
+            ) = encode_mut_pos_and_base(
                 row["parent"], row["child"], self.encoder.site_count
             )
 
             encoded_parents.append(encoded_parent)
             masks.append(mask)
             mutation_vectors.append(mutation_indicator)
+            new_base_idx_vectors.append(new_base_idxs)
+            wt_base_modifier_vectors.append(wt_base_modifier)
 
         return (
             torch.stack(encoded_parents),
             torch.stack(masks),
             torch.stack(mutation_vectors),
+            torch.stack(new_base_idx_vectors),
+            torch.stack(wt_base_modifier_vectors),
         )
 
 
@@ -193,17 +216,24 @@ class Crepe:
         self.model.to(device)
 
     def encode_sequences(self, sequences):
-        encoded_parents, masks = zip(
+        encoded_parents, masks, wt_base_modifiers = zip(
             *[self.encoder.encode_sequence(sequence) for sequence in sequences]
         )
-        return torch.stack(encoded_parents), torch.stack(masks)
+        return (
+            torch.stack(encoded_parents),
+            torch.stack(masks),
+            torch.stack(wt_base_modifiers),
+        )
 
     def __call__(self, sequences):
-        encoded_parents, masks = self.encode_sequences(sequences)
+        encoded_parents, masks, wt_base_modifiers = self.encode_sequences(sequences)
         if self.device is not None:
             encoded_parents = encoded_parents.to(self.device)
             masks = masks.to(self.device)
-        return self.model(encoded_parents, masks)
+            wt_base_modifiers = wt_base_modifiers.to(self.device)
+        with torch.no_grad():
+            outputs = self.model(encoded_parents, masks, wt_base_modifiers)
+            return tuple(t.detach().cpu() for t in outputs)
 
     def save(self, prefix):
         torch.save(self.model.state_dict(), f"{prefix}.pth")
@@ -222,6 +252,7 @@ class Crepe:
 
 
 def load_crepe(prefix, device=None):
+    assert crepe_exists(prefix), f"Crepe {prefix} not found."
     with open(f"{prefix}.yml", "r") as f:
         config = yaml.safe_load(f)
 
@@ -267,6 +298,24 @@ def crepe_exists(prefix):
     return os.path.exists(f"{prefix}.yml") and os.path.exists(f"{prefix}.pth")
 
 
+def trimmed_shm_model_outputs_of_crepe(crepe, parents):
+    rates, csp_logits = crepe(parents)
+    rates = rates.cpu().detach()
+    csps = torch.softmax(csp_logits, dim=-1).cpu().detach()
+    trimmed_rates = [rates[i, : len(parent)] for i, parent in enumerate(parents)]
+    trimmed_csps = [csps[i, : len(parent)] for i, parent in enumerate(parents)]
+    return trimmed_rates, trimmed_csps
+
+
+def load_and_add_shm_model_outputs_to_pcp_df(pcp_df_path_gz, crepe_prefix, device=None):
+    pcp_df = pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0).reset_index(drop=True)
+    crepe = load_crepe(crepe_prefix, device)
+    rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent"])
+    pcp_df["rates"] = rates
+    pcp_df["subs_probs"] = csps
+    return pcp_df
+
+
 class Burrito(ABC):
     def __init__(
         self,
@@ -304,6 +353,10 @@ class Burrito(ABC):
         self.bce_loss = nn.BCELoss()
         self.global_epoch = 0
 
+    @property
+    def device(self):
+        return next(self.model.parameters()).device
+
     def reset_optimization(self):
         """Reset the optimizer and scheduler."""
         self.optimizer = torch.optim.Adam(
@@ -316,7 +369,10 @@ class Burrito(ABC):
         )
 
     def multi_train(self, epochs, max_tries=3):
-        """Train the model. If lr isn't below min_lr, reset the optimizer and scheduler, and reset the model and resume training."""
+        """
+        Train the model. If lr isn't below min_lr, reset the optimizer and
+        scheduler, and reset the model and resume training.
+        """
         for i in range(max_tries):
             train_history = self.train(epochs)
             if self.optimizer.param_groups[0]["lr"] < self.min_learning_rate:
@@ -330,7 +386,10 @@ class Burrito(ABC):
         print(f"Failed to train model to min_learning_rate after {max_tries} tries.")
         return train_history
 
-    def process_data_loader(self, data_loader, train_mode=False):
+    def write_loss(self, loss_name, loss, step):
+        self.writer.add_scalar(loss_name, loss, step)
+
+    def process_data_loader(self, data_loader, train_mode=False, loss_reduction=None):
         """
         Process data through the model using the given data loader.
         If train_mode is True, performs optimization steps.
@@ -340,11 +399,13 @@ class Burrito(ABC):
             train_mode (bool, optional): Whether to do optimization as part of
                 the forward pass. Defaults to False.
                 Note that this also applies the regularization loss if set to True.
+            loss_reduction (callable, optional): Function to reduce the loss
+                tensor to a scalar. If None, uses torch.sum. Defaults to None.
 
         Returns:
             float: Average loss.
         """
-        total_loss = 0.0
+        total_loss = None
         total_samples = 0
 
         if train_mode:
@@ -352,19 +413,25 @@ class Burrito(ABC):
         else:
             self.model.eval()
 
+        if loss_reduction is None:
+            loss_reduction = torch.sum
+
         with torch.set_grad_enabled(train_mode):
             for batch in data_loader:
                 loss = self.loss_of_batch(batch)
+                if total_loss is None:
+                    total_loss = torch.zeros_like(loss)
 
                 if train_mode:
                     max_grad_retries = 5
                     for grad_retry_count in range(max_grad_retries):
+                        scalar_loss = loss_reduction(loss)
                         if hasattr(self.model, "regularization_loss"):
                             reg_loss = self.model.regularization_loss()
-                            loss += reg_loss
+                            scalar_loss += reg_loss
 
                         self.optimizer.zero_grad()
-                        loss.backward()
+                        scalar_loss.backward()
 
                         nan_in_gradients = False
                         for name, param in self.model.named_parameters():
@@ -393,11 +460,16 @@ class Burrito(ABC):
                 # If we multiply the loss by the batch size, then the loss will be the sum of the
                 # losses for each example in the batch. Then, when we divide by the number of
                 # examples in the dataset below, we will get the average loss per example.
-                total_loss += loss.item() * batch_size
+                total_loss += loss.detach() * batch_size
                 total_samples += batch_size
 
         average_loss = total_loss / total_samples
-        return average_loss
+        if hasattr(self, "writer"):
+            if train_mode:
+                self.write_loss("Training loss", average_loss, self.global_epoch)
+            else:
+                self.write_loss("Validation loss", average_loss, self.global_epoch)
+        return loss_reduction(average_loss).to("cpu")
 
     def train(self, epochs):
         assert self.train_loader is not None, "No training data provided."
@@ -411,12 +483,11 @@ class Burrito(ABC):
             train_losses.append(train_loss)
             val_losses.append(val_loss)
 
-            self.writer.add_scalar("Training loss", train_loss, self.global_epoch)
-            self.writer.add_scalar("Validation loss", val_loss, self.global_epoch)
-
         # Record the initial loss before training.
-        train_loss = self.process_data_loader(self.train_loader, train_mode=False)
-        val_loss = self.process_data_loader(self.val_loader, train_mode=False)
+        train_loss = self.process_data_loader(
+            self.train_loader, train_mode=False
+        ).item()
+        val_loss = self.process_data_loader(self.val_loader, train_mode=False).item()
         record_losses(train_loss, val_loss)
 
         with tqdm(range(1, epochs + 1), desc="Epoch") as pbar:
@@ -427,8 +498,10 @@ class Burrito(ABC):
 
                 train_loss = self.process_data_loader(
                     self.train_loader, train_mode=True
-                )
-                val_loss = self.process_data_loader(self.val_loader, train_mode=False)
+                ).item()
+                val_loss = self.process_data_loader(
+                    self.val_loader, train_mode=False
+                ).item()
                 self.scheduler.step(val_loss)
                 record_losses(train_loss, val_loss)
                 self.global_epoch += 1
@@ -452,22 +525,13 @@ class Burrito(ABC):
         if best_model_state is not None:
             self.model.load_state_dict(best_model_state)
 
-        # Make sure that saving the best model state worked.
-        if (
-            best_val_loss != float("inf")  # We actually have a training step.
-            and abs(best_val_loss - self.evaluate()) > 1e-6
-        ):
-            print(
-                f"\nWarning: observed val loss is {best_val_loss} and saved loss is {self.evaluate()}"
-            )
-
         return pd.DataFrame({"train_loss": train_losses, "val_loss": val_losses})
 
     def evaluate(self):
         """
         Evaluate the model on the validation set.
         """
-        return self.process_data_loader(self.val_loader, train_mode=False)
+        return self.process_data_loader(self.val_loader, train_mode=False).item()
 
     def save_crepe(self, prefix):
         self.to_crepe().save(prefix)
@@ -496,6 +560,7 @@ class SHMBurrito(Burrito):
         min_learning_rate=1e-4,
         l2_regularization_coeff=1e-6,
         verbose=False,
+        name="",
     ):
         super().__init__(
             train_dataset,
@@ -506,11 +571,12 @@ class SHMBurrito(Burrito):
             min_learning_rate,
             l2_regularization_coeff,
             verbose,
+            name,
         )
 
     def loss_of_batch(self, batch):
-        encoded_parents, masks, mutation_indicators = batch
-        rates = self.model(encoded_parents, masks)
+        encoded_parents, masks, mutation_indicators, _, wt_base_modifier = batch
+        rates = self.model(encoded_parents, masks, wt_base_modifier)
         mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
             dim=1, keepdim=True
         )
@@ -537,3 +603,64 @@ class SHMBurrito(Burrito):
             self.train_loader.dataset.encoder.site_count,
         )
         return Crepe(encoder, self.model, training_hyperparameters)
+
+
+class RSSHMBurrito(SHMBurrito):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.xent_loss = nn.CrossEntropyLoss()
+        self.loss_weights = torch.tensor([1.0, 0.01]).to(self.device)
+
+    def process_data_loader(self, data_loader, train_mode=False, loss_reduction=None):
+        if loss_reduction is None:
+            loss_reduction = lambda x: torch.sum(x * self.loss_weights)
+
+        return super().process_data_loader(data_loader, train_mode, loss_reduction)
+
+    def evaluate(self):
+        return super().process_data_loader(
+            self.val_loader, train_mode=False, loss_reduction=lambda x: x
+        )
+
+    def loss_of_batch(self, batch):
+        (
+            encoded_parents,
+            masks,
+            mutation_indicators,
+            new_base_idxs,
+            wt_base_modifier,
+        ) = batch
+        rates, csp_logits = self.model(encoded_parents, masks, wt_base_modifier)
+
+        # Existing mutation rate loss calculation
+        mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
+            dim=1, keepdim=True
+        )
+        mut_prob = 1 - torch.exp(-rates * mutation_freq)
+        mut_prob_masked = mut_prob[masks]
+        mutation_indicator_masked = mutation_indicators[masks].float()
+        rate_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
+
+        # Conditional substitution probability (CSP) loss calculation
+        # Mask the new_base_idxs to focus only on positions with mutations
+        mutated_positions_mask = mutation_indicators == 1
+        csp_logits_masked = csp_logits[mutated_positions_mask]
+        new_base_idxs_masked = new_base_idxs[mutated_positions_mask]
+        # Recall that WT bases are encoded as -1 in new_base_idxs_masked, so
+        # this assert makes sure that the loss is masked out for WT bases.
+        assert (new_base_idxs_masked >= 0).all()
+        csp_loss = self.xent_loss(csp_logits_masked, new_base_idxs_masked)
+
+        return torch.stack([rate_loss, csp_loss])
+
+    def write_loss(self, loss_name, loss, step):
+        rate_loss, csp_loss = loss.unbind()
+        self.writer.add_scalar("Rate " + loss_name, rate_loss.item(), step)
+        self.writer.add_scalar("CSP " + loss_name, csp_loss.item(), step)
+
+
+def burrito_class_of_model(model):
+    if isinstance(model, models.RSCNNModel):
+        return RSSHMBurrito
+    else:
+        return SHMBurrito

@@ -63,14 +63,38 @@ class FivemerModel(KmerModel):
         super().__init__(kmer_length=5)
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
 
-    def forward(self, encoded_parents, masks):
+    def forward(self, encoded_parents, masks, wt_base_modifier):
         log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze(-1)
-        rates = torch.exp(log_kmer_rates)
+        rates = torch.exp(log_kmer_rates * masks)
         return rates
 
     @property
     def kmer_rates(self):
         return torch.exp(self.kmer_embedding.weight).squeeze()
+
+
+class RSFivemerModel(KmerModel):
+    def __init__(self, kmer_length=5):
+        assert kmer_length == 5
+        super().__init__(kmer_length=5)
+        self.r_kmer_embedding = nn.Embedding(self.kmer_count, 1)
+        self.s_kmer_embedding = nn.Embedding(self.kmer_count, 4)
+
+    def forward(self, encoded_parents, masks, wt_base_modifier):
+        log_kmer_rates = self.r_kmer_embedding(encoded_parents).squeeze(-1)
+        rates = torch.exp(log_kmer_rates * masks)
+        csp_logits = self.s_kmer_embedding(encoded_parents)
+        # When we have an N, set all the CSP logits to 0, resulting in a uniform
+        # prediction. There is nothing to predict here.
+        csp_logits *= masks.unsqueeze(-1)
+        # As described elsewhere, this makes the WT base have a probability of 0
+        # after softmax.
+        csp_logits += wt_base_modifier
+        return rates, csp_logits
+
+    @property
+    def kmer_rates(self):
+        return torch.exp(self.r_kmer_embedding.weight).squeeze()
 
 
 class SHMoofModel(KmerModel):
@@ -80,15 +104,13 @@ class SHMoofModel(KmerModel):
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
         self.log_site_rates = nn.Embedding(self.site_count, 1)
 
-    def forward(self, encoded_parents, masks):
+    def forward(self, encoded_parents, masks, wt_base_modifier):
         log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze(-1)
-        sequence_length = encoded_parents.size(1)
-        positions = torch.arange(sequence_length, device=encoded_parents.device)
-        # When we transpose we get a tensor of shape [sequence_length, 1], which will broadcast
+        # When we transpose we get a tensor of shape [site_count, 1], which will broadcast
         # to the shape of log_kmer_rates, repeating over the batch dimension.
-        log_site_rates = self.log_site_rates(positions).T
+        log_site_rates = self.log_site_rates.weight.T
         # Rates are the product of kmer and site rates.
-        rates = torch.exp(log_kmer_rates + log_site_rates)
+        rates = torch.exp((log_kmer_rates + log_site_rates) * masks)
         return rates
 
     @property
@@ -132,6 +154,44 @@ class SHMoofModel(KmerModel):
         )
 
 
+class RSSHMoofModel(KmerModel):
+    def __init__(self, kmer_length, site_count):
+        super().__init__(kmer_length)
+        self.site_count = site_count
+        self.kmer_embedding = nn.Embedding(self.kmer_count, 4)
+        self.log_site_rates = nn.Embedding(self.site_count, 1)
+
+    def forward(self, encoded_parents, masks, wt_base_modifier):
+        log_kmer_rates_per_base = self.kmer_embedding(encoded_parents)
+        # Set WT base to have rate of 0 in log space.
+        log_kmer_rates_per_base += wt_base_modifier
+        # Here we are summing over the per-base dimensions to get the per-kmer
+        # rates. We want to do so in linear, not log space.
+        log_kmer_rates = torch.logsumexp(log_kmer_rates_per_base, dim=-1)
+        assert log_kmer_rates.shape == (
+            encoded_parents.size(0),
+            encoded_parents.size(1),
+        )
+
+        # When we transpose we get a tensor of shape [site_count, 1], which will broadcast
+        # to the shape of log_kmer_rates, repeating over the batch dimension.
+        log_site_rates = self.log_site_rates.weight.T
+        # Rates are the product of kmer and site rates.
+        rates = torch.exp((log_kmer_rates + log_site_rates) * masks)
+
+        csp_logits = log_kmer_rates_per_base * masks.unsqueeze(-1)
+        csp_logits += wt_base_modifier
+
+        return rates, csp_logits
+
+    @property
+    def hyperparameters(self):
+        return {
+            "kmer_length": self.kmer_length,
+            "site_count": self.site_count,
+        }
+
+
 class CNNModel(KmerModel):
     """
     This is a CNN model that uses k-mers as input and trains an embedding layer.
@@ -151,7 +211,7 @@ class CNNModel(KmerModel):
         self.dropout = nn.Dropout(dropout_prob)
         self.linear = nn.Linear(in_features=filter_count, out_features=1)
 
-    def forward(self, encoded_parents, masks):
+    def forward(self, encoded_parents, masks, wt_base_modifier):
         kmer_embeds = self.kmer_embedding(encoded_parents)
         kmer_embeds = kmer_embeds.permute(0, 2, 1)  # Transpose for Conv1D
         conv_out = F.relu(self.conv(kmer_embeds))
@@ -181,7 +241,7 @@ class CNNPEModel(CNNModel):
         )
         self.pos_encoder = PositionalEncoding(embedding_dim, dropout=dropout_prob)
 
-    def forward(self, encoded_parents, masks):
+    def forward(self, encoded_parents, masks, wt_base_modifier):
         kmer_embeds = self.kmer_embedding(encoded_parents)
         kmer_embeds = self.pos_encoder(kmer_embeds)
         kmer_embeds = kmer_embeds.permute(0, 2, 1)  # Transpose for Conv1D
@@ -210,6 +270,170 @@ class CNN1merModel(CNNModel):
         # than trainable kmer embeddings.
         identity_matrix = torch.eye(embedding_dim)
         self.kmer_embedding.weight = nn.Parameter(identity_matrix, requires_grad=False)
+
+
+class RSCNNModel(CNNModel, ABC):
+    """
+    The base class for all RSCNN models. These are CNN models that predict both
+    rates and CSP logits.
+
+    They differ in how much they share the weights between the r_ components
+    that predict rates, and the s_ components that predict CSP logits.
+
+    See https://github.com/matsengrp/netam/pull/9#issuecomment-1939097576
+    for diagrams about the various models.
+    """
+    @abstractmethod
+    def forward(self, encoded_parents, masks, wt_base_modifier):
+        pass
+
+
+class JoinedRSCNNModel(RSCNNModel):
+    """
+    This model shares everything except the final linear layers.
+    """
+
+    def __init__(
+        self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
+    ):
+        super().__init__(
+            kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
+        )
+        self.kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
+        self.conv = nn.Conv1d(
+            in_channels=embedding_dim,
+            out_channels=filter_count,
+            kernel_size=kernel_size,
+            padding="same",
+        )
+        self.dropout = nn.Dropout(dropout_prob)
+        self.r_linear = nn.Linear(in_features=filter_count, out_features=1)
+        self.s_linear = nn.Linear(in_features=filter_count, out_features=4)
+
+    def forward(self, encoded_parents, masks, wt_base_modifier):
+        kmer_embeds = self.kmer_embedding(encoded_parents)
+        kmer_embeds = kmer_embeds.permute(0, 2, 1)  # Transpose for Conv1D
+        conv_out = F.relu(self.conv(kmer_embeds))
+        conv_out = self.dropout(conv_out)
+        conv_out = conv_out.permute(0, 2, 1)
+
+        log_rates = self.r_linear(conv_out).squeeze(-1)
+        rates = torch.exp(log_rates * masks)
+
+        csp_logits = self.s_linear(conv_out)
+        csp_logits *= masks.unsqueeze(-1)
+        csp_logits += wt_base_modifier
+
+        return rates, csp_logits
+
+
+class HybridRSCNNModel(RSCNNModel):
+    """
+    This model shares the kmer_embedding only.
+    """
+    def __init__(
+        self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
+    ):
+        super().__init__(
+            kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
+        )
+
+        self.kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
+        # Duplicate the layers for the r_ component
+        self.r_conv = nn.Conv1d(
+            in_channels=embedding_dim,
+            out_channels=filter_count,
+            kernel_size=kernel_size,
+            padding="same",
+        )
+        self.r_dropout = nn.Dropout(dropout_prob)
+        self.r_linear = nn.Linear(in_features=filter_count, out_features=1)
+
+        self.s_conv = nn.Conv1d(
+            in_channels=embedding_dim,
+            out_channels=filter_count,
+            kernel_size=kernel_size,
+            padding="same",
+        )
+        self.s_dropout = nn.Dropout(dropout_prob)
+        self.s_linear = nn.Linear(in_features=filter_count, out_features=4)
+
+    def forward(self, encoded_parents, masks, wt_base_modifier):
+        kmer_embeds = self.kmer_embedding(encoded_parents)
+        kmer_embeds = kmer_embeds.permute(0, 2, 1)
+        r_conv_out = F.relu(self.r_conv(kmer_embeds))
+        r_conv_out = self.r_dropout(r_conv_out)
+        r_conv_out = r_conv_out.permute(0, 2, 1)
+        s_conv_out = F.relu(self.s_conv(kmer_embeds))
+        s_conv_out = self.s_dropout(s_conv_out)
+        s_conv_out = s_conv_out.permute(0, 2, 1)
+
+        log_rates = self.r_linear(r_conv_out).squeeze(-1)
+        rates = torch.exp(log_rates * masks)
+
+        csp_logits = self.s_linear(s_conv_out)
+        csp_logits *= masks.unsqueeze(-1)
+        csp_logits += wt_base_modifier
+
+        return rates, csp_logits
+
+
+class IndepRSCNNModel(RSCNNModel):
+    """
+    This model does not share any weights between the r_ and s_ components.
+    """
+    def __init__(
+        self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
+    ):
+        super().__init__(
+            kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob
+        )
+
+        # Duplicate the layers for the r_ component
+        self.r_kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
+        self.r_conv = nn.Conv1d(
+            in_channels=embedding_dim,
+            out_channels=filter_count,
+            kernel_size=kernel_size,
+            padding="same",
+        )
+        self.r_dropout = nn.Dropout(dropout_prob)
+        self.r_linear = nn.Linear(in_features=filter_count, out_features=1)
+
+        # Duplicate the layers for the s_ component
+        self.s_kmer_embedding = nn.Embedding(self.kmer_count, embedding_dim)
+        self.s_conv = nn.Conv1d(
+            in_channels=embedding_dim,
+            out_channels=filter_count,
+            kernel_size=kernel_size,
+            padding="same",
+        )
+        self.s_dropout = nn.Dropout(dropout_prob)
+        self.s_linear = nn.Linear(in_features=filter_count, out_features=4)
+
+    def forward(self, encoded_parents, masks, wt_base_modifier):
+        # Process for r_ component
+        r_kmer_embeds = self.r_kmer_embedding(encoded_parents)
+        r_kmer_embeds = r_kmer_embeds.permute(0, 2, 1)
+        r_conv_out = F.relu(self.r_conv(r_kmer_embeds))
+        r_conv_out = self.r_dropout(r_conv_out)
+        r_conv_out = r_conv_out.permute(0, 2, 1)
+
+        log_rates = self.r_linear(r_conv_out).squeeze(-1)
+        rates = torch.exp(log_rates * masks)
+
+        # Process for s_ component
+        s_kmer_embeds = self.s_kmer_embedding(encoded_parents)
+        s_kmer_embeds = s_kmer_embeds.permute(0, 2, 1)
+        s_conv_out = F.relu(self.s_conv(s_kmer_embeds))
+        s_conv_out = self.s_dropout(s_conv_out)
+        s_conv_out = s_conv_out.permute(0, 2, 1)
+
+        csp_logits = self.s_linear(s_conv_out)
+        csp_logits *= masks.unsqueeze(-1)
+        csp_logits += wt_base_modifier
+
+        return rates, csp_logits
 
 
 # Issue #8
@@ -247,9 +471,7 @@ class PersiteWrapper(ModelBase):
 
     def forward(self, encoded_parents, masks):
         base_model_rates = self.base_model(encoded_parents, masks)
-        sequence_length = encoded_parents.size(1)
-        positions = torch.arange(sequence_length, device=encoded_parents.device)
-        log_site_rates = self.log_site_rates(positions).T
+        log_site_rates = self.log_site_rates.weight.T
         rates = base_model_rates * torch.exp(log_site_rates)
         return rates
 
