@@ -1,4 +1,4 @@
-import itertools
+import os
 
 import pandas as pd
 import pytest
@@ -41,6 +41,7 @@ def test_make_dataset(tiny_dataset):
         mutation_indicator,
         new_base_idxs,
         wt_base_modifier,
+        branch_length,
     ) = tiny_dataset[0]
     assert (mask == torch.tensor([1, 1, 1, 1, 1, 0], dtype=torch.bool)).all()
     # First kmer is NAT due to padding, but our encoding defaults this to "N".
@@ -58,6 +59,7 @@ def test_make_dataset(tiny_dataset):
     correct_wt_base_modifier[3, 3] = -BIG
     correct_wt_base_modifier[4, 0] = -BIG
     assert (wt_base_modifier == correct_wt_base_modifier).all()
+    assert branch_length == 1/5
 
 
 def test_write_output(tiny_burrito):

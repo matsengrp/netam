@@ -139,7 +139,9 @@ class SHMoofDataset(Dataset):
             self.mutation_indicators,
             self.new_base_idxs,
             self.wt_base_modifier,
+            self.branch_lengths,
         ) = self.encode_pcps(dataframe)
+        assert self.encoded_parents.shape[0] == self.branch_lengths.shape[0]
 
     def __len__(self):
         return len(self.encoded_parents)
@@ -151,6 +153,7 @@ class SHMoofDataset(Dataset):
             self.mutation_indicators[idx],
             self.new_base_idxs[idx],
             self.wt_base_modifier[idx],
+            self.branch_lengths[idx],
         )
 
     def __repr__(self):
@@ -162,6 +165,7 @@ class SHMoofDataset(Dataset):
         self.mutation_indicators = self.mutation_indicators.to(device)
         self.new_base_idxs = self.new_base_idxs.to(device)
         self.wt_base_modifier = self.wt_base_modifier.to(device)
+        self.branch_lengths = self.branch_lengths.to(device)
 
     def encode_pcps(self, dataframe):
         encoded_parents = []
@@ -169,6 +173,7 @@ class SHMoofDataset(Dataset):
         mutation_vectors = []
         new_base_idx_vectors = []
         wt_base_modifier_vectors = []
+        branch_lengths = []
 
         for _, row in dataframe.iterrows():
             encoded_parent, mask, wt_base_modifier = self.encoder.encode_sequence(
@@ -186,6 +191,8 @@ class SHMoofDataset(Dataset):
             mutation_vectors.append(mutation_indicator)
             new_base_idx_vectors.append(new_base_idxs)
             wt_base_modifier_vectors.append(wt_base_modifier)
+            # The initial branch lengths are the normalized number of mutations.
+            branch_lengths.append(mutation_indicator.sum() / mask.sum())
 
         return (
             torch.stack(encoded_parents),
@@ -193,6 +200,7 @@ class SHMoofDataset(Dataset):
             torch.stack(mutation_vectors),
             torch.stack(new_base_idx_vectors),
             torch.stack(wt_base_modifier_vectors),
+            torch.tensor(branch_lengths),
         )
 
 
@@ -575,12 +583,9 @@ class SHMBurrito(Burrito):
         )
 
     def loss_of_batch(self, batch):
-        encoded_parents, masks, mutation_indicators, _, wt_base_modifier = batch
+        encoded_parents, masks, mutation_indicators, _, wt_base_modifier, branch_lengths = batch
         rates = self.model(encoded_parents, masks, wt_base_modifier)
-        mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
-            dim=1, keepdim=True
-        )
-        mut_prob = 1 - torch.exp(-rates * mutation_freq)
+        mut_prob = 1 - torch.exp(-rates * branch_lengths.unsqueeze(-1))
         mut_prob_masked = mut_prob[masks]
         mutation_indicator_masked = mutation_indicators[masks].float()
         loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
@@ -629,14 +634,11 @@ class RSSHMBurrito(SHMBurrito):
             mutation_indicators,
             new_base_idxs,
             wt_base_modifier,
+            branch_lengths,
         ) = batch
         rates, csp_logits = self.model(encoded_parents, masks, wt_base_modifier)
 
-        # Existing mutation rate loss calculation
-        mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
-            dim=1, keepdim=True
-        )
-        mut_prob = 1 - torch.exp(-rates * mutation_freq)
+        mut_prob = 1 - torch.exp(-rates * branch_lengths.unsqueeze(-1))
         mut_prob_masked = mut_prob[masks]
         mutation_indicator_masked = mutation_indicators[masks].float()
         rate_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
