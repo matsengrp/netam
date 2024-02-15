@@ -205,10 +205,16 @@ class SHMoofDataset(Dataset):
             torch.tensor(branch_lengths),
         )
 
+    def normalized_mutation_frequency(self):
+        return self.mutation_indicators.sum(axis=1) / self.masks.sum(axis=1)
+
     def export_branch_lengths(self, out_csv_path):
-        pd.DataFrame({"branch_length": self.branch_lengths}).to_csv(
-            out_csv_path, index=False
-        )
+        pd.DataFrame(
+            {
+                "branch_length": self.branch_lengths,
+                "mut_freq": self.normalized_mutation_frequency(),
+            }
+        ).to_csv(out_csv_path, index=False)
 
     def load_branch_lengths(self, in_csv_path):
         self.branch_lengths = pd.read_csv(in_csv_path)["branch_length"].values
@@ -734,10 +740,13 @@ class RSSHMBurrito(SHMBurrito):
                     branch_length,
                 )
             )
-            return torch.sum(loss)
+            # TODO note we are only using the rate loss here
+            return -loss[0]
 
         # TODO seems like we could perhaps preserve the original gradient, or we should make branch lengths an np array or something.
-        return optimize_branch_length(log_pcp_probability, starting_branch_length.clone().detach().item())
+        return optimize_branch_length(
+            log_pcp_probability, starting_branch_length.clone().detach().item()
+        )
 
     def find_optimal_branch_lengths(self, dataset):
         optimal_lengths = []
@@ -782,6 +791,9 @@ class RSSHMBurrito(SHMBurrito):
         rate_loss, csp_loss = loss.unbind()
         self.writer.add_scalar("Rate " + loss_name, rate_loss.item(), step)
         self.writer.add_scalar("CSP " + loss_name, csp_loss.item(), step)
+
+    def full_train(self, *args, **kwargs):
+        return self.joint_train(*args, **kwargs)
 
 
 def burrito_class_of_model(model):
