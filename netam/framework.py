@@ -24,6 +24,8 @@ from netam.common import (
 )
 from netam import models
 
+from epam.torch_common import optimize_branch_length
+
 
 def encode_mut_pos_and_base(parent, child, site_count=None):
     """
@@ -564,8 +566,9 @@ class Burrito(ABC):
             if loader is None:
                 continue
             dataset = loader.dataset
-            assert dataset.all_rates.device.type == "cpu"
+            dataset.to("cpu")
             dataset.branch_lengths = self.find_optimal_branch_lengths(dataset)
+            dataset.to(device)
         self.model.to(device)
 
     def mark_branch_lengths_optimized(self, cycle):
@@ -706,6 +709,74 @@ class RSSHMBurrito(SHMBurrito):
         csp_loss = self.xent_loss(csp_logits_masked, new_base_idxs_masked)
 
         return torch.stack([rate_loss, csp_loss])
+
+    def _find_optimal_branch_length(
+        self,
+        encoded_parent,
+        mask,
+        mutation_indicator,
+        new_base_idx,
+        wt_base_modifier,
+        starting_branch_length,
+    ):
+        if torch.sum(mutation_indicator) == 0:
+            return 0.0
+
+        def log_pcp_probability(log_branch_length):
+            branch_length = torch.exp(log_branch_length)
+            loss = self.loss_of_batch(
+                (
+                    encoded_parent.unsqueeze(0),
+                    mask.unsqueeze(0),
+                    mutation_indicator.unsqueeze(0),
+                    new_base_idx.unsqueeze(0),
+                    wt_base_modifier.unsqueeze(0),
+                    branch_length,
+                )
+            )
+            return torch.sum(loss)
+
+        # TODO seems like we could perhaps preserve the original gradient, or we should make branch lengths an np array or something.
+        return optimize_branch_length(log_pcp_probability, starting_branch_length.clone().detach().item())
+
+    def find_optimal_branch_lengths(self, dataset):
+        optimal_lengths = []
+
+        self.model.freeze()
+
+        for (
+            encoded_parent,
+            mask,
+            mutation_indicator,
+            new_base_idx,
+            wt_base_modifier,
+            starting_branch_length,
+        ) in tqdm(
+            zip(
+                dataset.encoded_parents,
+                dataset.masks,
+                dataset.mutation_indicators,
+                dataset.new_base_idxs,
+                dataset.wt_base_modifier,
+                dataset.branch_lengths,
+            ),
+            total=len(dataset.encoded_parents),
+            desc="Finding optimal branch lengths",
+        ):
+            optimal_lengths.append(
+                self._find_optimal_branch_length(
+                    encoded_parent,
+                    mask,
+                    mutation_indicator,
+                    new_base_idx,
+                    wt_base_modifier,
+                    starting_branch_length,
+                )
+            )
+
+        self.model.unfreeze()
+
+        return torch.tensor(optimal_lengths)
 
     def write_loss(self, loss_name, loss, step):
         rate_loss, csp_loss = loss.unbind()

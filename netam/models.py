@@ -43,6 +43,20 @@ class ModelBase(nn.Module):
             else:
                 raise ValueError(f"Unrecognized layer type: {type(layer)}")
 
+    def freeze(self):
+        """
+        Freeze all parameters in the model, disabling gradient computations.
+        """
+        for param in self.parameters():
+            param.requires_grad = False
+    
+    def unfreeze(self):
+        """
+        Unfreeze all parameters in the model, enabling gradient computations.
+        """
+        for param in self.parameters():
+            param.requires_grad = True
+
 
 class KmerModel(ModelBase):
     def __init__(self, kmer_length):

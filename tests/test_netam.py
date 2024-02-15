@@ -89,7 +89,7 @@ def tiny_rsmodel():
 @pytest.fixture
 def tiny_rsburrito(tiny_dataset, tiny_val_dataset, tiny_rsmodel):
     burrito = RSSHMBurrito(tiny_dataset, tiny_val_dataset, tiny_rsmodel)
-    burrito.train(epochs=5)
+    burrito.joint_train(epochs=5)
     return burrito
 
 
