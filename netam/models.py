@@ -49,7 +49,7 @@ class ModelBase(nn.Module):
         """
         for param in self.parameters():
             param.requires_grad = False
-    
+
     def unfreeze(self):
         """
         Unfreeze all parameters in the model, enabling gradient computations.

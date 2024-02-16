@@ -573,7 +573,9 @@ class Burrito(ABC):
                 continue
             dataset = loader.dataset
             dataset.to("cpu")
-            dataset.branch_lengths = self.find_optimal_branch_lengths(dataset,learning_rate=0.01, optimization_tol=1e-5)
+            dataset.branch_lengths = self.find_optimal_branch_lengths(
+                dataset, learning_rate=0.01, optimization_tol=1e-5
+            )
             dataset.to(device)
         self.model.to(device)
 
@@ -728,9 +730,11 @@ class RSSHMBurrito(SHMBurrito):
         if torch.sum(mutation_indicator) == 0:
             return 0.0
 
-        rates, _ = self.model(encoded_parent.unsqueeze(0),
-                            mask.unsqueeze(0),
-                            wt_base_modifier.unsqueeze(0))
+        rates, _ = self.model(
+            encoded_parent.unsqueeze(0),
+            mask.unsqueeze(0),
+            wt_base_modifier.unsqueeze(0),
+        )
 
         rates = rates.squeeze().double()
         mutation_indicator_masked = mutation_indicator[mask].double()
@@ -743,7 +747,9 @@ class RSSHMBurrito(SHMBurrito):
             return -rate_loss
 
         return optimize_branch_length(
-            log_pcp_probability, starting_branch_length.double().item(), **optimization_kwargs
+            log_pcp_probability,
+            starting_branch_length.double().item(),
+            **optimization_kwargs,
         )
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
@@ -778,7 +784,7 @@ class RSSHMBurrito(SHMBurrito):
                     mutation_indicator,
                     wt_base_modifier,
                     starting_branch_length,
-                    **optimization_kwargs
+                    **optimization_kwargs,
                 )
             )
 
