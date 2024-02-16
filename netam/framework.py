@@ -721,36 +721,48 @@ class RSSHMBurrito(SHMBurrito):
         encoded_parent,
         mask,
         mutation_indicator,
-        new_base_idx,
         wt_base_modifier,
         starting_branch_length,
     ):
         if torch.sum(mutation_indicator) == 0:
             return 0.0
 
+        # TODO couldn't we just squeeze rates instead of all this unsqueezing?
+        rates, _ = self.model(encoded_parent.unsqueeze(0),
+                            mask.unsqueeze(0),
+                            wt_base_modifier.unsqueeze(0))
+
+        rates = rates.double()
+        mutation_indicator_masked = mutation_indicator.unsqueeze(0)[mask.unsqueeze(0)].float().double()  # Ensure mutation indicators are also in float64
+
         def log_pcp_probability(log_branch_length):
-            branch_length = torch.exp(log_branch_length)
-            loss = self.loss_of_batch(
-                (
-                    encoded_parent.unsqueeze(0),
-                    mask.unsqueeze(0),
-                    mutation_indicator.unsqueeze(0),
-                    new_base_idx.unsqueeze(0),
-                    wt_base_modifier.unsqueeze(0),
-                    branch_length,
-                )
-            )
-            # TODO note we are only using the rate loss here
-            return -loss[0]
+            # Assuming log_branch_length is already a float64 tensor
+            # Convert the branch length from log space
+            branch_length = torch.exp(log_branch_length.float()).double()  # Convert to float32 for model, then back to float64
+            
+            # Compute mutation probability
+            mut_prob = 1 - torch.exp(-rates * branch_length.unsqueeze(-1))
+            
+            # Apply mask and convert mutation indicators to float
+            mut_prob_masked = mut_prob[mask.unsqueeze(0)]
+            
+            # Calculate the rate loss directly
+            rate_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
+            
+            # Return the negative rate loss (assuming minimization)
+            return -rate_loss
 
         # TODO seems like we could perhaps preserve the original gradient, or we should make branch lengths an np array or something.
         return optimize_branch_length(
-            log_pcp_probability, starting_branch_length.clone().detach().item()
+            log_pcp_probability, starting_branch_length.clone().detach().item(),
+            learning_rate=0.01,
+            optimization_tol=1e-5,
         )
 
     def find_optimal_branch_lengths(self, dataset):
         optimal_lengths = []
 
+        self.model.eval()
         self.model.freeze()
 
         for (
@@ -777,7 +789,6 @@ class RSSHMBurrito(SHMBurrito):
                     encoded_parent,
                     mask,
                     mutation_indicator,
-                    new_base_idx,
                     wt_base_modifier,
                     starting_branch_length,
                 )
