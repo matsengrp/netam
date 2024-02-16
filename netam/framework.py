@@ -762,7 +762,6 @@ class RSSHMBurrito(SHMBurrito):
             encoded_parent,
             mask,
             mutation_indicator,
-            new_base_idx,
             wt_base_modifier,
             starting_branch_length,
         ) in tqdm(
@@ -770,7 +769,6 @@ class RSSHMBurrito(SHMBurrito):
                 dataset.encoded_parents,
                 dataset.masks,
                 dataset.mutation_indicators,
-                dataset.new_base_idxs,
                 dataset.wt_base_modifier,
                 dataset.branch_lengths,
             ),
