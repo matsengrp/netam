@@ -727,34 +727,22 @@ class RSSHMBurrito(SHMBurrito):
         if torch.sum(mutation_indicator) == 0:
             return 0.0
 
-        # TODO couldn't we just squeeze rates instead of all this unsqueezing?
         rates, _ = self.model(encoded_parent.unsqueeze(0),
                             mask.unsqueeze(0),
                             wt_base_modifier.unsqueeze(0))
 
-        rates = rates.double()
-        mutation_indicator_masked = mutation_indicator.unsqueeze(0)[mask.unsqueeze(0)].float().double()  # Ensure mutation indicators are also in float64
+        rates = rates.squeeze().double()
+        mutation_indicator_masked = mutation_indicator[mask].double()
 
         def log_pcp_probability(log_branch_length):
-            # Assuming log_branch_length is already a float64 tensor
-            # Convert the branch length from log space
-            branch_length = torch.exp(log_branch_length.float()).double()  # Convert to float32 for model, then back to float64
-            
-            # Compute mutation probability
-            mut_prob = 1 - torch.exp(-rates * branch_length.unsqueeze(-1))
-            
-            # Apply mask and convert mutation indicators to float
-            mut_prob_masked = mut_prob[mask.unsqueeze(0)]
-            
-            # Calculate the rate loss directly
+            branch_length = torch.exp(log_branch_length)
+            mut_prob = 1 - torch.exp(-rates * branch_length)
+            mut_prob_masked = mut_prob[mask]
             rate_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
-            
-            # Return the negative rate loss (assuming minimization)
             return -rate_loss
 
-        # TODO seems like we could perhaps preserve the original gradient, or we should make branch lengths an np array or something.
         return optimize_branch_length(
-            log_pcp_probability, starting_branch_length.clone().detach().item(),
+            log_pcp_probability, starting_branch_length.double().item(),
             learning_rate=0.01,
             optimization_tol=1e-5,
         )
