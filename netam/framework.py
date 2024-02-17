@@ -495,8 +495,7 @@ class Burrito(ABC):
                 self.write_loss("Training loss", average_loss, self.global_epoch)
             else:
                 self.write_loss("Validation loss", average_loss, self.global_epoch)
-        # TODO do we really want cpu here? Why?
-        return loss_reduction(average_loss).to("cpu")
+        return loss_reduction(average_loss)
 
     def train(self, epochs):
         assert self.train_loader is not None, "No training data provided."
