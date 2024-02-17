@@ -118,11 +118,9 @@ class KmerSequenceEncoder:
             for i in range(self.site_count)
         ]
 
-        mask = mask_tensor_of(sequence, self.site_count)
-
         wt_base_modifier = wt_base_modifier_of(sequence, self.site_count)
 
-        return torch.tensor(kmer_indices, dtype=torch.int32), mask, wt_base_modifier
+        return torch.tensor(kmer_indices, dtype=torch.int32), wt_base_modifier
 
 
 class PlaceholderEncoder:
@@ -178,9 +176,10 @@ class SHMoofDataset(Dataset):
         branch_lengths = []
 
         for _, row in dataframe.iterrows():
-            encoded_parent, mask, wt_base_modifier = self.encoder.encode_sequence(
+            encoded_parent, wt_base_modifier = self.encoder.encode_sequence(
                 row["parent"]
             )
+            mask = mask_tensor_of(row["child"], self.encoder.site_count)
             (
                 mutation_indicator,
                 new_base_idxs,
@@ -240,9 +239,10 @@ class Crepe:
         self.model.to(device)
 
     def encode_sequences(self, sequences):
-        encoded_parents, masks, wt_base_modifiers = zip(
+        encoded_parents, wt_base_modifiers = zip(
             *[self.encoder.encode_sequence(sequence) for sequence in sequences]
         )
+        masks = [mask_tensor_of(sequence, self.encoder.site_count) for sequence in sequences]
         return (
             torch.stack(encoded_parents),
             torch.stack(masks),
