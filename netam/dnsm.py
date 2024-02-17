@@ -290,16 +290,24 @@ class DNSMBurrito(framework.Burrito):
         return self.bce_loss(predictions, aa_subs_indicator)
 
     def _find_optimal_branch_length(
-        self, parent, child, rates, subs_probs, starting_branch_length
+        self,
+        parent,
+        child,
+        rates,
+        subs_probs,
+        starting_branch_length,
+        **optimization_kwargs,
     ):
         if parent == child:
             return 0.0
         log_pcp_probability = self.wrapped_model._build_log_pcp_probability(
             parent, child, rates, subs_probs
         )
-        return optimize_branch_length(log_pcp_probability, starting_branch_length)
+        return optimize_branch_length(
+            log_pcp_probability, starting_branch_length, **optimization_kwargs
+        )
 
-    def find_optimal_branch_lengths(self, dataset):
+    def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         optimal_lengths = []
 
         for parent, child, rates, subs_probs, starting_length in tqdm(
@@ -320,6 +328,7 @@ class DNSMBurrito(framework.Burrito):
                     rates[: len(parent)],
                     subs_probs[: len(parent), :],
                     starting_length,
+                    **optimization_kwargs,
                 )
             )
 
