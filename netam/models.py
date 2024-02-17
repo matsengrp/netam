@@ -43,6 +43,20 @@ class ModelBase(nn.Module):
             else:
                 raise ValueError(f"Unrecognized layer type: {type(layer)}")
 
+    def freeze(self):
+        """
+        Freeze all parameters in the model, disabling gradient computations.
+        """
+        for param in self.parameters():
+            param.requires_grad = False
+
+    def unfreeze(self):
+        """
+        Unfreeze all parameters in the model, enabling gradient computations.
+        """
+        for param in self.parameters():
+            param.requires_grad = True
+
 
 class KmerModel(ModelBase):
     def __init__(self, kmer_length):
@@ -283,6 +297,7 @@ class RSCNNModel(CNNModel, ABC):
     See https://github.com/matsengrp/netam/pull/9#issuecomment-1939097576
     for diagrams about the various models.
     """
+
     @abstractmethod
     def forward(self, encoded_parents, masks, wt_base_modifier):
         pass
@@ -331,6 +346,7 @@ class HybridRSCNNModel(RSCNNModel):
     """
     This model shares the kmer_embedding only.
     """
+
     def __init__(
         self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
     ):
@@ -382,6 +398,7 @@ class IndepRSCNNModel(RSCNNModel):
     """
     This model does not share any weights between the r_ and s_ components.
     """
+
     def __init__(
         self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
     ):

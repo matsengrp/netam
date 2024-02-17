@@ -290,34 +290,35 @@ class DNSMBurrito(framework.Burrito):
         return self.bce_loss(predictions, aa_subs_indicator)
 
     def _find_optimal_branch_length(
-        self, parent, child, rates, subs_probs, starting_branch_length
+        self,
+        parent,
+        child,
+        rates,
+        subs_probs,
+        starting_branch_length,
+        **optimization_kwargs,
     ):
         if parent == child:
             return 0.0
         log_pcp_probability = self.wrapped_model._build_log_pcp_probability(
             parent, child, rates, subs_probs
         )
-        return optimize_branch_length(log_pcp_probability, starting_branch_length)
+        return optimize_branch_length(
+            log_pcp_probability, starting_branch_length, **optimization_kwargs
+        )
 
-    def find_optimal_branch_lengths(
-        self,
-        nt_parents,
-        nt_children,
-        all_rates,
-        all_subs_probs,
-        starting_branch_lengths,
-    ):
+    def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         optimal_lengths = []
 
         for parent, child, rates, subs_probs, starting_length in tqdm(
             zip(
-                nt_parents,
-                nt_children,
-                all_rates,
-                all_subs_probs,
-                starting_branch_lengths,
+                dataset.nt_parents,
+                dataset.nt_children,
+                dataset.all_rates,
+                dataset.all_subs_probs,
+                dataset.branch_lengths,
             ),
-            total=len(nt_parents),
+            total=len(dataset.nt_parents),
             desc="Finding optimal branch lengths",
         ):
             optimal_lengths.append(
@@ -327,54 +328,11 @@ class DNSMBurrito(framework.Burrito):
                     rates[: len(parent)],
                     subs_probs[: len(parent), :],
                     starting_length,
+                    **optimization_kwargs,
                 )
             )
 
         return np.array(optimal_lengths)
-
-    def optimize_branch_lengths(self):
-        # We do the branch length optimization on CPU but want to restore the
-        # model to the device it was on before.
-        device = next(self.model.parameters()).device
-        self.model.to("cpu")
-        for loader in [self.train_loader, self.val_loader]:
-            if loader is None:
-                continue
-            dataset = loader.dataset
-            assert dataset.all_rates.device.type == "cpu"
-            dataset.branch_lengths = self.find_optimal_branch_lengths(
-                dataset.nt_parents,
-                dataset.nt_children,
-                dataset.all_rates,
-                dataset.all_subs_probs,
-                dataset.branch_lengths,
-            )
-        self.model.to(device)
-
-    def mark_branch_lengths_optimized(self, cycle):
-        self.writer.add_scalar("branch length optimization", cycle, self.global_epoch)
-
-    def joint_train(self, epochs=20, cycle_count=2):
-        """
-        Do joint optimization of model and branch lengths.
-        """
-        loss_history_l = []
-        self.mark_branch_lengths_optimized(0)
-        loss_history_l.append(self.train(3))
-        self.optimize_branch_lengths()
-        self.mark_branch_lengths_optimized(0)
-        for cycle in range(cycle_count):
-            self.mark_branch_lengths_optimized(cycle + 1)
-            self.reset_optimization()
-            loss_history_l.append(self.train(epochs))
-            if cycle < cycle_count - 1:
-                self.optimize_branch_lengths()
-            self.mark_branch_lengths_optimized(cycle + 1)
-
-        return pd.concat(loss_history_l, ignore_index=True)
-
-    def full_train(self, epochs=100):
-        return self.joint_train(epochs=epochs)
 
     def to_crepe(self):
         training_hyperparameters = {

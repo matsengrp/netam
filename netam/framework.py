@@ -24,6 +24,8 @@ from netam.common import (
 )
 from netam import models
 
+from epam.torch_common import optimize_branch_length
+
 
 def encode_mut_pos_and_base(parent, child, site_count=None):
     """
@@ -139,7 +141,9 @@ class SHMoofDataset(Dataset):
             self.mutation_indicators,
             self.new_base_idxs,
             self.wt_base_modifier,
+            self.branch_lengths,
         ) = self.encode_pcps(dataframe)
+        assert self.encoded_parents.shape[0] == self.branch_lengths.shape[0]
 
     def __len__(self):
         return len(self.encoded_parents)
@@ -151,6 +155,7 @@ class SHMoofDataset(Dataset):
             self.mutation_indicators[idx],
             self.new_base_idxs[idx],
             self.wt_base_modifier[idx],
+            self.branch_lengths[idx],
         )
 
     def __repr__(self):
@@ -162,6 +167,7 @@ class SHMoofDataset(Dataset):
         self.mutation_indicators = self.mutation_indicators.to(device)
         self.new_base_idxs = self.new_base_idxs.to(device)
         self.wt_base_modifier = self.wt_base_modifier.to(device)
+        self.branch_lengths = self.branch_lengths.to(device)
 
     def encode_pcps(self, dataframe):
         encoded_parents = []
@@ -169,6 +175,7 @@ class SHMoofDataset(Dataset):
         mutation_vectors = []
         new_base_idx_vectors = []
         wt_base_modifier_vectors = []
+        branch_lengths = []
 
         for _, row in dataframe.iterrows():
             encoded_parent, mask, wt_base_modifier = self.encoder.encode_sequence(
@@ -186,6 +193,8 @@ class SHMoofDataset(Dataset):
             mutation_vectors.append(mutation_indicator)
             new_base_idx_vectors.append(new_base_idxs)
             wt_base_modifier_vectors.append(wt_base_modifier)
+            # The initial branch lengths are the normalized number of mutations.
+            branch_lengths.append(mutation_indicator.sum() / mask.sum())
 
         return (
             torch.stack(encoded_parents),
@@ -193,7 +202,22 @@ class SHMoofDataset(Dataset):
             torch.stack(mutation_vectors),
             torch.stack(new_base_idx_vectors),
             torch.stack(wt_base_modifier_vectors),
+            torch.tensor(branch_lengths),
         )
+
+    def normalized_mutation_frequency(self):
+        return self.mutation_indicators.sum(axis=1) / self.masks.sum(axis=1)
+
+    def export_branch_lengths(self, out_csv_path):
+        pd.DataFrame(
+            {
+                "branch_length": self.branch_lengths,
+                "mut_freq": self.normalized_mutation_frequency(),
+            }
+        ).to_csv(out_csv_path, index=False)
+
+    def load_branch_lengths(self, in_csv_path):
+        self.branch_lengths = pd.read_csv(in_csv_path)["branch_length"].values
 
 
 class Crepe:
@@ -308,7 +332,9 @@ def trimmed_shm_model_outputs_of_crepe(crepe, parents):
 
 
 def load_and_add_shm_model_outputs_to_pcp_df(pcp_df_path_gz, crepe_prefix, device=None):
-    pcp_df = pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0).reset_index(drop=True)
+    pcp_df = pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0).reset_index(
+        drop=True
+    )
     crepe = load_crepe(crepe_prefix, device)
     rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent"])
     pcp_df["rates"] = rates
@@ -446,7 +472,7 @@ class Burrito(ABC):
                         else:
                             if grad_retry_count < max_grad_retries - 1:
                                 print(
-                                    f"Retrying gradient calculation ({grad_retry_count + 1}/{max_grad_retries}) with loss {loss.item()}"
+                                    f"Retrying gradient calculation ({grad_retry_count + 1}/{max_grad_retries}) with loss {torch.sum(loss).item()}"
                                 )
                                 loss = self.loss_of_batch(batch)
                             else:
@@ -469,7 +495,7 @@ class Burrito(ABC):
                 self.write_loss("Training loss", average_loss, self.global_epoch)
             else:
                 self.write_loss("Validation loss", average_loss, self.global_epoch)
-        return loss_reduction(average_loss).to("cpu")
+        return loss_reduction(average_loss)
 
     def train(self, epochs):
         assert self.train_loader is not None, "No training data provided."
@@ -536,12 +562,53 @@ class Burrito(ABC):
     def save_crepe(self, prefix):
         self.to_crepe().save(prefix)
 
-    @abstractmethod
-    def loss_of_batch(self, batch):
-        pass
+    def optimize_branch_lengths(self, **optimization_kwargs):
+        if "learning_rate" not in optimization_kwargs:
+            optimization_kwargs["learning_rate"] = 0.01
+        if "optimization_tol" not in optimization_kwargs:
+            optimization_kwargs["optimization_tol"] = 1e-5
+        # We do the branch length optimization on CPU but want to restore the
+        # model to the device it was on before.
+        device = next(self.model.parameters()).device
+        self.model.to("cpu")
+        for loader in [self.train_loader, self.val_loader]:
+            if loader is None:
+                continue
+            dataset = loader.dataset
+            dataset.to("cpu")
+            dataset.branch_lengths = self.find_optimal_branch_lengths(
+                dataset, **optimization_kwargs
+            )
+            dataset.to(device)
+        self.model.to(device)
+
+    def mark_branch_lengths_optimized(self, cycle):
+        self.writer.add_scalar("branch length optimization", cycle, self.global_epoch)
+
+    def joint_train(self, epochs=20, cycle_count=2):
+        """
+        Do joint optimization of model and branch lengths.
+        """
+        loss_history_l = []
+        self.mark_branch_lengths_optimized(0)
+        loss_history_l.append(self.train(3))
+        self.optimize_branch_lengths()
+        self.mark_branch_lengths_optimized(0)
+        for cycle in range(cycle_count):
+            self.mark_branch_lengths_optimized(cycle + 1)
+            self.reset_optimization()
+            loss_history_l.append(self.train(epochs))
+            if cycle < cycle_count - 1:
+                self.optimize_branch_lengths()
+            self.mark_branch_lengths_optimized(cycle + 1)
+
+        return pd.concat(loss_history_l, ignore_index=True)
+
+    def full_train(self, epochs=100):
+        return self.joint_train(epochs=epochs)
 
     @abstractmethod
-    def full_train(self, *args, **kwargs):
+    def loss_of_batch(self, batch):
         pass
 
     @abstractmethod
@@ -575,12 +642,16 @@ class SHMBurrito(Burrito):
         )
 
     def loss_of_batch(self, batch):
-        encoded_parents, masks, mutation_indicators, _, wt_base_modifier = batch
+        (
+            encoded_parents,
+            masks,
+            mutation_indicators,
+            _,
+            wt_base_modifier,
+            branch_lengths,
+        ) = batch
         rates = self.model(encoded_parents, masks, wt_base_modifier)
-        mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
-            dim=1, keepdim=True
-        )
-        mut_prob = 1 - torch.exp(-rates * mutation_freq)
+        mut_prob = 1 - torch.exp(-rates * branch_lengths.unsqueeze(-1))
         mut_prob_masked = mut_prob[masks]
         mutation_indicator_masked = mutation_indicators[masks].float()
         loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
@@ -629,14 +700,11 @@ class RSSHMBurrito(SHMBurrito):
             mutation_indicators,
             new_base_idxs,
             wt_base_modifier,
+            branch_lengths,
         ) = batch
         rates, csp_logits = self.model(encoded_parents, masks, wt_base_modifier)
 
-        # Existing mutation rate loss calculation
-        mutation_freq = mutation_indicators.sum(dim=1, keepdim=True) / masks.sum(
-            dim=1, keepdim=True
-        )
-        mut_prob = 1 - torch.exp(-rates * mutation_freq)
+        mut_prob = 1 - torch.exp(-rates * branch_lengths.unsqueeze(-1))
         mut_prob_masked = mut_prob[masks]
         mutation_indicator_masked = mutation_indicators[masks].float()
         rate_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
@@ -653,10 +721,85 @@ class RSSHMBurrito(SHMBurrito):
 
         return torch.stack([rate_loss, csp_loss])
 
+    def _find_optimal_branch_length(
+        self,
+        encoded_parent,
+        mask,
+        mutation_indicator,
+        wt_base_modifier,
+        starting_branch_length,
+        **optimization_kwargs,
+    ):
+        if torch.sum(mutation_indicator) == 0:
+            return 0.0
+
+        rates, _ = self.model(
+            encoded_parent.unsqueeze(0),
+            mask.unsqueeze(0),
+            wt_base_modifier.unsqueeze(0),
+        )
+
+        rates = rates.squeeze().double()
+        mutation_indicator_masked = mutation_indicator[mask].double()
+
+        def log_pcp_probability(log_branch_length):
+            branch_length = torch.exp(log_branch_length)
+            mut_prob = 1 - torch.exp(-rates * branch_length)
+            mut_prob_masked = mut_prob[mask]
+            rate_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
+            return -rate_loss
+
+        return optimize_branch_length(
+            log_pcp_probability,
+            starting_branch_length.double().item(),
+            **optimization_kwargs,
+        )
+
+    def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
+        optimal_lengths = []
+
+        self.model.eval()
+        self.model.freeze()
+
+        for (
+            encoded_parent,
+            mask,
+            mutation_indicator,
+            wt_base_modifier,
+            starting_branch_length,
+        ) in tqdm(
+            zip(
+                dataset.encoded_parents,
+                dataset.masks,
+                dataset.mutation_indicators,
+                dataset.wt_base_modifier,
+                dataset.branch_lengths,
+            ),
+            total=len(dataset.encoded_parents),
+            desc="Finding optimal branch lengths",
+        ):
+            optimal_lengths.append(
+                self._find_optimal_branch_length(
+                    encoded_parent,
+                    mask,
+                    mutation_indicator,
+                    wt_base_modifier,
+                    starting_branch_length,
+                    **optimization_kwargs,
+                )
+            )
+
+        self.model.unfreeze()
+
+        return torch.tensor(optimal_lengths)
+
     def write_loss(self, loss_name, loss, step):
         rate_loss, csp_loss = loss.unbind()
         self.writer.add_scalar("Rate " + loss_name, rate_loss.item(), step)
         self.writer.add_scalar("CSP " + loss_name, csp_loss.item(), step)
+
+    def full_train(self, *args, **kwargs):
+        return self.joint_train(*args, **kwargs)
 
 
 def burrito_class_of_model(model):
