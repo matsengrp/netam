@@ -563,7 +563,11 @@ class Burrito(ABC):
     def save_crepe(self, prefix):
         self.to_crepe().save(prefix)
 
-    def optimize_branch_lengths(self):
+    def optimize_branch_lengths(self, **optimization_kwargs):
+        if "learning_rate" not in optimization_kwargs:
+            optimization_kwargs["learning_rate"] = 0.01
+        if "optimization_tol" not in optimization_kwargs:
+            optimization_kwargs["optimization_tol"] = 1e-5
         # We do the branch length optimization on CPU but want to restore the
         # model to the device it was on before.
         device = next(self.model.parameters()).device
@@ -574,7 +578,7 @@ class Burrito(ABC):
             dataset = loader.dataset
             dataset.to("cpu")
             dataset.branch_lengths = self.find_optimal_branch_lengths(
-                dataset, learning_rate=0.01, optimization_tol=1e-5
+                dataset, **optimization_kwargs
             )
             dataset.to(device)
         self.model.to(device)
