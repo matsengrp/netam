@@ -702,6 +702,8 @@ class RSSHMBurrito(SHMBurrito):
             wt_base_modifier,
             branch_lengths,
         ) = batch
+        # TODO think again through how we're using the mask here.
+        # In this case it's a mask of the children, but it could be a mask of the parents in other contexts.
         rates, csp_logits = self.model(encoded_parents, masks, wt_base_modifier)
 
         mut_prob = 1 - torch.exp(-rates * branch_lengths.unsqueeze(-1))
