@@ -585,25 +585,35 @@ class Burrito(ABC):
     def mark_branch_lengths_optimized(self, cycle):
         self.writer.add_scalar("branch length optimization", cycle, self.global_epoch)
 
-    def joint_train(self, epochs=20, cycle_count=2):
+    def joint_train(self, epochs=100, cycle_count=2, training_method="full"):
         """
         Do joint optimization of model and branch lengths.
+        
+        If training_method is "full", then we optimize the branch lengths using full ML optimization.
+        If training_method is "fixed", then we fix the branch lengths and only optimize the model.
         """
+        if training_method == "full":
+            optimize_branch_lengths = self.optimize_branch_lengths
+        elif training_method == "fixed":
+            optimize_branch_lengths = lambda: None
+        else:
+            raise ValueError(f"Unknown training method {training_method}")
         loss_history_l = []
         self.mark_branch_lengths_optimized(0)
         loss_history_l.append(self.train(3))
-        self.optimize_branch_lengths()
+        optimize_branch_lengths()
         self.mark_branch_lengths_optimized(0)
         for cycle in range(cycle_count):
             self.mark_branch_lengths_optimized(cycle + 1)
             self.reset_optimization()
             loss_history_l.append(self.train(epochs))
             if cycle < cycle_count - 1:
-                self.optimize_branch_lengths()
+                optimize_branch_lengths()
             self.mark_branch_lengths_optimized(cycle + 1)
 
         return pd.concat(loss_history_l, ignore_index=True)
 
+    # TODO should we delete this? At least, confuzing name.
     def full_train(self, epochs=100):
         return self.joint_train(epochs=epochs)
 
