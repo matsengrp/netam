@@ -582,6 +582,39 @@ class Burrito(ABC):
             dataset.to(device)
         self.model.to(device)
 
+    def use_yun_approx_branch_lengths(self):
+        """
+        Yun Song's approximation to the branch lengths.
+        
+        This approximation is the mutation count divided by the total mutation rate for the sequence.
+        TODO link to derivation.
+        """
+        for loader in [self.train_loader, self.val_loader]:
+            if loader is None:
+                continue
+            dataset = loader.dataset
+            lengths = []
+            for (
+                encoded_parent,
+                mask,
+                mutation_indicator,
+                wt_base_modifier,
+            ) in zip(
+                dataset.encoded_parents,
+                dataset.masks,
+                dataset.mutation_indicators,
+                dataset.wt_base_modifier,
+            ):
+                rates, _ = self.model(
+                    encoded_parent.unsqueeze(0),
+                    mask.unsqueeze(0),
+                    wt_base_modifier.unsqueeze(0),
+                )
+                mutation_indicator = mutation_indicator[mask].float()
+                length = torch.sum(mutation_indicator) / torch.sum(rates) 
+                lengths.append(length.item())
+            dataset.branch_lengths = torch.tensor(lengths)
+
     def mark_branch_lengths_optimized(self, cycle):
         self.writer.add_scalar("branch length optimization", cycle, self.global_epoch)
 
@@ -590,10 +623,13 @@ class Burrito(ABC):
         Do joint optimization of model and branch lengths.
         
         If training_method is "full", then we optimize the branch lengths using full ML optimization.
+        If training_method is "yun", then we use Yun's approximation to the branch lengths.
         If training_method is "fixed", then we fix the branch lengths and only optimize the model.
         """
         if training_method == "full":
             optimize_branch_lengths = self.optimize_branch_lengths
+        elif training_method == "yun":
+            optimize_branch_lengths = self.use_yun_approx_branch_lengths
         elif training_method == "fixed":
             optimize_branch_lengths = lambda: None
         else:
