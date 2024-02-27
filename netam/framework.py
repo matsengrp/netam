@@ -323,6 +323,9 @@ def crepe_exists(prefix):
 
 
 def trimmed_shm_model_outputs_of_crepe(crepe, parents):
+    """
+    Model outputs trimmed to the length of the parent sequences.
+    """
     rates, csp_logits = crepe(parents)
     rates = rates.cpu().detach()
     csps = torch.softmax(csp_logits, dim=-1).cpu().detach()
