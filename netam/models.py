@@ -13,7 +13,7 @@ from netam.common import (
     aa_idx_tensor_of_str_ambig,
     PositionalEncoding,
     generate_kmers,
-    mask_tensor_of,
+    aa_mask_tensor_of,
 )
 
 
@@ -535,7 +535,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
 
         aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
         aa_idxs = aa_idxs.to(model_device)
-        mask = mask_tensor_of(aa_str)
+        mask = aa_mask_tensor_of(aa_str)
         mask = mask.to(model_device)
 
         with torch.no_grad():

@@ -41,18 +41,26 @@ def aa_idx_tensor_of_str_ambig(aa_str):
         raise
 
 
-def mask_tensor_of(seq_str, length=None):
-    """Return a mask tensor indicating non-empty and non-"N" sites. Sites
+def generic_mask_tensor_of(ambig_symb, seq_str, length=None):
+    """Return a mask tensor indicating non-empty and non-ambiguous sites. Sites
     beyond the length of the sequence are masked."""
     if length is None:
         length = len(seq_str)
     mask = torch.zeros(length, dtype=torch.bool)
     if len(seq_str) < length:
-        seq_str += "N" * (length - len(seq_str))
+        seq_str += ambig_symb * (length - len(seq_str))
     else:
         seq_str = seq_str[:length]
-    mask[[c != "N" for c in seq_str]] = 1
+    mask[[c != ambig_symb for c in seq_str]] = 1
     return mask
+
+
+def nt_mask_tensor_of(*args, **kwargs):
+    return generic_mask_tensor_of("N", *args, **kwargs)
+
+
+def aa_mask_tensor_of(*args, **kwargs):
+    return generic_mask_tensor_of("X", *args, **kwargs)
 
 
 def informative_site_count(seq_str):

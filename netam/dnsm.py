@@ -37,7 +37,7 @@ from netam.common import (
     MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
     clamp_probability,
-    mask_tensor_of,
+    aa_mask_tensor_of,
     stack_heterogeneous,
     pick_device,
 )
@@ -82,7 +82,7 @@ class DNSMDataset(Dataset):
         self.mask = torch.ones((pcp_count, self.max_aa_seq_len), dtype=torch.bool)
 
         for i, (aa_parent, aa_child) in enumerate(zip(aa_parents, aa_children)):
-            self.mask[i, :] = mask_tensor_of(aa_parent, self.max_aa_seq_len)
+            self.mask[i, :] = aa_mask_tensor_of(aa_parent, self.max_aa_seq_len)
             aa_seq_len = len(aa_parent)
             self.aa_parents_idxs[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(aa_parent)
             self.aa_subs_indicator_tensor[i, :aa_seq_len] = subs_indicator_tensor_of(

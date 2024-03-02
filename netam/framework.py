@@ -17,7 +17,7 @@ from tensorboardX import SummaryWriter
 from netam.common import (
     generate_kmers,
     kmer_to_index_of,
-    mask_tensor_of,
+    nt_mask_tensor_of,
     BASES,
     BASES_AND_N_TO_INDEX,
     BIG,
@@ -179,7 +179,7 @@ class SHMoofDataset(Dataset):
             encoded_parent, wt_base_modifier = self.encoder.encode_sequence(
                 row["parent"]
             )
-            mask = mask_tensor_of(row["child"], self.encoder.site_count)
+            mask = nt_mask_tensor_of(row["child"], self.encoder.site_count)
             (
                 mutation_indicator,
                 new_base_idxs,
@@ -242,7 +242,7 @@ class Crepe:
         encoded_parents, wt_base_modifiers = zip(
             *[self.encoder.encode_sequence(sequence) for sequence in sequences]
         )
-        masks = [mask_tensor_of(sequence, self.encoder.site_count) for sequence in sequences]
+        masks = [nt_mask_tensor_of(sequence, self.encoder.site_count) for sequence in sequences]
         return (
             torch.stack(encoded_parents),
             torch.stack(masks),
