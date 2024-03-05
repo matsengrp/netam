@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 import os
 
 import pandas as pd
+import numpy as np
 import yaml
 from tqdm import tqdm
 
@@ -21,6 +22,7 @@ from netam.common import (
     BASES,
     BASES_AND_N_TO_INDEX,
     BIG,
+    VRC01_NT_SEQ,
 )
 from netam import models
 
@@ -101,6 +103,7 @@ class KmerSequenceEncoder:
         return {"kmer_length": self.kmer_length, "site_count": self.site_count}
 
     def encode_sequence(self, sequence):
+        sequence = sequence.upper()
         # Pad sequence with overhang_length 'N's at the start and end so that we
         # can assign parameters to every site in the sequence.
         padded_sequence = (
@@ -569,7 +572,21 @@ class Burrito(ABC):
     def save_crepe(self, prefix):
         self.to_crepe().save(prefix)
 
-    def optimize_branch_lengths(self, **optimization_kwargs):
+    def standardize_model_rates(self):
+        """
+        Normalize the rates output by the model so that it predicts rate 1 on site 1 
+        (zero-indexed) of VRC01_NT_SEQ.
+        """
+        encoder = self.val_loader.dataset.encoder
+        assert encoder.site_count >= 2
+        encoded_parent, wt_base_modifier = encoder.encode_sequence(VRC01_NT_SEQ)
+        mask = nt_mask_tensor_of(VRC01_NT_SEQ, encoder.site_count)
+        vrc01_rates, _ = self.model(encoded_parent.unsqueeze(0), mask.unsqueeze(0), wt_base_modifier.unsqueeze(0))
+        vrc01_rate_1 = vrc01_rates.squeeze()[1].item()
+        self.model.adjust_rate_bias_by(-np.log(vrc01_rate_1))
+
+    def standardize_and_optimize_branch_lengths(self, **optimization_kwargs):
+        self.standardize_model_rates()
         if "learning_rate" not in optimization_kwargs:
             optimization_kwargs["learning_rate"] = 0.01
         if "optimization_tol" not in optimization_kwargs:
@@ -589,13 +606,14 @@ class Burrito(ABC):
             dataset.to(device)
         self.model.to(device)
 
-    def use_yun_approx_branch_lengths(self):
+    def standardize_and_use_yun_approx_branch_lengths(self):
         """
         Yun Song's approximation to the branch lengths.
         
         This approximation is the mutation count divided by the total mutation rate for the sequence.
         See https://github.com/matsengrp/netam/assets/112708/034abb74-5635-48dc-bf28-4321b9110222
         """
+        self.standardize_model_rates()
         for loader in [self.train_loader, self.val_loader]:
             if loader is None:
                 continue
@@ -634,9 +652,9 @@ class Burrito(ABC):
         If training_method is "fixed", then we fix the branch lengths and only optimize the model.
         """
         if training_method == "full":
-            optimize_branch_lengths = self.optimize_branch_lengths
+            optimize_branch_lengths = self.standardize_and_optimize_branch_lengths
         elif training_method == "yun":
-            optimize_branch_lengths = self.use_yun_approx_branch_lengths
+            optimize_branch_lengths = self.standardize_and_use_yun_approx_branch_lengths
         elif training_method == "fixed":
             optimize_branch_lengths = lambda: None
         else:

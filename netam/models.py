@@ -77,10 +77,18 @@ class FivemerModel(KmerModel):
         super().__init__(kmer_length=5)
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
 
+    # TODO remove masks everywhere from the forward functions. 
+    # They should not prevent us from making predictions.
+    # Instead, they should be used to mask out the loss only.
+    # The problem is that if we want to use a transformer we will want to use the parent mask as a padding mask. Perhaps better is to keep around a child and a parent mask? Even though the CNNs don't use masks?
     def forward(self, encoded_parents, masks, wt_base_modifier):
         log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze(-1)
         rates = torch.exp(log_kmer_rates * masks)
         return rates
+
+    def adjust_rate_bias_by(self, log_adjustment_factor):
+        with torch.no_grad():
+            self.kmer_embedding.weight.data += log_adjustment_factor
 
     @property
     def kmer_rates(self):
@@ -106,6 +114,10 @@ class RSFivemerModel(KmerModel):
         csp_logits += wt_base_modifier
         return rates, csp_logits
 
+    def adjust_rate_bias_by(self, log_adjustment_factor):
+        with torch.no_grad():
+            self.r_kmer_embedding.weight.data += log_adjustment_factor
+
     @property
     def kmer_rates(self):
         return torch.exp(self.r_kmer_embedding.weight).squeeze()
@@ -126,6 +138,12 @@ class SHMoofModel(KmerModel):
         # Rates are the product of kmer and site rates.
         rates = torch.exp((log_kmer_rates + log_site_rates) * masks)
         return rates
+
+    def adjust_rate_bias_by(self, log_adjustment_factor):
+        with torch.no_grad():
+            self.kmer_embedding.weight.data += log_adjustment_factor / 2.
+            self.log_site_rates.weight.data += log_adjustment_factor / 2.
+
 
     @property
     def hyperparameters(self):
@@ -198,6 +216,11 @@ class RSSHMoofModel(KmerModel):
 
         return rates, csp_logits
 
+    def adjust_rate_bias_by(self, log_adjustment_factor):
+        with torch.no_grad():
+            self.kmer_embedding.weight.data += log_adjustment_factor / 2.
+            self.log_site_rates.weight.data += log_adjustment_factor / 2.
+
     @property
     def hyperparameters(self):
         return {
@@ -234,6 +257,10 @@ class CNNModel(KmerModel):
         log_rates = self.linear(conv_out).squeeze(-1)
         rates = torch.exp(log_rates * masks)
         return rates
+
+    def adjust_rate_bias_by(self, log_adjustment_factor):
+        with torch.no_grad():
+            self.linear.bias.data += log_adjustment_factor
 
     @property
     def hyperparameters(self):
@@ -301,6 +328,10 @@ class RSCNNModel(CNNModel, ABC):
     @abstractmethod
     def forward(self, encoded_parents, masks, wt_base_modifier):
         pass
+
+    def adjust_rate_bias_by(self, log_adjustment_factor):
+        with torch.no_grad():
+            self.r_linear.bias.data += log_adjustment_factor
 
 
 class JoinedRSCNNModel(RSCNNModel):
