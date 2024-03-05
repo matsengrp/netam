@@ -123,7 +123,7 @@ class HyperBurrito(ABC):
         print("burrito_hypers:", burrito_hyperparams)
         burrito = self.burrito_of_model(model, **burrito_hyperparams)
 
-        losses = burrito.full_train(epochs=self.epochs)
+        losses = burrito.joint_train(epochs=self.epochs)
 
         return losses["val_loss"].min()
 

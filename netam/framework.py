@@ -180,6 +180,10 @@ class SHMoofDataset(Dataset):
                 row["parent"]
             )
             mask = nt_mask_tensor_of(row["child"], self.encoder.site_count)
+            # Assert that anything that is masked in the child is also masked in
+            # the parent. We only use the parent_mask for this check.
+            parent_mask = nt_mask_tensor_of(row["parent"], self.encoder.site_count)
+            assert (mask <= parent_mask).all()
             (
                 mutation_indicator,
                 new_base_idxs,
@@ -590,7 +594,7 @@ class Burrito(ABC):
         Yun Song's approximation to the branch lengths.
         
         This approximation is the mutation count divided by the total mutation rate for the sequence.
-        TODO link to derivation.
+        See https://github.com/matsengrp/netam/assets/112708/034abb74-5635-48dc-bf28-4321b9110222
         """
         for loader in [self.train_loader, self.val_loader]:
             if loader is None:
@@ -652,10 +656,6 @@ class Burrito(ABC):
 
         return pd.concat(loss_history_l, ignore_index=True)
 
-    # TODO should we delete this? At least, confuzing name.
-    def full_train(self, epochs=100):
-        return self.joint_train(epochs=epochs)
-
     @abstractmethod
     def loss_of_batch(self, batch):
         pass
@@ -706,9 +706,6 @@ class SHMBurrito(Burrito):
         loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
         return loss
 
-    def full_train(self, *args, **kwargs):
-        return self.train(*args, **kwargs)
-
     def to_crepe(self):
         training_hyperparameters = {
             key: self.__dict__[key]
@@ -751,8 +748,6 @@ class RSSHMBurrito(SHMBurrito):
             wt_base_modifier,
             branch_lengths,
         ) = batch
-        # TODO think again through how we're using the mask here.
-        # In this case it's a mask of the children, but it could be a mask of the parents in other contexts.
         rates, csp_logits = self.model(encoded_parents, masks, wt_base_modifier)
 
         mut_prob = 1 - torch.exp(-rates * branch_lengths.unsqueeze(-1))
@@ -848,10 +843,6 @@ class RSSHMBurrito(SHMBurrito):
         rate_loss, csp_loss = loss.unbind()
         self.writer.add_scalar("Rate " + loss_name, rate_loss.item(), step)
         self.writer.add_scalar("CSP " + loss_name, csp_loss.item(), step)
-
-    def full_train(self, *args, **kwargs):
-        return self.joint_train(*args, **kwargs)
-
 
 def burrito_class_of_model(model):
     if isinstance(model, models.RSCNNModel):
