@@ -573,17 +573,10 @@ class Burrito(ABC):
         self.to_crepe().save(prefix)
 
     def standardize_model_rates(self):
-        """
-        Normalize the rates output by the model so that it predicts rate 1 on site 1 
-        (zero-indexed) of VRC01_NT_SEQ.
-        """
-        encoder = self.val_loader.dataset.encoder
-        assert encoder.site_count >= 2
-        encoded_parent, wt_base_modifier = encoder.encode_sequence(VRC01_NT_SEQ)
-        mask = nt_mask_tensor_of(VRC01_NT_SEQ, encoder.site_count)
-        vrc01_rates, _ = self.model(encoded_parent.unsqueeze(0), mask.unsqueeze(0), wt_base_modifier.unsqueeze(0))
-        vrc01_rate_1 = vrc01_rates.squeeze()[1].item()
-        self.model.adjust_rate_bias_by(-np.log(vrc01_rate_1))
+        """This is an opportunity to standardize the model rates. Only the
+        SHMBurrito class implements this, which makes sense because it 
+        needs to get normalized but the DNSM does not."""
+        pass
 
     def standardize_and_optimize_branch_lengths(self, **optimization_kwargs):
         self.standardize_model_rates()
@@ -723,6 +716,19 @@ class SHMBurrito(Burrito):
         mutation_indicator_masked = mutation_indicators[masks].float()
         loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
         return loss
+
+    def standardize_model_rates(self):
+        """
+        Normalize the rates output by the model so that it predicts rate 1 on site 1 
+        (zero-indexed) of VRC01_NT_SEQ.
+        """
+        encoder = self.val_loader.dataset.encoder
+        assert encoder.site_count >= 2
+        encoded_parent, wt_base_modifier = encoder.encode_sequence(VRC01_NT_SEQ)
+        mask = nt_mask_tensor_of(VRC01_NT_SEQ, encoder.site_count)
+        vrc01_rates, _ = self.model(encoded_parent.unsqueeze(0), mask.unsqueeze(0), wt_base_modifier.unsqueeze(0))
+        vrc01_rate_1 = vrc01_rates.squeeze()[1].item()
+        self.model.adjust_rate_bias_by(-np.log(vrc01_rate_1))
 
     def to_crepe(self):
         training_hyperparameters = {
