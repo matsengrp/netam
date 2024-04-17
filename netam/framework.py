@@ -717,10 +717,9 @@ class SHMBurrito(Burrito):
         loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
         return loss
 
-    def standardize_model_rates(self):
+    def vrc01_site_1_model_rate(self):
         """
-        Normalize the rates output by the model so that it predicts rate 1 on site 1 
-        (zero-indexed) of VRC01_NT_SEQ.
+        Calculate rate on site 1 (zero-indexed) of VRC01_NT_SEQ.
         """
         encoder = self.val_loader.dataset.encoder
         assert encoder.site_count >= 2
@@ -728,6 +727,14 @@ class SHMBurrito(Burrito):
         mask = nt_mask_tensor_of(VRC01_NT_SEQ, encoder.site_count)
         vrc01_rates, _ = self.model(encoded_parent.unsqueeze(0), mask.unsqueeze(0), wt_base_modifier.unsqueeze(0))
         vrc01_rate_1 = vrc01_rates.squeeze()[1].item()
+        return vrc01_rate_1
+
+    def standardize_model_rates(self):
+        """
+        Normalize the rates output by the model so that it predicts rate 1 on site 1 
+        (zero-indexed) of VRC01_NT_SEQ.
+        """
+        vrc01_rate_1 = self.vrc01_site_1_model_rate()
         self.model.adjust_rate_bias_by(-np.log(vrc01_rate_1))
 
     def to_crepe(self):

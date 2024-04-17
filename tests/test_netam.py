@@ -2,12 +2,13 @@ import os
 
 import pandas as pd
 import pytest
+import numpy as np
 import torch
 
 import netam.framework as framework
 from netam.common import BIG
 from netam.framework import SHMoofDataset, SHMBurrito, RSSHMBurrito
-from netam.models import SHMoofModel, IndepRSCNNModel
+from netam.models import SHMoofModel, RSSHMoofModel, IndepRSCNNModel
 
 
 @pytest.fixture
@@ -80,17 +81,28 @@ def test_crepe_roundtrip(tiny_burrito):
 
 
 @pytest.fixture
-def tiny_rsmodel():
+def tiny_rsshmoofmodel():
+    return RSSHMoofModel(site_count=6, kmer_length=3)
+                         
+                         
+@pytest.fixture
+def tiny_rsscnnmodel():
     return IndepRSCNNModel(
         kmer_length=3, embedding_dim=2, filter_count=2, kernel_size=3
     )
 
 
 @pytest.fixture
-def tiny_rsburrito(tiny_dataset, tiny_val_dataset, tiny_rsmodel):
-    burrito = RSSHMBurrito(tiny_dataset, tiny_val_dataset, tiny_rsmodel)
+def tiny_rsburrito(tiny_dataset, tiny_val_dataset, tiny_rsshmoofmodel):
+    burrito = RSSHMBurrito(tiny_dataset, tiny_val_dataset, tiny_rsshmoofmodel)
     burrito.joint_train(epochs=5)
     return burrito
+
+
+def test_standardize_model_rates(tiny_rsburrito):
+    tiny_rsburrito.standardize_model_rates()
+    vrc01_rate_1 = tiny_rsburrito.vrc01_site_1_model_rate()
+    assert np.isclose(vrc01_rate_1, 1.0)
 
 
 def test_write_output(tiny_rsburrito):
