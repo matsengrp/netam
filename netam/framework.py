@@ -580,7 +580,6 @@ class Burrito(ABC):
 
     def standardize_and_optimize_branch_lengths(self, **optimization_kwargs):
         self.standardize_model_rates()
-        print(f"vrc01 rate {self.vrc01_site_1_model_rate()}")
         if "learning_rate" not in optimization_kwargs:
             optimization_kwargs["learning_rate"] = 0.01
         if "optimization_tol" not in optimization_kwargs:
