@@ -639,7 +639,7 @@ class Burrito(ABC):
     def mark_branch_lengths_optimized(self, cycle):
         self.writer.add_scalar("branch length optimization", cycle, self.global_epoch)
 
-    def joint_train(self, epochs=100, cycle_count=2, training_method="full"):
+    def joint_train(self, epochs=100, cycle_count=2):
         """
         Do joint optimization of model and branch lengths.
 
