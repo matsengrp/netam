@@ -83,8 +83,8 @@ def test_crepe_roundtrip(tiny_burrito):
 @pytest.fixture
 def tiny_rsshmoofmodel():
     return RSSHMoofModel(site_count=6, kmer_length=3)
-                         
-                         
+
+
 @pytest.fixture
 def tiny_rsscnnmodel():
     return IndepRSCNNModel(

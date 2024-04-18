@@ -137,9 +137,8 @@ class SHMoofModel(KmerModel):
 
     def adjust_rate_bias_by(self, log_adjustment_factor):
         with torch.no_grad():
-            self.kmer_embedding.weight.data += log_adjustment_factor / 2.
-            self.log_site_rates.weight.data += log_adjustment_factor / 2.
-
+            self.kmer_embedding.weight.data += log_adjustment_factor / 2.0
+            self.log_site_rates.weight.data += log_adjustment_factor / 2.0
 
     @property
     def hyperparameters(self):
@@ -214,8 +213,8 @@ class RSSHMoofModel(KmerModel):
 
     def adjust_rate_bias_by(self, log_adjustment_factor):
         with torch.no_grad():
-            self.kmer_embedding.weight.data += log_adjustment_factor / 2.
-            self.log_site_rates.weight.data += log_adjustment_factor / 2.
+            self.kmer_embedding.weight.data += log_adjustment_factor / 2.0
+            self.log_site_rates.weight.data += log_adjustment_factor / 2.0
 
     @property
     def hyperparameters(self):

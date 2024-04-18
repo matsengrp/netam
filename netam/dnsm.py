@@ -92,7 +92,8 @@ class DNSMDataset(Dataset):
         # Make initial branch lengths (will get optimized later).
         self._branch_lengths = np.array(
             [
-                sequences.nt_mutation_frequency(parent, child) * branch_length_multiplier
+                sequences.nt_mutation_frequency(parent, child)
+                * branch_length_multiplier
                 for parent, child in zip(self.nt_parents, self.nt_children)
             ]
         )

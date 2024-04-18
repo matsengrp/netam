@@ -249,7 +249,10 @@ class Crepe:
         encoded_parents, wt_base_modifiers = zip(
             *[self.encoder.encode_sequence(sequence) for sequence in sequences]
         )
-        masks = [nt_mask_tensor_of(sequence, self.encoder.site_count) for sequence in sequences]
+        masks = [
+            nt_mask_tensor_of(sequence, self.encoder.site_count)
+            for sequence in sequences
+        ]
         return (
             torch.stack(encoded_parents),
             torch.stack(masks),
@@ -574,7 +577,7 @@ class Burrito(ABC):
 
     def standardize_model_rates(self):
         """This is an opportunity to standardize the model rates. Only the
-        SHMBurrito class implements this, which makes sense because it 
+        SHMBurrito class implements this, which makes sense because it
         needs to get normalized but the DNSM does not."""
         pass
 
@@ -602,7 +605,7 @@ class Burrito(ABC):
     def standardize_and_use_yun_approx_branch_lengths(self):
         """
         Yun Song's approximation to the branch lengths.
-        
+
         This approximation is the mutation count divided by the total mutation rate for the sequence.
         See https://github.com/matsengrp/netam/assets/112708/034abb74-5635-48dc-bf28-4321b9110222
         """
@@ -629,7 +632,7 @@ class Burrito(ABC):
                     wt_base_modifier.unsqueeze(0),
                 )
                 mutation_indicator = mutation_indicator[mask].float()
-                length = torch.sum(mutation_indicator) / torch.sum(rates) 
+                length = torch.sum(mutation_indicator) / torch.sum(rates)
                 lengths.append(length.item())
             dataset.branch_lengths = torch.tensor(lengths)
 
@@ -639,7 +642,7 @@ class Burrito(ABC):
     def joint_train(self, epochs=100, cycle_count=2, training_method="full"):
         """
         Do joint optimization of model and branch lengths.
-        
+
         If training_method is "full", then we optimize the branch lengths using full ML optimization.
         If training_method is "yun", then we use Yun's approximation to the branch lengths.
         If training_method is "fixed", then we fix the branch lengths and only optimize the model.
@@ -725,13 +728,17 @@ class SHMBurrito(Burrito):
         assert encoder.site_count >= 2
         encoded_parent, wt_base_modifier = encoder.encode_sequence(VRC01_NT_SEQ)
         mask = nt_mask_tensor_of(VRC01_NT_SEQ, encoder.site_count)
-        vrc01_rates, _ = self.model(encoded_parent.unsqueeze(0), mask.unsqueeze(0), wt_base_modifier.unsqueeze(0))
+        vrc01_rates, _ = self.model(
+            encoded_parent.unsqueeze(0),
+            mask.unsqueeze(0),
+            wt_base_modifier.unsqueeze(0),
+        )
         vrc01_rate_1 = vrc01_rates.squeeze()[1].item()
         return vrc01_rate_1
 
     def standardize_model_rates(self):
         """
-        Normalize the rates output by the model so that it predicts rate 1 on site 1 
+        Normalize the rates output by the model so that it predicts rate 1 on site 1
         (zero-indexed) of VRC01_NT_SEQ.
         """
         vrc01_rate_1 = self.vrc01_site_1_model_rate()
@@ -874,6 +881,7 @@ class RSSHMBurrito(SHMBurrito):
         rate_loss, csp_loss = loss.unbind()
         self.writer.add_scalar("Rate " + loss_name, rate_loss.item(), step)
         self.writer.add_scalar("CSP " + loss_name, csp_loss.item(), step)
+
 
 def burrito_class_of_model(model):
     if isinstance(model, models.RSCNNModel):

@@ -26,6 +26,7 @@ VRC01_NT_SEQ = (
     "TCA"
 )
 
+
 def generate_kmers(kmer_length):
     # Our strategy for kmers is to have a single representation for any kmer that isn't in ACGT.
     # This is the first one, which is simply "N", and so this placeholder value is 0.
