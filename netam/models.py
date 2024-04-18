@@ -77,10 +77,6 @@ class FivemerModel(KmerModel):
         super().__init__(kmer_length=5)
         self.kmer_embedding = nn.Embedding(self.kmer_count, 1)
 
-    # TODO remove masks everywhere from the forward functions. 
-    # They should not prevent us from making predictions.
-    # Instead, they should be used to mask out the loss only.
-    # The problem is that if we want to use a transformer we will want to use the parent mask as a padding mask. Perhaps better is to keep around a child and a parent mask? Even though the CNNs don't use masks?
     def forward(self, encoded_parents, masks, wt_base_modifier):
         log_kmer_rates = self.kmer_embedding(encoded_parents).squeeze(-1)
         rates = torch.exp(log_kmer_rates * masks)
