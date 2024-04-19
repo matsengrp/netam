@@ -47,7 +47,7 @@ def dnsm_burrito(pcp_df):
         learning_rate=0.001,
         min_learning_rate=0.0001,
     )
-    burrito.joint_train(epochs=1, cycle_count=2)
+    burrito.joint_train(epochs=1, cycle_count=2, training_method="full")
     return burrito
 
 

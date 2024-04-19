@@ -95,7 +95,7 @@ def tiny_rsscnnmodel():
 @pytest.fixture
 def tiny_rsburrito(tiny_dataset, tiny_val_dataset, tiny_rsshmoofmodel):
     burrito = RSSHMBurrito(tiny_dataset, tiny_val_dataset, tiny_rsshmoofmodel)
-    burrito.joint_train(epochs=5)
+    burrito.joint_train(epochs=5, training_method="yun")
     return burrito
 
 
