@@ -15,6 +15,8 @@ AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
 AA_STR_SORTED_AMBIG = AA_STR_SORTED + "X"
 MAX_AMBIG_AA_IDX = len(AA_STR_SORTED_AMBIG) - 1
 
+# I needed some sequence to use to normalize the rate of mutation in the SHM model.
+# So, I chose perhaps the most famous antibody sequence, VRC01:
 # https://www.ncbi.nlm.nih.gov/nuccore/GU980702.1
 VRC01_NT_SEQ = (
     "CAGGTGCAGCTGGTGCAGTCTGGGGGTCAGATGAAGAAGCCTGGCGAGTCGATGAGAATT"
