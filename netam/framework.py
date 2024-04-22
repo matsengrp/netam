@@ -656,8 +656,9 @@ class Burrito(ABC):
         else:
             raise ValueError(f"Unknown training method {training_method}")
         loss_history_l = []
-        self.mark_branch_lengths_optimized(0)
-        loss_history_l.append(self.train(3))
+        # TODO
+        # self.mark_branch_lengths_optimized(0)
+        # loss_history_l.append(self.train(3))
         optimize_branch_lengths()
         self.mark_branch_lengths_optimized(0)
         for cycle in range(cycle_count):
