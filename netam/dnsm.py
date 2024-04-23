@@ -9,9 +9,7 @@ We'll use these conventions:
 """
 
 import torch
-import torch.nn as nn
-from torch import Tensor
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import torch.nn.functional as F
 
 # Amazingly, using one thread makes things 50x faster for branch length
@@ -28,8 +26,7 @@ from epam.models import WrappedBinaryMutSel
 import epam.molevol as molevol
 import epam.sequences as sequences
 from epam.sequences import (
-    subs_indicator_tensor_of,
-    translate_sequence,
+    aa_subs_indicator_tensor_of,
     translate_sequences,
 )
 
@@ -37,7 +34,7 @@ from netam.common import (
     MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
     clamp_probability,
-    mask_tensor_of,
+    aa_mask_tensor_of,
     stack_heterogeneous,
     pick_device,
 )
@@ -82,10 +79,10 @@ class DNSMDataset(Dataset):
         self.mask = torch.ones((pcp_count, self.max_aa_seq_len), dtype=torch.bool)
 
         for i, (aa_parent, aa_child) in enumerate(zip(aa_parents, aa_children)):
-            self.mask[i, :] = mask_tensor_of(aa_parent, self.max_aa_seq_len)
+            self.mask[i, :] = aa_mask_tensor_of(aa_parent, self.max_aa_seq_len)
             aa_seq_len = len(aa_parent)
             self.aa_parents_idxs[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(aa_parent)
-            self.aa_subs_indicator_tensor[i, :aa_seq_len] = subs_indicator_tensor_of(
+            self.aa_subs_indicator_tensor[i, :aa_seq_len] = aa_subs_indicator_tensor_of(
                 aa_parent, aa_child
             )
 
@@ -95,7 +92,8 @@ class DNSMDataset(Dataset):
         # Make initial branch lengths (will get optimized later).
         self._branch_lengths = np.array(
             [
-                sequences.mutation_frequency(parent, child) * branch_length_multiplier
+                sequences.nt_mutation_frequency(parent, child)
+                * branch_length_multiplier
                 for parent, child in zip(self.nt_parents, self.nt_children)
             ]
         )

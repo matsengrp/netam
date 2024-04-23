@@ -13,7 +13,7 @@ from netam.common import (
     aa_idx_tensor_of_str_ambig,
     PositionalEncoding,
     generate_kmers,
-    mask_tensor_of,
+    aa_mask_tensor_of,
 )
 
 
@@ -82,6 +82,10 @@ class FivemerModel(KmerModel):
         rates = torch.exp(log_kmer_rates * masks)
         return rates
 
+    def adjust_rate_bias_by(self, log_adjustment_factor):
+        with torch.no_grad():
+            self.kmer_embedding.weight.data += log_adjustment_factor
+
     @property
     def kmer_rates(self):
         return torch.exp(self.kmer_embedding.weight).squeeze()
@@ -106,6 +110,10 @@ class RSFivemerModel(KmerModel):
         csp_logits += wt_base_modifier
         return rates, csp_logits
 
+    def adjust_rate_bias_by(self, log_adjustment_factor):
+        with torch.no_grad():
+            self.r_kmer_embedding.weight.data += log_adjustment_factor
+
     @property
     def kmer_rates(self):
         return torch.exp(self.r_kmer_embedding.weight).squeeze()
@@ -126,6 +134,11 @@ class SHMoofModel(KmerModel):
         # Rates are the product of kmer and site rates.
         rates = torch.exp((log_kmer_rates + log_site_rates) * masks)
         return rates
+
+    def adjust_rate_bias_by(self, log_adjustment_factor):
+        with torch.no_grad():
+            self.kmer_embedding.weight.data += log_adjustment_factor / 2.0
+            self.log_site_rates.weight.data += log_adjustment_factor / 2.0
 
     @property
     def hyperparameters(self):
@@ -198,6 +211,11 @@ class RSSHMoofModel(KmerModel):
 
         return rates, csp_logits
 
+    def adjust_rate_bias_by(self, log_adjustment_factor):
+        with torch.no_grad():
+            self.kmer_embedding.weight.data += log_adjustment_factor / 2.0
+            self.log_site_rates.weight.data += log_adjustment_factor / 2.0
+
     @property
     def hyperparameters(self):
         return {
@@ -234,6 +252,10 @@ class CNNModel(KmerModel):
         log_rates = self.linear(conv_out).squeeze(-1)
         rates = torch.exp(log_rates * masks)
         return rates
+
+    def adjust_rate_bias_by(self, log_adjustment_factor):
+        with torch.no_grad():
+            self.linear.bias.data += log_adjustment_factor
 
     @property
     def hyperparameters(self):
@@ -301,6 +323,10 @@ class RSCNNModel(CNNModel, ABC):
     @abstractmethod
     def forward(self, encoded_parents, masks, wt_base_modifier):
         pass
+
+    def adjust_rate_bias_by(self, log_adjustment_factor):
+        with torch.no_grad():
+            self.r_linear.bias.data += log_adjustment_factor
 
 
 class JoinedRSCNNModel(RSCNNModel):
@@ -535,7 +561,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
 
         aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
         aa_idxs = aa_idxs.to(model_device)
-        mask = mask_tensor_of(aa_str)
+        mask = aa_mask_tensor_of(aa_str)
         mask = mask.to(model_device)
 
         with torch.no_grad():

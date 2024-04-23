@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 import os
 
 import pandas as pd
+import numpy as np
 import yaml
 from tqdm import tqdm
 
@@ -17,10 +18,11 @@ from tensorboardX import SummaryWriter
 from netam.common import (
     generate_kmers,
     kmer_to_index_of,
-    mask_tensor_of,
+    nt_mask_tensor_of,
     BASES,
     BASES_AND_N_TO_INDEX,
     BIG,
+    VRC01_NT_SEQ,
 )
 from netam import models
 
@@ -101,6 +103,7 @@ class KmerSequenceEncoder:
         return {"kmer_length": self.kmer_length, "site_count": self.site_count}
 
     def encode_sequence(self, sequence):
+        sequence = sequence.upper()
         # Pad sequence with overhang_length 'N's at the start and end so that we
         # can assign parameters to every site in the sequence.
         padded_sequence = (
@@ -118,11 +121,9 @@ class KmerSequenceEncoder:
             for i in range(self.site_count)
         ]
 
-        mask = mask_tensor_of(sequence, self.site_count)
-
         wt_base_modifier = wt_base_modifier_of(sequence, self.site_count)
 
-        return torch.tensor(kmer_indices, dtype=torch.int32), mask, wt_base_modifier
+        return torch.tensor(kmer_indices, dtype=torch.int32), wt_base_modifier
 
 
 class PlaceholderEncoder:
@@ -178,9 +179,14 @@ class SHMoofDataset(Dataset):
         branch_lengths = []
 
         for _, row in dataframe.iterrows():
-            encoded_parent, mask, wt_base_modifier = self.encoder.encode_sequence(
+            encoded_parent, wt_base_modifier = self.encoder.encode_sequence(
                 row["parent"]
             )
+            mask = nt_mask_tensor_of(row["child"], self.encoder.site_count)
+            # Assert that anything that is masked in the child is also masked in
+            # the parent. We only use the parent_mask for this check.
+            parent_mask = nt_mask_tensor_of(row["parent"], self.encoder.site_count)
+            assert (mask <= parent_mask).all()
             (
                 mutation_indicator,
                 new_base_idxs,
@@ -240,9 +246,13 @@ class Crepe:
         self.model.to(device)
 
     def encode_sequences(self, sequences):
-        encoded_parents, masks, wt_base_modifiers = zip(
+        encoded_parents, wt_base_modifiers = zip(
             *[self.encoder.encode_sequence(sequence) for sequence in sequences]
         )
+        masks = [
+            nt_mask_tensor_of(sequence, self.encoder.site_count)
+            for sequence in sequences
+        ]
         return (
             torch.stack(encoded_parents),
             torch.stack(masks),
@@ -323,6 +333,9 @@ def crepe_exists(prefix):
 
 
 def trimmed_shm_model_outputs_of_crepe(crepe, parents):
+    """
+    Model outputs trimmed to the length of the parent sequences.
+    """
     rates, csp_logits = crepe(parents)
     rates = rates.cpu().detach()
     csps = torch.softmax(csp_logits, dim=-1).cpu().detach()
@@ -562,11 +575,18 @@ class Burrito(ABC):
     def save_crepe(self, prefix):
         self.to_crepe().save(prefix)
 
-    def optimize_branch_lengths(self, **optimization_kwargs):
+    def standardize_model_rates(self):
+        """This is an opportunity to standardize the model rates. Only the
+        SHMBurrito class implements this, which makes sense because it
+        needs to get normalized but the DNSM does not."""
+        pass
+
+    def standardize_and_optimize_branch_lengths(self, **optimization_kwargs):
+        self.standardize_model_rates()
         if "learning_rate" not in optimization_kwargs:
             optimization_kwargs["learning_rate"] = 0.01
         if "optimization_tol" not in optimization_kwargs:
-            optimization_kwargs["optimization_tol"] = 1e-5
+            optimization_kwargs["optimization_tol"] = 1e-3
         # We do the branch length optimization on CPU but want to restore the
         # model to the device it was on before.
         device = next(self.model.parameters()).device
@@ -582,30 +602,71 @@ class Burrito(ABC):
             dataset.to(device)
         self.model.to(device)
 
+    def standardize_and_use_yun_approx_branch_lengths(self):
+        """
+        Yun Song's approximation to the branch lengths.
+
+        This approximation is the mutation count divided by the total mutation rate for the sequence.
+        See https://github.com/matsengrp/netam/assets/112708/034abb74-5635-48dc-bf28-4321b9110222
+        """
+        self.standardize_model_rates()
+        for loader in [self.train_loader, self.val_loader]:
+            if loader is None:
+                continue
+            dataset = loader.dataset
+            lengths = []
+            for (
+                encoded_parent,
+                mask,
+                mutation_indicator,
+                wt_base_modifier,
+            ) in zip(
+                dataset.encoded_parents,
+                dataset.masks,
+                dataset.mutation_indicators,
+                dataset.wt_base_modifier,
+            ):
+                rates, _ = self.model(
+                    encoded_parent.unsqueeze(0),
+                    mask.unsqueeze(0),
+                    wt_base_modifier.unsqueeze(0),
+                )
+                mutation_indicator = mutation_indicator[mask].float()
+                length = torch.sum(mutation_indicator) / torch.sum(rates)
+                lengths.append(length.item())
+            dataset.branch_lengths = torch.tensor(lengths)
+
     def mark_branch_lengths_optimized(self, cycle):
         self.writer.add_scalar("branch length optimization", cycle, self.global_epoch)
 
-    def joint_train(self, epochs=20, cycle_count=2):
+    def joint_train(self, epochs=100, cycle_count=2, training_method="full"):
         """
         Do joint optimization of model and branch lengths.
+
+        If training_method is "full", then we optimize the branch lengths using full ML optimization.
+        If training_method is "yun", then we use Yun's approximation to the branch lengths.
+        If training_method is "fixed", then we fix the branch lengths and only optimize the model.
         """
+        if training_method == "full":
+            optimize_branch_lengths = self.standardize_and_optimize_branch_lengths
+        elif training_method == "yun":
+            optimize_branch_lengths = self.standardize_and_use_yun_approx_branch_lengths
+        elif training_method == "fixed":
+            optimize_branch_lengths = lambda: None
+        else:
+            raise ValueError(f"Unknown training method {training_method}")
         loss_history_l = []
-        self.mark_branch_lengths_optimized(0)
-        loss_history_l.append(self.train(3))
-        self.optimize_branch_lengths()
+        optimize_branch_lengths()
         self.mark_branch_lengths_optimized(0)
         for cycle in range(cycle_count):
             self.mark_branch_lengths_optimized(cycle + 1)
             self.reset_optimization()
             loss_history_l.append(self.train(epochs))
             if cycle < cycle_count - 1:
-                self.optimize_branch_lengths()
+                optimize_branch_lengths()
             self.mark_branch_lengths_optimized(cycle + 1)
 
         return pd.concat(loss_history_l, ignore_index=True)
-
-    def full_train(self, epochs=100):
-        return self.joint_train(epochs=epochs)
 
     @abstractmethod
     def loss_of_batch(self, batch):
@@ -657,8 +718,29 @@ class SHMBurrito(Burrito):
         loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
         return loss
 
-    def full_train(self, *args, **kwargs):
-        return self.train(*args, **kwargs)
+    def vrc01_site_1_model_rate(self):
+        """
+        Calculate rate on site 1 (zero-indexed) of VRC01_NT_SEQ.
+        """
+        encoder = self.val_loader.dataset.encoder
+        assert encoder.site_count >= 2
+        encoded_parent, wt_base_modifier = encoder.encode_sequence(VRC01_NT_SEQ)
+        mask = nt_mask_tensor_of(VRC01_NT_SEQ, encoder.site_count)
+        vrc01_rates, _ = self.model(
+            encoded_parent.unsqueeze(0),
+            mask.unsqueeze(0),
+            wt_base_modifier.unsqueeze(0),
+        )
+        vrc01_rate_1 = vrc01_rates.squeeze()[1].item()
+        return vrc01_rate_1
+
+    def standardize_model_rates(self):
+        """
+        Normalize the rates output by the model so that it predicts rate 1 on site 1
+        (zero-indexed) of VRC01_NT_SEQ.
+        """
+        vrc01_rate_1 = self.vrc01_site_1_model_rate()
+        self.model.adjust_rate_bias_by(-np.log(vrc01_rate_1))
 
     def to_crepe(self):
         training_hyperparameters = {
@@ -797,9 +879,6 @@ class RSSHMBurrito(SHMBurrito):
         rate_loss, csp_loss = loss.unbind()
         self.writer.add_scalar("Rate " + loss_name, rate_loss.item(), step)
         self.writer.add_scalar("CSP " + loss_name, csp_loss.item(), step)
-
-    def full_train(self, *args, **kwargs):
-        return self.joint_train(*args, **kwargs)
 
 
 def burrito_class_of_model(model):
