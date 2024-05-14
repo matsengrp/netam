@@ -582,7 +582,7 @@ class Burrito(ABC):
         pass
 
     def standardize_and_optimize_branch_lengths(self, **optimization_kwargs):
-        #self.standardize_model_rates()
+        self.standardize_model_rates()
         if "learning_rate" not in optimization_kwargs:
             optimization_kwargs["learning_rate"] = 0.01
         if "optimization_tol" not in optimization_kwargs:
@@ -652,7 +652,7 @@ class Burrito(ABC):
         elif training_method == "yun":
             optimize_branch_lengths = self.standardize_and_use_yun_approx_branch_lengths
         elif training_method == "fixed":
-            optimize_branch_lengths = lambda: None
+            optimize_branch_lengths = self.standardize_model_rates
         else:
             raise ValueError(f"Unknown training method {training_method}")
         loss_history_l = []
