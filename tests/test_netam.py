@@ -119,6 +119,6 @@ def mini_rsburrito(mini_dataset, tiny_rsscnnmodel):
 
 def test_standardize_model_rates(mini_rsburrito):
     mini_rsburrito.standardize_model_rates()
-    vrc01_rate_1 = mini_rsburrito.vrc01_site_1_model_rate()
-    assert np.isclose(vrc01_rate_1, 1.0)
+    vrc01_rate_14 = mini_rsburrito.vrc01_site_14_model_rate()
+    assert np.isclose(vrc01_rate_14, 1.0)
 
