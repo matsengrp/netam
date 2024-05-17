@@ -726,6 +726,9 @@ class SHMBurrito(Burrito):
         assert encoder.site_count >= 15, "Encoder site count too small vrc01_site_14_model_rate"
         encoded_parent, wt_base_modifier = encoder.encode_sequence(VRC01_NT_SEQ)
         mask = nt_mask_tensor_of(VRC01_NT_SEQ, encoder.site_count)
+        encoded_parent = encoded_parent.to(self.device)
+        mask = mask.to(self.device)
+        wt_base_modifier = wt_base_modifier.to(self.device)
         vrc01_rates, _ = self.model(
             encoded_parent.unsqueeze(0),
             mask.unsqueeze(0),
