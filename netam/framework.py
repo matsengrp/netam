@@ -652,7 +652,7 @@ class Burrito(ABC):
         elif training_method == "yun":
             optimize_branch_lengths = self.standardize_and_use_yun_approx_branch_lengths
         elif training_method == "fixed":
-            optimize_branch_lengths = self.standardize_model_rates
+            optimize_branch_lengths = lambda: None
         else:
             raise ValueError(f"Unknown training method {training_method}")
         loss_history_l = []
