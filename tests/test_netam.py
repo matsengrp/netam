@@ -93,18 +93,6 @@ def tiny_rsscnnmodel():
 
 
 @pytest.fixture
-def tiny_rsburrito(tiny_dataset, tiny_val_dataset, tiny_rsshmoofmodel):
-    burrito = RSSHMBurrito(tiny_dataset, tiny_val_dataset, tiny_rsshmoofmodel)
-    burrito.joint_train(epochs=5, training_method="yun")
-    return burrito
-
-
-def test_write_output(tiny_rsburrito):
-    os.makedirs("_ignore", exist_ok=True)
-    tiny_rsburrito.save_crepe("_ignore/tiny_rscrepe")
-
-
-@pytest.fixture
 def mini_dataset():
     df = pd.read_csv("data/wyatt-10x-1p5m_pcp_2023-11-30_NI.first100.csv.gz")
     return SHMoofDataset(df, site_count=500, kmer_length=3)
@@ -117,8 +105,12 @@ def mini_rsburrito(mini_dataset, tiny_rsscnnmodel):
     return burrito
 
 
+def test_write_output(mini_rsburrito):
+    os.makedirs("_ignore", exist_ok=True)
+    mini_rsburrito.save_crepe("_ignore/mini_rscrepe")
+
+
 def test_standardize_model_rates(mini_rsburrito):
     mini_rsburrito.standardize_model_rates()
     vrc01_rate_14 = mini_rsburrito.vrc01_site_14_model_rate()
     assert np.isclose(vrc01_rate_14, 1.0)
-
