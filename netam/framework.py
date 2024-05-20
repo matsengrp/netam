@@ -668,7 +668,9 @@ class Burrito(ABC):
             current_lr = self.optimizer.param_groups[0]["lr"]
             # set new_lr to be the geometric mean of current_lr and the learning rate
             weight = 0.5 + cycle / (2 * cycle_count)
-            new_lr = np.exp(weight * np.log(current_lr) + (1 - weight) * np.log(self.learning_rate))
+            new_lr = np.exp(
+                weight * np.log(current_lr) + (1 - weight) * np.log(self.learning_rate)
+            )
             self.reset_optimization(new_lr)
             loss_history_l.append(self.train(epochs))
             if cycle < cycle_count - 1:
@@ -732,7 +734,9 @@ class SHMBurrito(Burrito):
         Calculate rate on site 14 (zero-indexed) of VRC01_NT_SEQ.
         """
         encoder = self.val_loader.dataset.encoder
-        assert encoder.site_count >= 15, "Encoder site count too small vrc01_site_14_model_rate"
+        assert (
+            encoder.site_count >= 15
+        ), "Encoder site count too small vrc01_site_14_model_rate"
         encoded_parent, wt_base_modifier = encoder.encode_sequence(VRC01_NT_SEQ)
         mask = nt_mask_tensor_of(VRC01_NT_SEQ, encoder.site_count)
         encoded_parent = encoded_parent.to(self.device)
