@@ -396,11 +396,13 @@ class Burrito(ABC):
     def device(self):
         return next(self.model.parameters()).device
 
-    def reset_optimization(self):
+    def reset_optimization(self, learning_rate=None):
         """Reset the optimizer and scheduler."""
+        if learning_rate is None:
+            learning_rate = self.learning_rate
         self.optimizer = torch.optim.Adam(
             self.model.parameters(),
-            lr=self.learning_rate,
+            lr=learning_rate,
             weight_decay=self.l2_regularization_coeff,
         )
         self.scheduler = ReduceLROnPlateau(
@@ -646,6 +648,9 @@ class Burrito(ABC):
         If training_method is "full", then we optimize the branch lengths using full ML optimization.
         If training_method is "yun", then we use Yun's approximation to the branch lengths.
         If training_method is "fixed", then we fix the branch lengths and only optimize the model.
+
+        We reset the optimization after each cycle, and we use a learning rate schedule that
+        uses a weighted geometric mean of the current learning rate and the initial learning rate that progressively moves towards keeping the current learning rate as the cycles progress.
         """
         if training_method == "full":
             optimize_branch_lengths = self.standardize_and_optimize_branch_lengths
@@ -660,7 +665,11 @@ class Burrito(ABC):
         self.mark_branch_lengths_optimized(0)
         for cycle in range(cycle_count):
             self.mark_branch_lengths_optimized(cycle + 1)
-            self.reset_optimization()
+            current_lr = self.optimizer.param_groups[0]["lr"]
+            # set new_lr to be the geometric mean of current_lr and the learning rate
+            weight = 0.5 + cycle / (2 * cycle_count)
+            new_lr = np.exp(weight * np.log(current_lr) + (1 - weight) * np.log(self.learning_rate))
+            self.reset_optimization(new_lr)
             loss_history_l.append(self.train(epochs))
             if cycle < cycle_count - 1:
                 optimize_branch_lengths()
