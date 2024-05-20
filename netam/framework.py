@@ -649,8 +649,11 @@ class Burrito(ABC):
         If training_method is "yun", then we use Yun's approximation to the branch lengths.
         If training_method is "fixed", then we fix the branch lengths and only optimize the model.
 
-        We reset the optimization after each cycle, and we use a learning rate schedule that
-        uses a weighted geometric mean of the current learning rate and the initial learning rate that progressively moves towards keeping the current learning rate as the cycles progress.
+        We reset the optimization after each cycle, and we use a learning rate
+        schedule that uses a weighted geometric mean of the current learning
+        rate and the initial learning rate that progressively moves towards
+        keeping the current learning rate as the cycles progress.
+
         """
         if training_method == "full":
             optimize_branch_lengths = self.standardize_and_optimize_branch_lengths
