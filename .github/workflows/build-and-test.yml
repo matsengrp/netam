@@ -1,0 +1,47 @@
+name: build and test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: main
+
+      - name: Setup epam ssh key
+        uses: webfactory/ssh-agent@v0.9.0
+         with:
+           ssh-private-key: ${{ secrets.EPAM_DEPLOY_PRIVATE_KEY }}
+
+      - name: Checkout Epam repo
+        uses: actions/checkout@v4
+        with:
+          repository: matsengrp/epam
+          path: epam
+
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: '1.5.6-0' # any version from https://github.com/mamba-org/micromamba-releases
+          environment-file: epam/environment.yml
+          init-shell: bash
+          cache-environment: false
+          post-cleanup: 'all'
+
+      - name: Install and Test
+        shell: bash -l {0}
+        run: |
+          cd main
+          pip install .
+          make test
