@@ -53,6 +53,10 @@ jobs:
           cd ../main
           pip install .
 
+      - name: Run Black
+        run: |
+          black --check .
+
       - name: Test
         shell: bash -l {0}
         run: |
