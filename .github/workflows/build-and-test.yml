@@ -32,9 +32,6 @@ jobs:
         shell: bash -l {0}
         run: |
           git clone git@github.com:matsengrp/epam.git
-          git clone git@github.com:matsengrp/shmple.git
-          cd shmple
-          git checkout f1f3db0b67351bae7c23b96197b58c7674bb95bb
 
       - uses: mamba-org/setup-micromamba@v1
         with:
@@ -43,7 +40,6 @@ jobs:
           create-args: >-
             python=${{ matrix.python-version }}
             datrie
-            pytest
           init-shell: bash
           cache-environment: false
           post-cleanup: 'none'
@@ -51,6 +47,7 @@ jobs:
       - name: Install
         shell: bash -l {0}
         run: |
+          export GIT_CLONE_PROTECTION_ACTIVE=false
           cd epam
           make install
           cd ../main
