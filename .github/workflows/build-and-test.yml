@@ -33,17 +33,19 @@ jobs:
           ls
           cd epam
 
-      - uses: mamba-org/setup-micromamba@v1
-        with:
-          micromamba-version: '1.5.6-0' # any version from https://github.com/mamba-org/micromamba-releases
-          environment-file: environment.yml
-          init-shell: bash
-          cache-environment: false
-          post-cleanup: 'all'
+      # - uses: mamba-org/setup-micromamba@v1
+      #   with:
+      #     micromamba-version: '1.5.6-0' # any version from https://github.com/mamba-org/micromamba-releases
+      #     environment-file: environment.yml
+      #     init-shell: bash
+      #     cache-environment: false
+      #     post-cleanup: 'all'
 
       - name: Install and Test
         shell: bash -l {0}
         run: |
+          pwd
+          ls
           cd main
           pip install .
           make test
