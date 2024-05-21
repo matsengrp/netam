@@ -24,7 +24,9 @@ jobs:
       - name: Setup epam ssh key
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.EPAM_DEPLOY_PRIVATE_KEY }}
+          ssh-private-key: |
+            ${{ secrets.EPAM_DEPLOY_PRIVATE_KEY }}
+            ${{ secrets.SHMPLE_DEPLOY_PRIVATE_KEY }}
 
       - name: Clone Epam
         shell: bash -l {0}
@@ -43,11 +45,16 @@ jobs:
           cache-environment: false
           post-cleanup: 'none'
 
-      - name: Install and Test
+      - name: Install
         shell: bash -l {0}
         run: |
           cd epam
           make install
           cd ../main
           pip install .
+
+      - name: Test
+        shell: bash -l {0}
+        run: |
+          cd main
           make test
