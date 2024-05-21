@@ -25,11 +25,10 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.EPAM_DEPLOY_PRIVATE_KEY }}
 
-      - name: Checkout Epam repo
-        uses: actions/checkout@v4
-        with:
-          repository: matsengrp/epam
-          path: epam
+      - name: Install and Test
+        shell: bash -l {0}
+        run: |
+          git checkout git@github.com:matsengrp/epam.git
 
       - uses: mamba-org/setup-micromamba@v1
         with:
