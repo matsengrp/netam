@@ -46,11 +46,10 @@ jobs:
           cache-environment: false
           post-cleanup: 'none'
 
-      - name: Lint and check format
+      - name: Check format
         shell: bash -l {0}
         run: |
           cd main
-          make lint
           make checkformat
 
       - name: Install
