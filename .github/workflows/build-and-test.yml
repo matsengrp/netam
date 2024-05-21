@@ -11,6 +11,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
+        python-version: [3.9]
 
     runs-on: ${{ matrix.os }}
 
@@ -35,8 +36,9 @@ jobs:
           micromamba-version: '1.5.6-0' # any version from https://github.com/mamba-org/micromamba-releases
           environment-name: epam
           create-args: >-
-            python=3.9
+            python=${{ matrix.python-version }}
             datrie
+            pytest
           init-shell: bash
           cache-environment: false
           post-cleanup: 'none'
