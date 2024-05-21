@@ -29,11 +29,14 @@ jobs:
         shell: bash -l {0}
         run: |
           git clone git@github.com:matsengrp/epam.git
+          pwd
+          ls
+          cd epam
 
       - uses: mamba-org/setup-micromamba@v1
         with:
           micromamba-version: '1.5.6-0' # any version from https://github.com/mamba-org/micromamba-releases
-          environment-file: epam/environment.yml
+          environment-file: environment.yml
           init-shell: bash
           cache-environment: false
           post-cleanup: 'all'
