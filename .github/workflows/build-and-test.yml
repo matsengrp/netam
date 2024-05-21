@@ -22,8 +22,8 @@ jobs:
 
       - name: Setup epam ssh key
         uses: webfactory/ssh-agent@v0.9.0
-         with:
-           ssh-private-key: ${{ secrets.EPAM_DEPLOY_PRIVATE_KEY }}
+        with:
+          ssh-private-key: ${{ secrets.EPAM_DEPLOY_PRIVATE_KEY }}
 
       - name: Checkout Epam repo
         uses: actions/checkout@v4
