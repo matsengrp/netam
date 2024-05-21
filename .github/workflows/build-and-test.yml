@@ -40,9 +40,17 @@ jobs:
           create-args: >-
             python=${{ matrix.python-version }}
             datrie
+            black
+            flake8
           init-shell: bash
           cache-environment: false
           post-cleanup: 'none'
+
+      - name: Check format
+        shell: bash -l {0}
+        run: |
+          cd main
+          make checkformat
 
       - name: Install
         shell: bash -l {0}
