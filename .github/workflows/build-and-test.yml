@@ -28,7 +28,7 @@ jobs:
       - name: Install and Test
         shell: bash -l {0}
         run: |
-          git checkout git@github.com:matsengrp/epam.git
+          git clone git@github.com:matsengrp/epam.git
 
       - uses: mamba-org/setup-micromamba@v1
         with:
