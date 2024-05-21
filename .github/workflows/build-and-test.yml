@@ -25,27 +25,27 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.EPAM_DEPLOY_PRIVATE_KEY }}
 
-      - name: Install and Test
+      - name: Clone Epam
         shell: bash -l {0}
         run: |
           git clone git@github.com:matsengrp/epam.git
-          pwd
-          ls
-          ls epam
 
       - uses: mamba-org/setup-micromamba@v1
         with:
           micromamba-version: '1.5.6-0' # any version from https://github.com/mamba-org/micromamba-releases
-          environment-file: epam/environment.yml
+          environment-name: epam
+          create-args: >-
+            python=3.9
+            datrie
           init-shell: bash
           cache-environment: false
-          post-cleanup: 'all'
+          post-cleanup: 'none'
 
       - name: Install and Test
         shell: bash -l {0}
         run: |
-          pwd
-          ls
-          cd main
+          cd epam
+          make install
+          cd ../main
           pip install .
           make test
