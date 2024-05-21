@@ -1,0 +1,60 @@
+name: build and test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: [3.9]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: main
+
+      - name: Setup epam ssh key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.SHMPLE_DEPLOY_PRIVATE_KEY }}
+            ${{ secrets.EPAM_DEPLOY_PRIVATE_KEY }}
+
+      - name: Clone Epam
+        shell: bash -l {0}
+        run: |
+          git clone git@github.com:matsengrp/epam.git
+
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: '1.5.6-0' # any version from https://github.com/mamba-org/micromamba-releases
+          environment-name: epam
+          create-args: >-
+            python=${{ matrix.python-version }}
+            datrie
+          init-shell: bash
+          cache-environment: false
+          post-cleanup: 'none'
+
+      - name: Install
+        shell: bash -l {0}
+        run: |
+          export GIT_CLONE_PROTECTION_ACTIVE=false
+          cd epam
+          make install
+          cd ../main
+          pip install .
+
+      - name: Test
+        shell: bash -l {0}
+        run: |
+          cd main
+          make test
