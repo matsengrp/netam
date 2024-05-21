@@ -25,8 +25,8 @@ jobs:
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: |
-            ${{ secrets.EPAM_DEPLOY_PRIVATE_KEY }}
             ${{ secrets.SHMPLE_DEPLOY_PRIVATE_KEY }}
+            ${{ secrets.EPAM_DEPLOY_PRIVATE_KEY }}
 
       - name: Clone Epam
         shell: bash -l {0}
