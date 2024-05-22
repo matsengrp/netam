@@ -9,6 +9,7 @@ from epam.molevol import (
 )
 from epam.torch_common import optimize_branch_length
 
+
 def codon_probs_of_parent_scaled_rates_and_sub_probs(
     parent_idxs, scaled_rates, sub_probs
 ):
@@ -32,10 +33,12 @@ def codon_probs_of_parent_scaled_rates_and_sub_probs(
 
     return codon_probs
 
+
 def _trim_seqs_to_codon_boundary_and_max_len(seqs, site_count):
     """Assumes that all sequences have the same length"""
     max_len = site_count - site_count % 3
     return [seq[: min(len(seq) - len(seq) % 3, max_len)] for seq in seqs]
+
 
 def _prepare_pcp_df(pcp_df, crepe, site_count):
     """
@@ -48,12 +51,11 @@ def _prepare_pcp_df(pcp_df, crepe, site_count):
         pcp_df["child"], site_count
     )
     pcp_df = pcp_df[pcp_df["parent"] != pcp_df["child"]].reset_index(drop=True)
-    ratess, cspss = trimmed_shm_model_outputs_of_crepe(
-        crepe, pcp_df["parent"]
-    )
+    ratess, cspss = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent"])
     pcp_df["rates"] = ratess
     pcp_df["subs_probs"] = cspss
     return pcp_df
+
 
 class CodonProbBurrito(Burrito):
     def __init__(
@@ -74,7 +76,7 @@ class CodonProbBurrito(Burrito):
             model,
             **kwargs,
         )
-    
+
     # These are from RSSHMBurrito, as a start
     def _find_optimal_branch_length(
         self,
@@ -149,6 +151,6 @@ class CodonProbBurrito(Burrito):
 
         return torch.tensor(optimal_lengths)
 
+
 class CodonProbDataset:
     pass
-
