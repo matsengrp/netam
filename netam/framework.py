@@ -551,7 +551,7 @@ class Burrito(ABC):
                 first_value_of_batch = (
                     list(batch.values())[0] if isinstance(batch, dict) else batch[0]
                 )
-                batch_size = first_value_of_batch.shape[0]
+                batch_size = len(first_value_of_batch)
                 # If we multiply the loss by the batch size, then the loss will be the sum of the
                 # losses for each example in the batch. Then, when we divide by the number of
                 # examples in the dataset below, we will get the average loss per example.
