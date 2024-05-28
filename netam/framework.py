@@ -640,7 +640,9 @@ class Burrito(ABC):
             dataset.branch_lengths = torch.tensor(lengths)
 
     def mark_branch_lengths_optimized(self, cycle):
-        self.writer.add_scalar("branch length optimization", cycle, self.global_epoch, walltime=time())
+        self.writer.add_scalar(
+            "branch length optimization", cycle, self.global_epoch, walltime=time()
+        )
 
     def joint_train(self, epochs=100, cycle_count=2, training_method="full"):
         """
@@ -897,8 +899,12 @@ class RSSHMBurrito(SHMBurrito):
 
     def write_loss(self, loss_name, loss, step):
         rate_loss, csp_loss = loss.unbind()
-        self.writer.add_scalar("Rate " + loss_name, rate_loss.item(), step, walltime=time())
-        self.writer.add_scalar("CSP " + loss_name, csp_loss.item(), step, walltime=time())
+        self.writer.add_scalar(
+            "Rate " + loss_name, rate_loss.item(), step, walltime=time()
+        )
+        self.writer.add_scalar(
+            "CSP " + loss_name, csp_loss.item(), step, walltime=time()
+        )
 
 
 def burrito_class_of_model(model):
