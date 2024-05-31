@@ -433,9 +433,7 @@ class Burrito(ABC):
 
     def write_cuda_memory_info(self):
         megabyte_scaling_factor = 1 / 1024 ** 2
-        print(self.device.type)
         if self.device.type == "cuda":
-            print("writing cuda memory info")
             self.writer.add_scalar(
                 "CUDA memory allocated",
                 torch.cuda.memory_allocated() * megabyte_scaling_factor,
