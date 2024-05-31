@@ -535,7 +535,12 @@ class Burrito(ABC):
                 self.write_loss("Validation loss", average_loss, self.global_epoch)
         return loss_reduction(average_loss)
 
-    def train(self, epochs):
+    def train(self, epochs, out_prefix=None):
+        """
+        Train the model for the given number of epochs.
+        
+        If out_prefix is provided, then a crepe will be saved to that location.
+        """
         assert self.train_loader is not None, "No training data provided."
 
         train_losses = []
@@ -593,6 +598,9 @@ class Burrito(ABC):
 
         if best_model_state is not None:
             self.model.load_state_dict(best_model_state)
+
+        if out_prefix is not None:
+            self.save_crepe(out_prefix)
 
         return pd.DataFrame({"train_loss": train_losses, "val_loss": val_losses})
 
@@ -671,7 +679,7 @@ class Burrito(ABC):
             "branch length optimization", cycle, self.global_epoch, walltime=time()
         )
 
-    def joint_train(self, epochs=100, cycle_count=2, training_method="full"):
+    def joint_train(self, epochs=100, cycle_count=2, training_method="full", out_prefix=None):
         """
         Do joint optimization of model and branch lengths.
 
