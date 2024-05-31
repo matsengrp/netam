@@ -555,6 +555,7 @@ class Burrito(ABC):
                     break
 
                 if self.device.type == "cuda":
+                    # Clear cache for accurate memory usage tracking.
                     torch.cuda.empty_cache()
 
                 train_loss = self.process_data_loader(
