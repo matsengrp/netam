@@ -538,7 +538,7 @@ class Burrito(ABC):
     def train(self, epochs, out_prefix=None):
         """
         Train the model for the given number of epochs.
-        
+
         If out_prefix is provided, then a crepe will be saved to that location.
         """
         assert self.train_loader is not None, "No training data provided."
@@ -679,7 +679,9 @@ class Burrito(ABC):
             "branch length optimization", cycle, self.global_epoch, walltime=time()
         )
 
-    def joint_train(self, epochs=100, cycle_count=2, training_method="full", out_prefix=None):
+    def joint_train(
+        self, epochs=100, cycle_count=2, training_method="full", out_prefix=None
+    ):
         """
         Do joint optimization of model and branch lengths.
 
