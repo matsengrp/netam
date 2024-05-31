@@ -250,41 +250,32 @@ class DNSMBurrito(framework.Burrito):
             in_csv_prefix + ".val_branch_lengths.csv"
         )
 
-    def loss_of_batch(self, batch):
+    def predictions_of_batch(self, batch):
+        """
+        Make predictions for a batch of data.
+        
+        Note that we use the mask for prediction as part of the input for the
+        transformer, though we don't mask the predictions themselves.
+        """
         aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
-        aa_subs_indicator = batch["subs_indicator"].to(self.device)
         mask = batch["mask"].to(self.device)
         log_neutral_aa_mut_probs = batch["log_neutral_aa_mut_probs"].to(self.device)
-
         if not torch.isfinite(log_neutral_aa_mut_probs[mask]).all():
             raise ValueError(
                 f"log_neutral_aa_mut_probs has non-finite values at relevant positions: {log_neutral_aa_mut_probs[mask]}"
             )
-
         log_selection_factors = self.model(aa_parents_idxs, mask)
-        return self.complete_loss_fn(
-            log_neutral_aa_mut_probs,
-            log_selection_factors,
-            aa_subs_indicator,
-            mask,
-        )
-
-    def complete_loss_fn(
-        self,
-        log_neutral_aa_mut_probs,
-        log_selection_factors,
-        aa_subs_indicator,
-        mask,
-    ):
         # Take the product of the neutral mutation probabilities and the selection factors.
         predictions = torch.exp(log_neutral_aa_mut_probs + log_selection_factors)
-
-        predictions = predictions.masked_select(mask)
-        aa_subs_indicator = aa_subs_indicator.masked_select(mask)
-
         assert torch.isfinite(predictions).all()
         predictions = clamp_probability(predictions)
+        return predictions
 
+    def loss_of_batch(self, batch):
+        aa_subs_indicator = batch["subs_indicator"].to(self.device)
+        mask = batch["mask"].to(self.device)
+        aa_subs_indicator = aa_subs_indicator.masked_select(mask)
+        predictions = self.predictions_of_batch(batch).masked_select(mask)
         return self.bce_loss(predictions, aa_subs_indicator)
 
     def _find_optimal_branch_length(
