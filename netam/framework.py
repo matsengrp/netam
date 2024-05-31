@@ -345,11 +345,13 @@ def trimmed_shm_model_outputs_of_crepe(crepe, parents):
     return trimmed_rates, trimmed_csps
 
 
-def load_and_add_shm_model_outputs_to_pcp_df(pcp_df_path_gz, crepe_prefix, device=None):
+def load_and_add_shm_model_outputs_to_pcp_df(pcp_df_path_gz, crepe_prefix, sample_count=None):
     pcp_df = pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0).reset_index(
         drop=True
     )
-    crepe = load_crepe(crepe_prefix, device)
+    if sample_count is not None:
+        pcp_df = pcp_df.sample(sample_count)
+    crepe = load_crepe(crepe_prefix)
     rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent"])
     pcp_df["rates"] = rates
     pcp_df["subs_probs"] = csps
