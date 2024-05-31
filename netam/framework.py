@@ -345,7 +345,9 @@ def trimmed_shm_model_outputs_of_crepe(crepe, parents):
     return trimmed_rates, trimmed_csps
 
 
-def load_and_add_shm_model_outputs_to_pcp_df(pcp_df_path_gz, crepe_prefix, sample_count=None):
+def load_and_add_shm_model_outputs_to_pcp_df(
+    pcp_df_path_gz, crepe_prefix, sample_count=None
+):
     pcp_df = pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0).reset_index(
         drop=True
     )
@@ -434,7 +436,7 @@ class Burrito(ABC):
         self.writer.add_scalar(loss_name, loss, step, walltime=time())
 
     def write_cuda_memory_info(self):
-        megabyte_scaling_factor = 1 / 1024 ** 2
+        megabyte_scaling_factor = 1 / 1024**2
         if self.device.type == "cuda":
             self.writer.add_scalar(
                 "CUDA memory allocated",

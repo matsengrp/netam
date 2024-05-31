@@ -253,7 +253,7 @@ class DNSMBurrito(framework.Burrito):
     def predictions_of_batch(self, batch):
         """
         Make predictions for a batch of data.
-        
+
         Note that we use the mask for prediction as part of the input for the
         transformer, though we don't mask the predictions themselves.
         """
