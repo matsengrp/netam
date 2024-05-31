@@ -109,7 +109,7 @@ class DNSMDataset(Dataset):
             f"Expected {len(self._branch_lengths)} branch lengths, "
             f"got {len(new_branch_lengths)}"
         )
-        assert np.all(np.isfinite(new_branch_lengths) & (new_branch_lengths > 0))
+        assert torch.all(torch.isfinite(new_branch_lengths) & (new_branch_lengths > 0))
         self._branch_lengths = new_branch_lengths
         self.update_neutral_aa_mut_probs()
 
@@ -122,7 +122,7 @@ class DNSMDataset(Dataset):
         self.branch_lengths = pd.read_csv(in_csv_path)["branch_length"].values
 
     def update_neutral_aa_mut_probs(self):
-        print("consolidating shmple rates into substitution probabilities...")
+        print("consolidating neutral rates into substitution probabilities...")
 
         neutral_aa_mut_prob_l = []
 
@@ -250,41 +250,32 @@ class DNSMBurrito(framework.Burrito):
             in_csv_prefix + ".val_branch_lengths.csv"
         )
 
-    def loss_of_batch(self, batch):
+    def predictions_of_batch(self, batch):
+        """
+        Make predictions for a batch of data.
+
+        Note that we use the mask for prediction as part of the input for the
+        transformer, though we don't mask the predictions themselves.
+        """
         aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
-        aa_subs_indicator = batch["subs_indicator"].to(self.device)
         mask = batch["mask"].to(self.device)
         log_neutral_aa_mut_probs = batch["log_neutral_aa_mut_probs"].to(self.device)
-
         if not torch.isfinite(log_neutral_aa_mut_probs[mask]).all():
             raise ValueError(
                 f"log_neutral_aa_mut_probs has non-finite values at relevant positions: {log_neutral_aa_mut_probs[mask]}"
             )
-
         log_selection_factors = self.model(aa_parents_idxs, mask)
-        return self.complete_loss_fn(
-            log_neutral_aa_mut_probs,
-            log_selection_factors,
-            aa_subs_indicator,
-            mask,
-        )
-
-    def complete_loss_fn(
-        self,
-        log_neutral_aa_mut_probs,
-        log_selection_factors,
-        aa_subs_indicator,
-        mask,
-    ):
         # Take the product of the neutral mutation probabilities and the selection factors.
         predictions = torch.exp(log_neutral_aa_mut_probs + log_selection_factors)
-
-        predictions = predictions.masked_select(mask)
-        aa_subs_indicator = aa_subs_indicator.masked_select(mask)
-
         assert torch.isfinite(predictions).all()
         predictions = clamp_probability(predictions)
+        return predictions
 
+    def loss_of_batch(self, batch):
+        aa_subs_indicator = batch["subs_indicator"].to(self.device)
+        mask = batch["mask"].to(self.device)
+        aa_subs_indicator = aa_subs_indicator.masked_select(mask)
+        predictions = self.predictions_of_batch(batch).masked_select(mask)
         return self.bce_loss(predictions, aa_subs_indicator)
 
     def _find_optimal_branch_length(
@@ -307,6 +298,7 @@ class DNSMBurrito(framework.Burrito):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         optimal_lengths = []
+        failed_count = 0
 
         for parent, child, rates, subs_probs, starting_length in tqdm(
             zip(
@@ -319,18 +311,24 @@ class DNSMBurrito(framework.Burrito):
             total=len(dataset.nt_parents),
             desc="Finding optimal branch lengths",
         ):
-            optimal_lengths.append(
-                self._find_optimal_branch_length(
-                    parent,
-                    child,
-                    rates[: len(parent)],
-                    subs_probs[: len(parent), :],
-                    starting_length,
-                    **optimization_kwargs,
-                )
+            branch_length, failed_to_converge = self._find_optimal_branch_length(
+                parent,
+                child,
+                rates[: len(parent)],
+                subs_probs[: len(parent), :],
+                starting_length,
+                **optimization_kwargs,
             )
 
-        return np.array(optimal_lengths)
+            optimal_lengths.append(branch_length)
+            failed_count += failed_to_converge
+
+        if failed_count > 0:
+            print(
+                f"Branch length optimization failed to converge for {failed_count} of {len(dataset)} sequences."
+            )
+
+        return torch.tensor(optimal_lengths)
 
     def to_crepe(self):
         training_hyperparameters = {

@@ -1,6 +1,7 @@
 import copy
 from abc import ABC, abstractmethod
 import os
+from time import time
 
 import pandas as pd
 import numpy as np
@@ -344,11 +345,19 @@ def trimmed_shm_model_outputs_of_crepe(crepe, parents):
     return trimmed_rates, trimmed_csps
 
 
-def load_and_add_shm_model_outputs_to_pcp_df(pcp_df_path_gz, crepe_prefix, device=None):
+def load_and_add_shm_model_outputs_to_pcp_df(
+    pcp_df_path_gz, crepe_prefix, sample_count=None, chosen_v_families=None
+):
     pcp_df = pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0).reset_index(
         drop=True
     )
-    crepe = load_crepe(crepe_prefix, device)
+    pcp_df["v_family"] = pcp_df["v_gene"].str.split("-").str[0]
+    if chosen_v_families is not None:
+        chosen_v_families = set(chosen_v_families)
+        pcp_df = pcp_df[pcp_df["v_family"].isin(chosen_v_families)]
+    if sample_count is not None:
+        pcp_df = pcp_df.sample(sample_count)
+    crepe = load_crepe(crepe_prefix)
     rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent"])
     pcp_df["rates"] = rates
     pcp_df["subs_probs"] = csps
@@ -428,7 +437,21 @@ class Burrito(ABC):
         return train_history
 
     def write_loss(self, loss_name, loss, step):
-        self.writer.add_scalar(loss_name, loss, step)
+        self.writer.add_scalar(loss_name, loss, step, walltime=time())
+
+    def write_cuda_memory_info(self):
+        megabyte_scaling_factor = 1 / 1024**2
+        if self.device.type == "cuda":
+            self.writer.add_scalar(
+                "CUDA memory allocated",
+                torch.cuda.memory_allocated() * megabyte_scaling_factor,
+                self.global_epoch,
+            )
+            self.writer.add_scalar(
+                "CUDA max memory allocated",
+                torch.cuda.max_memory_allocated() * megabyte_scaling_factor,
+                self.global_epoch,
+            )
 
     def process_data_loader(self, data_loader, train_mode=False, loss_reduction=None):
         """
@@ -512,7 +535,12 @@ class Burrito(ABC):
                 self.write_loss("Validation loss", average_loss, self.global_epoch)
         return loss_reduction(average_loss)
 
-    def train(self, epochs):
+    def train(self, epochs, out_prefix=None):
+        """
+        Train the model for the given number of epochs.
+
+        If out_prefix is provided, then a crepe will be saved to that location.
+        """
         assert self.train_loader is not None, "No training data provided."
 
         train_losses = []
@@ -536,6 +564,10 @@ class Burrito(ABC):
                 current_lr = self.optimizer.param_groups[0]["lr"]
                 if current_lr < self.min_learning_rate:
                     break
+
+                if self.device.type == "cuda":
+                    # Clear cache for accurate memory usage tracking.
+                    torch.cuda.empty_cache()
 
                 train_loss = self.process_data_loader(
                     self.train_loader, train_mode=True
@@ -561,10 +593,14 @@ class Burrito(ABC):
                         lr=current_lr,
                         refresh=True,
                     )
+                self.write_cuda_memory_info()
                 self.writer.flush()
 
         if best_model_state is not None:
             self.model.load_state_dict(best_model_state)
+
+        if out_prefix is not None:
+            self.save_crepe(out_prefix)
 
         return pd.DataFrame({"train_loss": train_losses, "val_loss": val_losses})
 
@@ -639,9 +675,13 @@ class Burrito(ABC):
             dataset.branch_lengths = torch.tensor(lengths)
 
     def mark_branch_lengths_optimized(self, cycle):
-        self.writer.add_scalar("branch length optimization", cycle, self.global_epoch)
+        self.writer.add_scalar(
+            "branch length optimization", cycle, self.global_epoch, walltime=time()
+        )
 
-    def joint_train(self, epochs=100, cycle_count=2, training_method="full"):
+    def joint_train(
+        self, epochs=100, cycle_count=2, training_method="full", out_prefix=None
+    ):
         """
         Do joint optimization of model and branch lengths.
 
@@ -858,6 +898,7 @@ class RSSHMBurrito(SHMBurrito):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         optimal_lengths = []
+        failed_count = 0
 
         self.model.eval()
         self.model.freeze()
@@ -879,15 +920,21 @@ class RSSHMBurrito(SHMBurrito):
             total=len(dataset.encoded_parents),
             desc="Finding optimal branch lengths",
         ):
-            optimal_lengths.append(
-                self._find_optimal_branch_length(
-                    encoded_parent,
-                    mask,
-                    mutation_indicator,
-                    wt_base_modifier,
-                    starting_branch_length,
-                    **optimization_kwargs,
-                )
+            branch_length, failed_to_converge = self._find_optimal_branch_length(
+                encoded_parent,
+                mask,
+                mutation_indicator,
+                wt_base_modifier,
+                starting_branch_length,
+                **optimization_kwargs,
+            )
+
+            optimal_lengths.append(branch_length)
+            failed_count += failed_to_converge
+
+        if failed_count > 0:
+            print(
+                f"Branch length optimization failed to converge for {failed_count} of {len(dataset)} sequences."
             )
 
         self.model.unfreeze()
@@ -896,8 +943,12 @@ class RSSHMBurrito(SHMBurrito):
 
     def write_loss(self, loss_name, loss, step):
         rate_loss, csp_loss = loss.unbind()
-        self.writer.add_scalar("Rate " + loss_name, rate_loss.item(), step)
-        self.writer.add_scalar("CSP " + loss_name, csp_loss.item(), step)
+        self.writer.add_scalar(
+            "Rate " + loss_name, rate_loss.item(), step, walltime=time()
+        )
+        self.writer.add_scalar(
+            "CSP " + loss_name, csp_loss.item(), step, walltime=time()
+        )
 
 
 def burrito_class_of_model(model):
