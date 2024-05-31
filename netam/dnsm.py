@@ -109,7 +109,7 @@ class DNSMDataset(Dataset):
             f"Expected {len(self._branch_lengths)} branch lengths, "
             f"got {len(new_branch_lengths)}"
         )
-        assert np.all(np.isfinite(new_branch_lengths) & (new_branch_lengths > 0))
+        assert torch.all(torch.isfinite(new_branch_lengths) & (new_branch_lengths > 0))
         self._branch_lengths = new_branch_lengths
         self.update_neutral_aa_mut_probs()
 
@@ -298,6 +298,7 @@ class DNSMBurrito(framework.Burrito):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         optimal_lengths = []
+        failed_count = 0
 
         for parent, child, rates, subs_probs, starting_length in tqdm(
             zip(
@@ -310,18 +311,24 @@ class DNSMBurrito(framework.Burrito):
             total=len(dataset.nt_parents),
             desc="Finding optimal branch lengths",
         ):
-            optimal_lengths.append(
-                self._find_optimal_branch_length(
-                    parent,
-                    child,
-                    rates[: len(parent)],
-                    subs_probs[: len(parent), :],
-                    starting_length,
-                    **optimization_kwargs,
-                )
+            branch_length, failed_to_converge = self._find_optimal_branch_length(
+                parent,
+                child,
+                rates[: len(parent)],
+                subs_probs[: len(parent), :],
+                starting_length,
+                **optimization_kwargs,
             )
 
-        return np.array(optimal_lengths)
+            optimal_lengths.append(branch_length)
+            failed_count += failed_to_converge
+
+        if failed_count > 0:
+            print(
+                f"Branch length optimization failed to converge for {failed_count} of {len(dataset)} sequences."
+            )
+
+        return torch.tensor(optimal_lengths)
 
     def to_crepe(self):
         training_hyperparameters = {

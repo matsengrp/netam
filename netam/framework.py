@@ -898,6 +898,7 @@ class RSSHMBurrito(SHMBurrito):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         optimal_lengths = []
+        failed_count = 0
 
         self.model.eval()
         self.model.freeze()
@@ -919,15 +920,21 @@ class RSSHMBurrito(SHMBurrito):
             total=len(dataset.encoded_parents),
             desc="Finding optimal branch lengths",
         ):
-            optimal_lengths.append(
-                self._find_optimal_branch_length(
-                    encoded_parent,
-                    mask,
-                    mutation_indicator,
-                    wt_base_modifier,
-                    starting_branch_length,
-                    **optimization_kwargs,
-                )
+            branch_length, failed_to_converge = self._find_optimal_branch_length(
+                encoded_parent,
+                mask,
+                mutation_indicator,
+                wt_base_modifier,
+                starting_branch_length,
+                **optimization_kwargs,
+            )
+
+            optimal_lengths.append(branch_length)
+            failed_count += failed_to_converge
+
+        if failed_count > 0:
+            print(
+                f"Branch length optimization failed to converge for {failed_count} of {len(dataset)} sequences."
             )
 
         self.model.unfreeze()
