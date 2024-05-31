@@ -122,7 +122,7 @@ class DNSMDataset(Dataset):
         self.branch_lengths = pd.read_csv(in_csv_path)["branch_length"].values
 
     def update_neutral_aa_mut_probs(self):
-        print("consolidating shmple rates into substitution probabilities...")
+        print("consolidating neutral rates into substitution probabilities...")
 
         neutral_aa_mut_prob_l = []
 

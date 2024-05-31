@@ -431,6 +431,21 @@ class Burrito(ABC):
     def write_loss(self, loss_name, loss, step):
         self.writer.add_scalar(loss_name, loss, step, walltime=time())
 
+    def write_cuda_memory_info(self):
+        megabyte_scaling_factor = 1 / 1024 ** 2
+        # if self.device is cuda
+        if self.device.type == "cuda":
+            self.writer.add_scalar(
+                "CUDA memory allocated",
+                torch.cuda.memory_allocated() * megabyte_scaling_factor,
+                self.global_epoch,
+            )
+            self.writer.add_scalar(
+                "CUDA max memory allocated",
+                torch.cuda.max_memory_allocated() * megabyte_scaling_factor,
+                self.global_epoch,
+            )
+
     def process_data_loader(self, data_loader, train_mode=False, loss_reduction=None):
         """
         Process data through the model using the given data loader.
@@ -538,6 +553,9 @@ class Burrito(ABC):
                 if current_lr < self.min_learning_rate:
                     break
 
+                if self.device.type == "cuda":
+                    torch.cuda.empty_cache()
+
                 train_loss = self.process_data_loader(
                     self.train_loader, train_mode=True
                 ).item()
@@ -562,6 +580,7 @@ class Burrito(ABC):
                         lr=current_lr,
                         refresh=True,
                     )
+                self.write_cuda_memory_info()
                 self.writer.flush()
 
         if best_model_state is not None:
