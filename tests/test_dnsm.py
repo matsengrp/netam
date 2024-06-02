@@ -48,35 +48,14 @@ def dnsm_burrito(pcp_df):
         learning_rate=0.001,
         min_learning_rate=0.0001,
     )
-    # NOTE Temporary change to fixed; return to full when ready
-    burrito.joint_train(epochs=1, cycle_count=2, training_method="fixed")
+    burrito.joint_train(epochs=1, cycle_count=2, training_method="full")
     return burrito
-
-
-def worker_optimize_branch_length(model, dataset):
-    burrito = DNSMBurrito(None, dataset, model)
-    return burrito.find_optimal_branch_lengths(dataset)
-
-
-def split_dataset(dataset, into_count):
-    """
-    Split a Dataset into into_count subsets.
-    """
-    dataset_size = len(dataset)
-    indices = list(range(dataset_size))
-    split_indices = np.array_split(indices, into_count)
-    subsets = [dataset.clone_with_indices(split_indices[i]) for i in range(into_count)]
-    return subsets
 
 
 def test_parallel_branch_length_optimization(dnsm_burrito):
     dataset = dnsm_burrito.val_dataset
-    model = dnsm_burrito.model
-    splits = split_dataset(dataset, 2)
-    pool = Pool(2)
-    split_branch_lengths = pool.starmap(worker_optimize_branch_length, [(model, dataset) for dataset in splits])
-    parallel_branch_lengths = torch.cat(split_branch_lengths)
-    branch_lengths = dnsm_burrito.find_optimal_branch_lengths(dataset)
+    parallel_branch_lengths = dnsm_burrito.find_optimal_branch_lengths(dataset)
+    branch_lengths = dnsm_burrito.serial_find_optimal_branch_lengths(dataset)
     assert torch.allclose(branch_lengths, parallel_branch_lengths)
 
 

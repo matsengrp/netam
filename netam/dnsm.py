@@ -8,6 +8,8 @@ We'll use these conventions:
 
 """
 
+import multiprocessing as mp
+
 import torch
 from torch.utils.data import Dataset
 import torch.nn.functional as F
@@ -338,7 +340,7 @@ class DNSMBurrito(framework.Burrito):
             log_pcp_probability, starting_branch_length, **optimization_kwargs
         )
 
-    def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
+    def serial_find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         optimal_lengths = []
         failed_count = 0
 
@@ -372,6 +374,17 @@ class DNSMBurrito(framework.Burrito):
 
         return torch.tensor(optimal_lengths)
 
+    def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
+        worker_count = min(mp.cpu_count()//2, 10)
+        with mp.Pool(worker_count) as pool:
+            splits = split_dataset(dataset, worker_count)
+            results = pool.starmap(
+                worker_optimize_branch_length,
+                [(self.model, split, optimization_kwargs) for split in splits],
+            )
+        return torch.cat(results)
+        
+
     def to_crepe(self):
         training_hyperparameters = {
             key: self.__dict__[key]
@@ -382,6 +395,25 @@ class DNSMBurrito(framework.Burrito):
         encoder = framework.PlaceholderEncoder()
         return framework.Crepe(encoder, self.model, training_hyperparameters)
 
+
+## Begin functions used for parallel branch length optimization.
+
+def worker_optimize_branch_length(model, dataset, optimization_kwargs):
+    burrito = DNSMBurrito(None, dataset, model)
+    return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
+
+
+def split_dataset(dataset, into_count):
+    """
+    Split a Dataset into into_count subsets.
+    """
+    dataset_size = len(dataset)
+    indices = list(range(dataset_size))
+    split_indices = np.array_split(indices, into_count)
+    subsets = [dataset.clone_with_indices(split_indices[i]) for i in range(into_count)]
+    return subsets
+
+### End functions used for parallel branch length optimization.
 
 class DNSMHyperBurrito(HyperBurrito):
     # Note that we have to write the args out explicitly because we use some magic to filter kwargs in the optuna_objective method.
