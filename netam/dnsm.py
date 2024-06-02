@@ -49,12 +49,12 @@ class DNSMDataset(Dataset):
         nt_children,
         all_rates,
         all_subs_probs,
-        branch_length_multiplier=5.0,
+        branch_lengths,
     ):
         self.nt_parents = nt_parents
         self.nt_children = nt_children
-        self.all_rates = stack_heterogeneous(all_rates.reset_index(drop=True))
-        self.all_subs_probs = stack_heterogeneous(all_subs_probs.reset_index(drop=True))
+        self.all_rates = all_rates
+        self.all_subs_probs = all_subs_probs
 
         assert len(self.nt_parents) == len(self.nt_children)
         pcp_count = len(self.nt_parents)
@@ -89,15 +89,57 @@ class DNSMDataset(Dataset):
         assert torch.all(self.mask.sum(dim=1) > 0)
         assert torch.max(self.aa_parents_idxs) <= MAX_AMBIG_AA_IDX
 
-        # Make initial branch lengths (will get optimized later).
-        self._branch_lengths = np.array(
+        self._branch_lengths = branch_lengths
+        self.update_neutral_aa_mut_probs()
+
+    @classmethod
+    def from_data(
+        cls,
+        nt_parents,
+        nt_children,
+        all_rates,
+        all_subs_probs,
+        branch_length_multiplier=5.0,
+    ):
+        """
+        Alternative constructor that takes the raw data and calculates the initial
+        branch lengths.
+        """
+        initial_branch_lengths = np.array(
             [
                 sequences.nt_mutation_frequency(parent, child)
                 * branch_length_multiplier
-                for parent, child in zip(self.nt_parents, self.nt_children)
+                for parent, child in zip(nt_parents, nt_children)
             ]
         )
-        self.update_neutral_aa_mut_probs()
+        return cls(
+            nt_parents.reset_index(drop=True),
+            nt_children.reset_index(drop=True),
+            # TODO we should use different names or something
+            stack_heterogeneous(all_rates.reset_index(drop=True)),
+            stack_heterogeneous(all_subs_probs.reset_index(drop=True)),
+            initial_branch_lengths,
+        )
+
+    def clone(self):
+        new_dataset = DNSMDataset(
+            self.nt_parents,
+            self.nt_children,
+            self.all_rates,
+            self.all_subs_probs,
+            self._branch_lengths,
+        )
+        return new_dataset
+
+    def clone_with_indices(self, indices):
+        new_dataset = DNSMDataset(
+            self.nt_parents[indices],
+            self.nt_children[indices],
+            self.all_rates[indices],
+            self.all_subs_probs[indices],
+            self._branch_lengths[indices],
+        )
+        return new_dataset
 
     @property
     def branch_lengths(self):
@@ -216,7 +258,7 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multipli
         subs_probs[:train_len],
         subs_probs[train_len:],
     )
-    val_dataset = DNSMDataset(
+    val_dataset = DNSMDataset.from_data(
         val_parents,
         val_children,
         val_rates,
@@ -226,7 +268,7 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multipli
     if train_frac == 0.0:
         return None, val_dataset
     # else:
-    train_dataset = DNSMDataset(
+    train_dataset = DNSMDataset.from_data(
         train_parents,
         train_children,
         train_rates,

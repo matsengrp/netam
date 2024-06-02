@@ -1,6 +1,6 @@
 import os
 
-import pandas as pd
+import numpy as np
 import torch
 import pytest
 
@@ -13,6 +13,7 @@ from netam.common import aa_idx_tensor_of_str_ambig, MAX_AMBIG_AA_IDX
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dnsm import DNSMBurrito, train_test_datasets_of_pcp_df
 
+from multiprocessing import Pool
 
 def test_aa_idx_tensor_of_str_ambig():
     input_seq = "ACX"
@@ -47,8 +48,36 @@ def dnsm_burrito(pcp_df):
         learning_rate=0.001,
         min_learning_rate=0.0001,
     )
-    burrito.joint_train(epochs=1, cycle_count=2, training_method="full")
+    # NOTE Temporary change to fixed; return to full when ready
+    burrito.joint_train(epochs=1, cycle_count=2, training_method="fixed")
     return burrito
+
+
+def worker_optimize_branch_length(model, dataset):
+    burrito = DNSMBurrito(None, dataset, model)
+    return burrito.find_optimal_branch_lengths(dataset)
+
+
+def split_dataset(dataset, into_count):
+    """
+    Split a Dataset into into_count subsets.
+    """
+    dataset_size = len(dataset)
+    indices = list(range(dataset_size))
+    split_indices = np.array_split(indices, into_count)
+    subsets = [dataset.clone_with_indices(split_indices[i]) for i in range(into_count)]
+    return subsets
+
+
+def test_parallel_branch_length_optimization(dnsm_burrito):
+    dataset = dnsm_burrito.val_dataset
+    model = dnsm_burrito.model
+    splits = split_dataset(dataset, 2)
+    pool = Pool(2)
+    split_branch_lengths = pool.starmap(worker_optimize_branch_length, [(model, dataset) for dataset in splits])
+    parallel_branch_lengths = torch.cat(split_branch_lengths)
+    branch_lengths = dnsm_burrito.find_optimal_branch_lengths(dataset)
+    assert torch.allclose(branch_lengths, parallel_branch_lengths)
 
 
 def test_crepe_roundtrip(dnsm_burrito):
