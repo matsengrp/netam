@@ -1,5 +1,5 @@
-import copy
 from abc import ABC, abstractmethod
+import copy
 import os
 from time import time
 
@@ -11,7 +11,6 @@ from tqdm import tqdm
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from tensorboardX import SummaryWriter
@@ -381,16 +380,13 @@ class Burrito(ABC):
         Note that we allow train_dataset to be None, to support use cases where
         we just want to do evaluation.
         """
-        if train_dataset is None:
-            self.train_loader = None
-        else:
-            self.train_loader = DataLoader(
-                train_dataset, batch_size=batch_size, shuffle=True
-            )
+        self.train_dataset = train_dataset
+        self.val_dataset = val_dataset
+        self.batch_size = batch_size
+        if train_dataset is not None:
             self.writer = SummaryWriter(log_dir=f"./_logs/{name}")
             self.writer.add_text("model_name", model.__class__.__name__)
             self.writer.add_text("model_hyperparameters", str(model.hyperparameters))
-        self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
         self.model = model
         self.learning_rate = learning_rate
         self.min_learning_rate = min_learning_rate
@@ -400,6 +396,17 @@ class Burrito(ABC):
         self.reset_optimization()
         self.bce_loss = nn.BCELoss()
         self.global_epoch = 0
+
+    def build_train_loader(self):
+        if self.train_dataset is None:
+            return None
+        else:
+            return DataLoader(
+                self.train_dataset, batch_size=self.batch_size, shuffle=True
+            )
+    
+    def build_val_loader(self):
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False)
 
     @property
     def device(self):
@@ -541,7 +548,9 @@ class Burrito(ABC):
 
         If out_prefix is provided, then a crepe will be saved to that location.
         """
-        assert self.train_loader is not None, "No training data provided."
+        assert self.train_dataset is not None, "No training data provided."
+        train_loader = self.build_train_loader()
+        val_loader = self.build_val_loader()
 
         train_losses = []
         val_losses = []
@@ -554,9 +563,9 @@ class Burrito(ABC):
 
         # Record the initial loss before training.
         train_loss = self.process_data_loader(
-            self.train_loader, train_mode=False
+            train_loader, train_mode=False
         ).item()
-        val_loss = self.process_data_loader(self.val_loader, train_mode=False).item()
+        val_loss = self.process_data_loader(val_loader, train_mode=False).item()
         record_losses(train_loss, val_loss)
 
         with tqdm(range(1, epochs + 1), desc="Epoch") as pbar:
@@ -570,10 +579,10 @@ class Burrito(ABC):
                     torch.cuda.empty_cache()
 
                 train_loss = self.process_data_loader(
-                    self.train_loader, train_mode=True
+                    train_loader, train_mode=True
                 ).item()
                 val_loss = self.process_data_loader(
-                    self.val_loader, train_mode=False
+                    val_loader, train_mode=False
                 ).item()
                 self.scheduler.step(val_loss)
                 record_losses(train_loss, val_loss)
@@ -608,7 +617,8 @@ class Burrito(ABC):
         """
         Evaluate the model on the validation set.
         """
-        return self.process_data_loader(self.val_loader, train_mode=False).item()
+        val_loader = self.build_val_loader()
+        return self.process_data_loader(val_loader, train_mode=False).item()
 
     def save_crepe(self, prefix):
         self.to_crepe().save(prefix)
@@ -629,10 +639,9 @@ class Burrito(ABC):
         # model to the device it was on before.
         device = next(self.model.parameters()).device
         self.model.to("cpu")
-        for loader in [self.train_loader, self.val_loader]:
-            if loader is None:
+        for dataset in [self.train_dataset, self.val_dataset]:
+            if dataset is None:
                 continue
-            dataset = loader.dataset
             dataset.to("cpu")
             dataset.branch_lengths = self.find_optimal_branch_lengths(
                 dataset, **optimization_kwargs
@@ -648,10 +657,9 @@ class Burrito(ABC):
         See https://github.com/matsengrp/netam/assets/112708/034abb74-5635-48dc-bf28-4321b9110222
         """
         self.standardize_model_rates()
-        for loader in [self.train_loader, self.val_loader]:
-            if loader is None:
+        for dataset in [self.train_dataset, self.val_dataset]:
+            if dataset is None:
                 continue
-            dataset = loader.dataset
             lengths = []
             for (
                 encoded_parent,
@@ -776,7 +784,7 @@ class SHMBurrito(Burrito):
         """
         Calculate rate on site 14 (zero-indexed) of VRC01_NT_SEQ.
         """
-        encoder = self.val_loader.dataset.encoder
+        encoder = self.val_dataset.encoder
         assert (
             encoder.site_count >= 15
         ), "Encoder site count too small vrc01_site_14_model_rate"
@@ -812,7 +820,7 @@ class SHMBurrito(Burrito):
         }
         encoder = KmerSequenceEncoder(
             self.model.hyperparameters["kmer_length"],
-            self.train_loader.dataset.encoder.site_count,
+            self.train_dataset.encoder.site_count,
         )
         return Crepe(encoder, self.model, training_hyperparameters)
 
@@ -830,8 +838,9 @@ class RSSHMBurrito(SHMBurrito):
         return super().process_data_loader(data_loader, train_mode, loss_reduction)
 
     def evaluate(self):
+        val_loader = self.build_val_loader()
         return super().process_data_loader(
-            self.val_loader, train_mode=False, loss_reduction=lambda x: x
+            val_loader, train_mode=False, loss_reduction=lambda x: x
         )
 
     def loss_of_batch(self, batch):

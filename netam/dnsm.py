@@ -242,11 +242,11 @@ class DNSMBurrito(framework.Burrito):
         self.wrapped_model = WrappedBinaryMutSel(self.model, weights_directory=None)
 
     def load_branch_lengths(self, in_csv_prefix):
-        if self.train_loader is not None:
-            self.train_loader.dataset.load_branch_lengths(
+        if self.train_dataset is not None:
+            self.train_dataset.load_branch_lengths(
                 in_csv_prefix + ".train_branch_lengths.csv"
             )
-        self.val_loader.dataset.load_branch_lengths(
+        self.val_dataset.load_branch_lengths(
             in_csv_prefix + ".val_branch_lengths.csv"
         )
 
