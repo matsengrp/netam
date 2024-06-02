@@ -404,7 +404,7 @@ class Burrito(ABC):
             return DataLoader(
                 self.train_dataset, batch_size=self.batch_size, shuffle=True
             )
-    
+
     def build_val_loader(self):
         return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False)
 
@@ -562,9 +562,7 @@ class Burrito(ABC):
             val_losses.append(val_loss)
 
         # Record the initial loss before training.
-        train_loss = self.process_data_loader(
-            train_loader, train_mode=False
-        ).item()
+        train_loss = self.process_data_loader(train_loader, train_mode=False).item()
         val_loss = self.process_data_loader(val_loader, train_mode=False).item()
         record_losses(train_loss, val_loss)
 
@@ -581,9 +579,7 @@ class Burrito(ABC):
                 train_loss = self.process_data_loader(
                     train_loader, train_mode=True
                 ).item()
-                val_loss = self.process_data_loader(
-                    val_loader, train_mode=False
-                ).item()
+                val_loss = self.process_data_loader(val_loader, train_mode=False).item()
                 self.scheduler.step(val_loss)
                 record_losses(train_loss, val_loss)
                 self.global_epoch += 1

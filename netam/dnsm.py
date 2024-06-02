@@ -290,9 +290,7 @@ class DNSMBurrito(framework.Burrito):
             self.train_dataset.load_branch_lengths(
                 in_csv_prefix + ".train_branch_lengths.csv"
             )
-        self.val_dataset.load_branch_lengths(
-            in_csv_prefix + ".val_branch_lengths.csv"
-        )
+        self.val_dataset.load_branch_lengths(in_csv_prefix + ".val_branch_lengths.csv")
 
     def predictions_of_batch(self, batch):
         """
@@ -375,7 +373,7 @@ class DNSMBurrito(framework.Burrito):
         return torch.tensor(optimal_lengths)
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
-        worker_count = min(mp.cpu_count()//2, 10)
+        worker_count = min(mp.cpu_count() // 2, 10)
         with mp.Pool(worker_count) as pool:
             splits = split_dataset(dataset, worker_count)
             results = pool.starmap(
@@ -383,7 +381,6 @@ class DNSMBurrito(framework.Burrito):
                 [(self.model, split, optimization_kwargs) for split in splits],
             )
         return torch.cat(results)
-        
 
     def to_crepe(self):
         training_hyperparameters = {
@@ -397,6 +394,7 @@ class DNSMBurrito(framework.Burrito):
 
 
 ## Begin functions used for parallel branch length optimization.
+
 
 def worker_optimize_branch_length(model, dataset, optimization_kwargs):
     burrito = DNSMBurrito(None, dataset, model)
@@ -413,7 +411,9 @@ def split_dataset(dataset, into_count):
     subsets = [dataset.clone_with_indices(split_indices[i]) for i in range(into_count)]
     return subsets
 
+
 ### End functions used for parallel branch length optimization.
+
 
 class DNSMHyperBurrito(HyperBurrito):
     # Note that we have to write the args out explicitly because we use some magic to filter kwargs in the optuna_objective method.

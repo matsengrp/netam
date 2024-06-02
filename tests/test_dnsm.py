@@ -15,6 +15,7 @@ from netam.dnsm import DNSMBurrito, train_test_datasets_of_pcp_df
 
 from multiprocessing import Pool
 
+
 def test_aa_idx_tensor_of_str_ambig():
     input_seq = "ACX"
     expected_output = torch.tensor([0, 1, MAX_AMBIG_AA_IDX], dtype=torch.int)
