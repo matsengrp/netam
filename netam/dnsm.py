@@ -138,7 +138,7 @@ class DNSMDataset(Dataset):
     def subset_via_indices(self, indices):
         """
         Create a new dataset with a subset of the data, as per `indices`.
-        
+
         Whether the new dataset is a deep copy or a shallow copy using slices
         depends on `indices`: if `indices` is an iterable of integers, then we
         make a deep copy, otherwise we use slices to make a shallow copy.
