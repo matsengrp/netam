@@ -38,7 +38,6 @@ from netam.common import (
     clamp_probability,
     aa_mask_tensor_of,
     stack_heterogeneous,
-    pick_device,
 )
 import netam.framework as framework
 from netam.hyper_burrito import HyperBurrito
@@ -47,11 +46,11 @@ from netam.hyper_burrito import HyperBurrito
 class DNSMDataset(Dataset):
     def __init__(
         self,
-        nt_parents,
-        nt_children,
-        all_rates,
-        all_subs_probs,
-        branch_lengths,
+        nt_parents: pd.Series,
+        nt_children: pd.Series,
+        all_rates: torch.Tensor,
+        all_subs_probs: torch.Tensor,
+        branch_lengths: torch.Tensor,
     ):
         self.nt_parents = nt_parents
         self.nt_children = nt_children
@@ -97,15 +96,18 @@ class DNSMDataset(Dataset):
     @classmethod
     def from_data(
         cls,
-        nt_parents,
-        nt_children,
-        all_rates,
-        all_subs_probs,
+        nt_parents: pd.Series,
+        nt_children: pd.Series,
+        all_rates_series: pd.Series,
+        all_subs_probs_series: pd.Series,
         branch_length_multiplier=5.0,
     ):
         """
-        Alternative constructor that takes the raw data and calculates the initial
-        branch lengths.
+        Alternative constructor that takes the raw data and calculates the
+        initial branch lengths.
+
+        The `_series` arguments are series of Tensor which get concatenated to
+        create the full object.
         """
         initial_branch_lengths = np.array(
             [
@@ -117,9 +119,8 @@ class DNSMDataset(Dataset):
         return cls(
             nt_parents.reset_index(drop=True),
             nt_children.reset_index(drop=True),
-            # TODO we should use different names or something
-            stack_heterogeneous(all_rates.reset_index(drop=True)),
-            stack_heterogeneous(all_subs_probs.reset_index(drop=True)),
+            stack_heterogeneous(all_rates_series.reset_index(drop=True)),
+            stack_heterogeneous(all_subs_probs_series.reset_index(drop=True)),
             initial_branch_lengths,
         )
 
@@ -135,8 +136,8 @@ class DNSMDataset(Dataset):
 
     def clone_with_indices(self, indices):
         new_dataset = DNSMDataset(
-            self.nt_parents[indices],
-            self.nt_children[indices],
+            self.nt_parents[indices].reset_index(drop=True),
+            self.nt_children[indices].reset_index(drop=True),
             self.all_rates[indices],
             self.all_subs_probs[indices],
             self._branch_lengths[indices],
