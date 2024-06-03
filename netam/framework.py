@@ -719,7 +719,7 @@ class Burrito(ABC):
                 weight * np.log(current_lr) + (1 - weight) * np.log(self.learning_rate)
             )
             self.reset_optimization(new_lr)
-            loss_history_l.append(self.train(epochs))
+            loss_history_l.append(self.train(epochs, out_prefix=out_prefix))
             if cycle < cycle_count - 1:
                 optimize_branch_lengths()
             self.mark_branch_lengths_optimized(cycle + 1)

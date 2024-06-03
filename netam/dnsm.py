@@ -353,6 +353,8 @@ class DNSMBurrito(framework.Burrito):
         log_pcp_probability = self.wrapped_model._build_log_pcp_probability(
             parent, child, rates, subs_probs
         )
+        if type(starting_branch_length) == torch.Tensor:
+            starting_branch_length = starting_branch_length.detach().item()
         return optimize_branch_length(
             log_pcp_probability, starting_branch_length, **optimization_kwargs
         )
