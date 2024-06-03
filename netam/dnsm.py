@@ -106,7 +106,7 @@ class DNSMDataset(Dataset):
         Alternative constructor that takes the raw data and calculates the
         initial branch lengths.
 
-        The `_series` arguments are series of Tensor which get concatenated to
+        The `_series` arguments are series of Tensors which get stacked to
         create the full object.
         """
         initial_branch_lengths = np.array(
@@ -125,16 +125,24 @@ class DNSMDataset(Dataset):
         )
 
     def clone(self):
+        """Make a deep copy of the dataset."""
         new_dataset = DNSMDataset(
             self.nt_parents,
             self.nt_children,
-            self.all_rates,
-            self.all_subs_probs,
-            self._branch_lengths,
+            self.all_rates.copy(),
+            self.all_subs_probs.copy(),
+            self._branch_lengths.copy(),
         )
         return new_dataset
 
-    def clone_with_indices(self, indices):
+    def subset_via_indices(self, indices):
+        """
+        Create a new dataset with a subset of the data, as per `indices`.
+        
+        Whether the new dataset is a deep copy or a shallow copy using slices
+        depends on `indices`: if `indices` is an iterable of integers, then we
+        make a deep copy, otherwise we use slices to make a shallow copy.
+        """
         new_dataset = DNSMDataset(
             self.nt_parents[indices].reset_index(drop=True),
             self.nt_children[indices].reset_index(drop=True),
@@ -151,7 +159,7 @@ class DNSMDataset(Dataset):
         dataset_size = len(self)
         indices = list(range(dataset_size))
         split_indices = np.array_split(indices, into_count)
-        subsets = [self.clone_with_indices(split_indices[i]) for i in range(into_count)]
+        subsets = [self.subset_via_indices(split_indices[i]) for i in range(into_count)]
         return subsets
 
     @property
