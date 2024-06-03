@@ -1,6 +1,5 @@
 import os
 
-import numpy as np
 import torch
 import pytest
 
@@ -12,8 +11,6 @@ from netam.framework import (
 from netam.common import aa_idx_tensor_of_str_ambig, MAX_AMBIG_AA_IDX
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dnsm import DNSMBurrito, train_test_datasets_of_pcp_df
-
-from multiprocessing import Pool
 
 
 def test_aa_idx_tensor_of_str_ambig():
