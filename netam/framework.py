@@ -416,7 +416,7 @@ class Burrito(ABC):
         """Reset the optimizer and scheduler."""
         if learning_rate is None:
             learning_rate = self.learning_rate
-        self.optimizer = torch.optim.Adam(
+        self.optimizer = torch.optim.AdamW(
             self.model.parameters(),
             lr=learning_rate,
             weight_decay=self.l2_regularization_coeff,
