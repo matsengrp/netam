@@ -404,15 +404,12 @@ class DNSMBurrito(framework.Burrito):
         return framework.Crepe(encoder, self.model, training_hyperparameters)
 
 
-## Begin functions used for parallel branch length optimization.
-
-
 def worker_optimize_branch_length(model, dataset, optimization_kwargs):
+    """
+    The worker used for parallel branch length optimization.
+    """
     burrito = DNSMBurrito(None, dataset, model)
     return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
-
-
-### End functions used for parallel branch length optimization.
 
 
 class DNSMHyperBurrito(HyperBurrito):
