@@ -8,6 +8,7 @@ We'll use these conventions:
 
 """
 
+import copy
 import multiprocessing as mp
 
 import torch
@@ -418,7 +419,7 @@ def worker_optimize_branch_length(model, dataset, optimization_kwargs):
     """
     The worker used for parallel branch length optimization.
     """
-    burrito = DNSMBurrito(None, dataset, model)
+    burrito = DNSMBurrito(None, dataset, copy.deepcopy(model))
     return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
 
 
