@@ -394,6 +394,7 @@ class Burrito(ABC):
         self.reset_optimization()
         self.bce_loss = nn.BCELoss()
         self.global_epoch = 0
+        self.start_time = time()
 
     def build_train_loader(self):
         if self.train_dataset is None:
@@ -423,6 +424,12 @@ class Burrito(ABC):
             self.optimizer, mode="min", factor=0.5, patience=10
         )
 
+    def execution_hours(self):
+        """
+        Return time in hours (rounded to 3 decimal places) since the Burrito was created.
+        """
+        return round((time() - self.start_time) / 3600, 3)
+
     def multi_train(self, epochs, max_tries=3):
         """
         Train the model. If lr isn't below min_lr, reset the optimizer and
@@ -442,7 +449,7 @@ class Burrito(ABC):
         return train_history
 
     def write_loss(self, loss_name, loss, step):
-        self.writer.add_scalar(loss_name, loss, step, walltime=time())
+        self.writer.add_scalar(loss_name, loss, step, walltime=self.execution_hours())
 
     def write_cuda_memory_info(self):
         megabyte_scaling_factor = 1 / 1024**2
@@ -678,7 +685,7 @@ class Burrito(ABC):
 
     def mark_branch_lengths_optimized(self, cycle):
         self.writer.add_scalar(
-            "branch length optimization", cycle, self.global_epoch, walltime=time()
+            "branch length optimization", cycle, self.global_epoch, walltime=self.execution_hours()
         )
 
     def joint_train(
@@ -945,10 +952,10 @@ class RSSHMBurrito(SHMBurrito):
     def write_loss(self, loss_name, loss, step):
         rate_loss, csp_loss = loss.unbind()
         self.writer.add_scalar(
-            "Rate " + loss_name, rate_loss.item(), step, walltime=time()
+            "Rate " + loss_name, rate_loss.item(), step, walltime=self.execution_hours()
         )
         self.writer.add_scalar(
-            "CSP " + loss_name, csp_loss.item(), step, walltime=time()
+            "CSP " + loss_name, csp_loss.item(), step, walltime=self.execution_hours()
         )
 
 
