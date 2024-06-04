@@ -685,7 +685,10 @@ class Burrito(ABC):
 
     def mark_branch_lengths_optimized(self, cycle):
         self.writer.add_scalar(
-            "branch length optimization", cycle, self.global_epoch, walltime=self.execution_hours()
+            "branch length optimization",
+            cycle,
+            self.global_epoch,
+            walltime=self.execution_hours(),
         )
 
     def joint_train(
