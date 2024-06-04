@@ -432,7 +432,6 @@ class DNSMHyperBurrito(HyperBurrito):
         learning_rate=0.1,
         min_learning_rate=1e-4,
         l2_regularization_coeff=1e-6,
-        verbose=False,
     ):
         model.to(device)
         burrito = DNSMBurrito(
@@ -443,6 +442,5 @@ class DNSMHyperBurrito(HyperBurrito):
             learning_rate=learning_rate,
             min_learning_rate=min_learning_rate,
             l2_regularization_coeff=l2_regularization_coeff,
-            verbose=verbose,
         )
         return burrito
