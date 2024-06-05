@@ -1,6 +1,7 @@
 import math
 import inspect
 import itertools
+import subprocess
 
 import numpy as np
 import torch
@@ -141,6 +142,21 @@ def stack_heterogeneous(tensors, pad_value=0.0):
     return torch.stack(padded_tensors)
 
 
+def find_least_used_cuda_gpu():
+    result = subprocess.run(
+        ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,nounits,noheader"],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        print("Error running nvidia-smi; choosing GPU 0.")
+        return 0
+    utilization = [int(x) for x in result.stdout.strip().split("\n")]
+    least_used_gpu = utilization.index(min(utilization))
+    print(f"Picking GPU {least_used_gpu}; utilization: {utilization}")
+    return least_used_gpu
+
+
 def pick_device():
     # check that CUDA is usable
     def check_CUDA():
@@ -152,7 +168,8 @@ def pick_device():
 
     if torch.backends.cudnn.is_available() and check_CUDA():
         print("Using CUDA")
-        return torch.device("cuda")
+        which_gpu = find_least_used_cuda_gpu()
+        return torch.device(f"cuda:{which_gpu}")
     elif torch.backends.mps.is_available():
         print("Using Metal Performance Shaders")
         return torch.device("mps")
