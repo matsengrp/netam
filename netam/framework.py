@@ -556,6 +556,8 @@ class Burrito(ABC):
 
         If out_prefix is provided, then a crepe will be saved to that location.
         """
+        self.model.to(pick_device())
+
         assert self.train_dataset is not None, "No training data provided."
         train_loader = self.build_train_loader()
         val_loader = self.build_val_loader()
@@ -718,12 +720,12 @@ class Burrito(ABC):
             optimize_branch_lengths = lambda: None
         else:
             raise ValueError(f"Unknown training method {training_method}")
+        # TODO: remove the loss history stuff
         loss_history_l = []
         optimize_branch_lengths()
         self.mark_branch_lengths_optimized(0)
         for cycle in range(cycle_count):
             print(f"### Beginning cycle {cycle + 1}/{cycle_count}")
-            self.model.to(pick_device())
             self.mark_branch_lengths_optimized(cycle + 1)
             current_lr = self.optimizer.param_groups[0]["lr"]
             # set new_lr to be the geometric mean of current_lr and the
