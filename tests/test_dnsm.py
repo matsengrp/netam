@@ -1,6 +1,5 @@
 import os
 
-import pandas as pd
 import torch
 import pytest
 
@@ -49,6 +48,13 @@ def dnsm_burrito(pcp_df):
     )
     burrito.joint_train(epochs=1, cycle_count=2, training_method="full")
     return burrito
+
+
+def test_parallel_branch_length_optimization(dnsm_burrito):
+    dataset = dnsm_burrito.val_dataset
+    parallel_branch_lengths = dnsm_burrito.find_optimal_branch_lengths(dataset)
+    branch_lengths = dnsm_burrito.serial_find_optimal_branch_lengths(dataset)
+    assert torch.allclose(branch_lengths, parallel_branch_lengths)
 
 
 def test_crepe_roundtrip(dnsm_burrito):

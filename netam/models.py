@@ -1,5 +1,10 @@
 from abc import ABC, abstractmethod
 import math
+import warnings
+
+warnings.filterwarnings(
+    "ignore", category=UserWarning, module="torch.nn.modules.transformer"
+)
 
 import pandas as pd
 
