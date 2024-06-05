@@ -19,6 +19,7 @@ from netam.common import (
     generate_kmers,
     kmer_to_index_of,
     nt_mask_tensor_of,
+    pick_device,
     BASES,
     BASES_AND_N_TO_INDEX,
     BIG,
@@ -722,6 +723,7 @@ class Burrito(ABC):
         self.mark_branch_lengths_optimized(0)
         for cycle in range(cycle_count):
             print(f"### Beginning cycle {cycle + 1}/{cycle_count}")
+            self.model.to(pick_device())
             self.mark_branch_lengths_optimized(cycle + 1)
             current_lr = self.optimizer.param_groups[0]["lr"]
             # set new_lr to be the geometric mean of current_lr and the
