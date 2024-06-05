@@ -719,9 +719,11 @@ class Burrito(ABC):
         optimize_branch_lengths()
         self.mark_branch_lengths_optimized(0)
         for cycle in range(cycle_count):
+            print(f"### Beginning cycle {cycle + 1}/{cycle_count}")
             self.mark_branch_lengths_optimized(cycle + 1)
             current_lr = self.optimizer.param_groups[0]["lr"]
-            # set new_lr to be the geometric mean of current_lr and the learning rate
+            # set new_lr to be the geometric mean of current_lr and the
+            # originally-specified learning rate
             weight = 0.5 + cycle / (2 * cycle_count)
             new_lr = np.exp(
                 weight * np.log(current_lr) + (1 - weight) * np.log(self.learning_rate)
