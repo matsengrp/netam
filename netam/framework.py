@@ -718,7 +718,6 @@ class Burrito(ABC):
         schedule that uses a weighted geometric mean of the current learning
         rate and the initial learning rate that progressively moves towards
         keeping the current learning rate as the cycles progress.
-
         """
         if training_method == "full":
             optimize_branch_lengths = self.standardize_and_optimize_branch_lengths
@@ -742,7 +741,6 @@ class Burrito(ABC):
             new_lr = np.exp(
                 weight * np.log(current_lr) + (1 - weight) * np.log(self.learning_rate)
             )
-            # self.model_and_optimizer_to(f"cuda:{cycle % 2}")
             self.reset_optimization(new_lr)
             loss_history_l.append(self.train(epochs, out_prefix=out_prefix))
             if cycle < cycle_count - 1:
