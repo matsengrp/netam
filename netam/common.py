@@ -142,10 +142,10 @@ def stack_heterogeneous(tensors, pad_value=0.0):
     return torch.stack(padded_tensors)
 
 
-def find_least_used_cuda_gpu(default_value):
+def find_least_used_cuda_gpu():
     """
     Find the least used CUDA GPU on the system using nvidia-smi.
-    If they are all idle, return the default value.
+    If they are all idle, return None.
     """
     result = subprocess.run(
         ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,nounits,noheader"],
@@ -153,23 +153,19 @@ def find_least_used_cuda_gpu(default_value):
         text=True,
     )
     if result.returncode != 0:
-        print("Error running nvidia-smi; choosing GPU 0.")
-        return 0
+        print(f"Error running nvidia-smi.")
+        return None
     utilization = [int(x) for x in result.stdout.strip().split("\n")]
     if max(utilization) == 0:
-        gpu_to_use = default_value
-    else:
-        gpu_to_use = utilization.index(min(utilization))
-    print(
-        f"Picking GPU {gpu_to_use}; default {default_value}; utilization: {utilization}"
-    )
-    return gpu_to_use
+        return None  # All GPUs are idle.
+    # else:
+    return utilization.index(min(utilization))
 
 
-def pick_device(jobid):
+def pick_device(gpu_index=0):
     """
     Pick a device for PyTorch to use. If CUDA is available, use the least used
-    GPU, and if all are idle use a GPU based on the jobid.
+    GPU, and if all are idle use the gpu_index modulo the number of GPUs.
     """
 
     # check that CUDA is usable
@@ -181,8 +177,10 @@ def pick_device(jobid):
             return False
 
     if torch.backends.cudnn.is_available() and check_CUDA():
-        print(f"Using CUDA for job {jobid}")
-        which_gpu = find_least_used_cuda_gpu(jobid % torch.cuda.device_count())
+        which_gpu = find_least_used_cuda_gpu()
+        if which_gpu is None:
+            which_gpu = gpu_index % torch.cuda.device_count()
+        print(f"Using CUDA GPU {which_gpu}")
         return torch.device(f"cuda:{which_gpu}")
     elif torch.backends.mps.is_available():
         print("Using Metal Performance Shaders")
