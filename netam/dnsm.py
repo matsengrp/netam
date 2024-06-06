@@ -281,24 +281,6 @@ class DNSMDataset(Dataset):
         self.all_subs_probs = self.all_subs_probs.to(device)
 
 
-def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multiplier=5.0):
-    train_len = int(train_frac * len(pcp_df))
-    pcp_df = pcp_df.reset_index(drop=True)
-    # take the first train_len rows for train_df
-    train_df = pcp_df.iloc[:train_len]
-    val_df = pcp_df.iloc[train_len:]
-    val_dataset = DNSMDataset.of_pcp_df(
-        val_df, branch_length_multiplier=branch_length_multiplier
-    )
-    if train_frac == 0.0:
-        return None, val_dataset
-    # else:
-    train_dataset = DNSMDataset.of_pcp_df(
-        train_df, branch_length_multiplier=branch_length_multiplier
-    )
-    return train_dataset, val_dataset
-
-
 class DNSMBurrito(framework.Burrito):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
