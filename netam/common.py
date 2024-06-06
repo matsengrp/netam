@@ -178,7 +178,7 @@ def pick_device(jobid=0):
             return False
 
     if torch.backends.cudnn.is_available() and check_CUDA():
-        print("Using CUDA")
+        print(f"Using CUDA for job {jobid}")
         which_gpu = find_least_used_cuda_gpu(jobid % torch.cuda.device_count())
         return torch.device(f"cuda:{which_gpu}")
     elif torch.backends.mps.is_available():
