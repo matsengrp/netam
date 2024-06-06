@@ -563,9 +563,6 @@ class Burrito(ABC):
 
         If out_prefix is provided, then a crepe will be saved to that location.
         """
-        #self.model_and_optimizer_to(pick_device())
-        self.model_and_optimizer_to("cuda:1")
-
         assert self.train_dataset is not None, "No training data provided."
         train_loader = self.build_train_loader()
         val_loader = self.build_val_loader()
@@ -742,6 +739,7 @@ class Burrito(ABC):
             new_lr = np.exp(
                 weight * np.log(current_lr) + (1 - weight) * np.log(self.learning_rate)
             )
+            self.model_and_optimizer_to(f"cuda:{cycle % 2}")
             self.reset_optimization(new_lr)
             loss_history_l.append(self.train(epochs, out_prefix=out_prefix))
             if cycle < cycle_count - 1:
