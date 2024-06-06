@@ -239,10 +239,12 @@ class Crepe:
         self.encoder = encoder
         self.model = model
         self.training_hyperparameters = training_hyperparameters
-        self.device = None
+
+    @property
+    def device(self):
+        return next(self.model.parameters()).device
 
     def to(self, device):
-        self.device = device
         self.model.to(device)
 
     def encode_sequences(self, sequences):
@@ -261,10 +263,9 @@ class Crepe:
 
     def __call__(self, sequences):
         encoded_parents, masks, wt_base_modifiers = self.encode_sequences(sequences)
-        if self.device is not None:
-            encoded_parents = encoded_parents.to(self.device)
-            masks = masks.to(self.device)
-            wt_base_modifiers = wt_base_modifiers.to(self.device)
+        encoded_parents = encoded_parents.to(self.device)
+        masks = masks.to(self.device)
+        wt_base_modifiers = wt_base_modifiers.to(self.device)
         with torch.no_grad():
             outputs = self.model(encoded_parents, masks, wt_base_modifiers)
             return tuple(t.detach().cpu() for t in outputs)
@@ -344,9 +345,7 @@ def trimmed_shm_model_outputs_of_crepe(crepe, parents):
     return trimmed_rates, trimmed_csps
 
 
-def load_and_add_shm_model_outputs_to_pcp_df(
-    pcp_df_path_gz, crepe_prefix, sample_count=None, chosen_v_families=None
-):
+def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
     pcp_df = pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0).reset_index(
         drop=True
     )
@@ -356,7 +355,11 @@ def load_and_add_shm_model_outputs_to_pcp_df(
         pcp_df = pcp_df[pcp_df["v_family"].isin(chosen_v_families)]
     if sample_count is not None:
         pcp_df = pcp_df.sample(sample_count)
-    crepe = load_crepe(crepe_prefix)
+    return pcp_df
+
+
+def add_shm_model_outputs_to_pcp_df(pcp_df, crepe_prefix, device=None):
+    crepe = load_crepe(crepe_prefix, device=device)
     rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent"])
     pcp_df["rates"] = rates
     pcp_df["subs_probs"] = csps
@@ -638,7 +641,7 @@ class Burrito(ABC):
             optimization_kwargs["optimization_tol"] = 1e-3
         # We do the branch length optimization on CPU but want to restore the
         # model to the device it was on before.
-        device = next(self.model.parameters()).device
+        device = self.device
         self.model.to("cpu")
         for dataset in [self.train_dataset, self.val_dataset]:
             if dataset is None:
@@ -705,7 +708,6 @@ class Burrito(ABC):
         schedule that uses a weighted geometric mean of the current learning
         rate and the initial learning rate that progressively moves towards
         keeping the current learning rate as the cycles progress.
-
         """
         if training_method == "full":
             optimize_branch_lengths = self.standardize_and_optimize_branch_lengths
@@ -719,9 +721,11 @@ class Burrito(ABC):
         optimize_branch_lengths()
         self.mark_branch_lengths_optimized(0)
         for cycle in range(cycle_count):
+            print(f"### Beginning cycle {cycle + 1}/{cycle_count}")
             self.mark_branch_lengths_optimized(cycle + 1)
             current_lr = self.optimizer.param_groups[0]["lr"]
-            # set new_lr to be the geometric mean of current_lr and the learning rate
+            # set new_lr to be the geometric mean of current_lr and the
+            # originally-specified learning rate
             weight = 0.5 + cycle / (2 * cycle_count)
             new_lr = np.exp(
                 weight * np.log(current_lr) + (1 - weight) * np.log(self.learning_rate)

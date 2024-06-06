@@ -1,6 +1,7 @@
 import math
 import inspect
 import itertools
+import subprocess
 
 import numpy as np
 import torch
@@ -141,7 +142,32 @@ def stack_heterogeneous(tensors, pad_value=0.0):
     return torch.stack(padded_tensors)
 
 
-def pick_device():
+def find_least_used_cuda_gpu():
+    """
+    Find the least used CUDA GPU on the system using nvidia-smi.
+    If they are all idle, return None.
+    """
+    result = subprocess.run(
+        ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,nounits,noheader"],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"Error running nvidia-smi.")
+        return None
+    utilization = [int(x) for x in result.stdout.strip().split("\n")]
+    if max(utilization) == 0:
+        return None  # All GPUs are idle.
+    # else:
+    return utilization.index(min(utilization))
+
+
+def pick_device(gpu_index=0):
+    """
+    Pick a device for PyTorch to use. If CUDA is available, use the least used
+    GPU, and if all are idle use the gpu_index modulo the number of GPUs.
+    """
+
     # check that CUDA is usable
     def check_CUDA():
         try:
@@ -151,8 +177,11 @@ def pick_device():
             return False
 
     if torch.backends.cudnn.is_available() and check_CUDA():
-        print("Using CUDA")
-        return torch.device("cuda")
+        which_gpu = find_least_used_cuda_gpu()
+        if which_gpu is None:
+            which_gpu = gpu_index % torch.cuda.device_count()
+        print(f"Using CUDA GPU {which_gpu}")
+        return torch.device(f"cuda:{which_gpu}")
     elif torch.backends.mps.is_available():
         print("Using Metal Performance Shaders")
         return torch.device("mps")

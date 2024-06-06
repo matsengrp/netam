@@ -183,11 +183,11 @@ class DNSMDataset(Dataset):
         )
 
     def load_branch_lengths(self, in_csv_path):
-        self.branch_lengths = pd.read_csv(in_csv_path)["branch_length"].values
+        self.branch_lengths = torch.Tensor(
+            pd.read_csv(in_csv_path)["branch_length"].values
+        )
 
     def update_neutral_aa_mut_probs(self):
-        print("consolidating neutral rates into substitution probabilities...")
-
         neutral_aa_mut_prob_l = []
 
         for nt_parent, mask, rates, branch_length, subs_probs in zip(
