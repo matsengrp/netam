@@ -433,6 +433,9 @@ class Burrito(ABC):
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):
                     state[k] = v.to(device)
+        for dataset in [self.train_dataset, self.val_dataset]:
+            if dataset is not None:
+                dataset.to(device)
 
     def execution_hours(self):
         """
@@ -648,7 +651,7 @@ class Burrito(ABC):
             optimization_kwargs["optimization_tol"] = 1e-3
         # We do the branch length optimization on CPU but want to restore the
         # model to the device it was on before.
-        device = next(self.model.parameters()).device
+        device = self.device
         self.model.to("cpu")
         for dataset in [self.train_dataset, self.val_dataset]:
             if dataset is None:
