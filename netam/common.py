@@ -160,11 +160,11 @@ def find_least_used_cuda_gpu(default_value):
         gpu_to_use = default_value
     else:
         gpu_to_use = utilization.index(min(utilization))
-    print(f"Picking GPU {gpu_to_use}; utilization: {utilization}")
+    print(f"Picking GPU {gpu_to_use}; default {default_value}; utilization: {utilization}")
     return gpu_to_use
 
 
-def pick_device(jobid=None):
+def pick_device(jobid=0):
     """
     Pick a device for PyTorch to use. If CUDA is available, use the least used
     GPU, and if all are idle use a GPU based on the jobid.
