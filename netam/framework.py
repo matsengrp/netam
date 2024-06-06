@@ -19,7 +19,6 @@ from netam.common import (
     generate_kmers,
     kmer_to_index_of,
     nt_mask_tensor_of,
-    pick_device,
     BASES,
     BASES_AND_N_TO_INDEX,
     BIG,
