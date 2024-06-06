@@ -742,7 +742,7 @@ class Burrito(ABC):
             new_lr = np.exp(
                 weight * np.log(current_lr) + (1 - weight) * np.log(self.learning_rate)
             )
-            self.model_and_optimizer_to(f"cuda:{cycle % 2}")
+            # self.model_and_optimizer_to(f"cuda:{cycle % 2}")
             self.reset_optimization(new_lr)
             loss_history_l.append(self.train(epochs, out_prefix=out_prefix))
             if cycle < cycle_count - 1:
