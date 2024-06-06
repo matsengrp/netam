@@ -263,6 +263,7 @@ class Crepe:
     def __call__(self, sequences):
         encoded_parents, masks, wt_base_modifiers = self.encode_sequences(sequences)
         if self.device is not None:
+            print(f"using device {self.device}")
             encoded_parents = encoded_parents.to(self.device)
             masks = masks.to(self.device)
             wt_base_modifiers = wt_base_modifiers.to(self.device)
