@@ -15,7 +15,6 @@ BASES_AND_N_TO_INDEX = {"A": 0, "C": 1, "G": 2, "T": 3, "N": 4}
 AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
 AA_STR_SORTED_AMBIG = AA_STR_SORTED + "X"
 MAX_AMBIG_AA_IDX = len(AA_STR_SORTED_AMBIG) - 1
-NEXT_GPU_TO_USE = 0
 
 # I needed some sequence to use to normalize the rate of mutation in the SHM model.
 # So, I chose perhaps the most famous antibody sequence, VRC01:
@@ -144,7 +143,6 @@ def stack_heterogeneous(tensors, pad_value=0.0):
 
 
 def find_least_used_cuda_gpu():
-    global NEXT_GPU_TO_USE
     result = subprocess.run(
         ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,nounits,noheader"],
         stdout=subprocess.PIPE,
@@ -154,11 +152,7 @@ def find_least_used_cuda_gpu():
         print("Error running nvidia-smi; choosing GPU 0.")
         return 0
     utilization = [int(x) for x in result.stdout.strip().split("\n")]
-    if min(utilization) == 0:
-        gpu_to_use = NEXT_GPU_TO_USE
-        NEXT_GPU_TO_USE = (NEXT_GPU_TO_USE + 1) % torch.cuda.device_count()
-    else:
-        gpu_to_use = utilization.index(min(utilization))
+    gpu_to_use = utilization.index(min(utilization))
     print(f"Picking GPU {gpu_to_use}; utilization: {utilization}")
     return gpu_to_use
 
