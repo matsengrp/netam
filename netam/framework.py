@@ -563,7 +563,8 @@ class Burrito(ABC):
 
         If out_prefix is provided, then a crepe will be saved to that location.
         """
-        self.model_and_optimizer_to(pick_device())
+        #self.model_and_optimizer_to(pick_device())
+        self.model_and_optimizer_to("cuda:1")
 
         assert self.train_dataset is not None, "No training data provided."
         train_loader = self.build_train_loader()
