@@ -427,6 +427,12 @@ class Burrito(ABC):
             self.optimizer, mode="min", factor=0.5, patience=10
         )
 
+    def model_and_optimizer_to(self, device):
+        self.model.to(device)
+        self.optimizer.state = {
+            k: v.to(device) for k, v in self.optimizer.state.items()
+        }
+
     def execution_hours(self):
         """
         Return time in hours (rounded to 3 decimal places) since the Burrito was created.
@@ -556,7 +562,7 @@ class Burrito(ABC):
 
         If out_prefix is provided, then a crepe will be saved to that location.
         """
-        self.model.to(pick_device())
+        self.model_and_optimizer_to(pick_device())
 
         assert self.train_dataset is not None, "No training data provided."
         train_loader = self.build_train_loader()
