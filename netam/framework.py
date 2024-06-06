@@ -578,10 +578,6 @@ class Burrito(ABC):
 
         with tqdm(range(1, epochs + 1), desc="Epoch") as pbar:
             for epoch in pbar:
-                # Try moving the model to an open device every 10 epochs.
-                if epoch % 10 == 0:
-                    self.model.to(pick_device())
-
                 current_lr = self.optimizer.param_groups[0]["lr"]
                 if current_lr < self.min_learning_rate:
                     break
