@@ -427,16 +427,6 @@ class Burrito(ABC):
             self.optimizer, mode="min", factor=0.5, patience=10
         )
 
-    def model_and_optimizer_to(self, device):
-        self.model.to(device)
-        for state in self.optimizer.state.values():
-            for k, v in state.items():
-                if isinstance(v, torch.Tensor):
-                    state[k] = v.to(device)
-        for dataset in [self.train_dataset, self.val_dataset]:
-            if dataset is not None:
-                dataset.to(device)
-
     def execution_hours(self):
         """
         Return time in hours (rounded to 3 decimal places) since the Burrito was created.
@@ -727,7 +717,6 @@ class Burrito(ABC):
             optimize_branch_lengths = lambda: None
         else:
             raise ValueError(f"Unknown training method {training_method}")
-        # TODO: remove the loss history stuff
         loss_history_l = []
         optimize_branch_lengths()
         self.mark_branch_lengths_optimized(0)
