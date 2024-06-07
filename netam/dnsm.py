@@ -281,6 +281,26 @@ class DNSMDataset(Dataset):
         self.all_subs_probs = self.all_subs_probs.to(device)
 
 
+def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
+    """
+    Perform a train-val split based on a "in_train" column.
+
+    Stays here so it can be used in tests.
+    """
+    train_df = pcp_df[pcp_df["in_train"]].reset_index(drop=True)
+    val_df = pcp_df[~pcp_df["in_train"]].reset_index(drop=True)
+    val_dataset = DNSMDataset.of_pcp_df(
+        val_df, branch_length_multiplier=branch_length_multiplier
+    )
+    if len(train_df) == 0:
+        return None, val_dataset
+    # else:
+    train_dataset = DNSMDataset.of_pcp_df(
+        train_df, branch_length_multiplier=branch_length_multiplier
+    )
+    return train_dataset, val_dataset
+
+
 class DNSMBurrito(framework.Burrito):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -402,26 +422,6 @@ def worker_optimize_branch_length(model, dataset, optimization_kwargs):
     """
     burrito = DNSMBurrito(None, dataset, copy.deepcopy(model))
     return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
-
-
-def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
-    """
-    Perform a train-val split based on a "in_train" column.
-    
-    Stays here so it can be used in tests.
-    """
-    train_df = pcp_df[pcp_df["in_train"]].reset_index(drop=True)
-    val_df = pcp_df[~pcp_df["in_train"]].reset_index(drop=True)
-    val_dataset = DNSMDataset.of_pcp_df(
-        val_df, branch_length_multiplier=branch_length_multiplier
-    )
-    if len(train_df) == 0:
-        return None, val_dataset
-    # else:
-    train_dataset = DNSMDataset.of_pcp_df(
-        train_df, branch_length_multiplier=branch_length_multiplier
-    )
-    return train_dataset, val_dataset
 
 
 class DNSMHyperBurrito(HyperBurrito):
