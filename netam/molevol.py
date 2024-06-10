@@ -39,8 +39,12 @@ def normalize_sub_probs(parent_idxs: Tensor, sub_probs: Tensor) -> Tensor:
     """
 
     # Assert that sub_probs are within the range [0, 1] modulo rounding error
-    assert torch.all(sub_probs >= -1e-6), "Substitution probabilities must be non-negative"
-    assert torch.all(sub_probs <= 1 + 1e-6), "Substitution probabilities must be less than or equal to 1"
+    assert torch.all(
+        sub_probs >= -1e-6
+    ), "Substitution probabilities must be non-negative"
+    assert torch.all(
+        sub_probs <= 1 + 1e-6
+    ), "Substitution probabilities must be less than or equal to 1"
 
     # Create an array of row indices that matches the shape of `parent_idxs`.
     row_indices = torch.arange(len(parent_idxs))

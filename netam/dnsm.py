@@ -41,6 +41,7 @@ from netam.sequences import (
     translate_sequences,
 )
 
+
 class DNSMDataset(Dataset):
     def __init__(
         self,
