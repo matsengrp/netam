@@ -95,7 +95,7 @@ class DNSMDataset(Dataset):
         self.update_neutral_aa_mut_probs()
 
     @classmethod
-    def from_data(
+    def of_seriess(
         cls,
         nt_parents: pd.Series,
         nt_children: pd.Series,
@@ -123,6 +123,21 @@ class DNSMDataset(Dataset):
             stack_heterogeneous(all_rates_series.reset_index(drop=True)),
             stack_heterogeneous(all_subs_probs_series.reset_index(drop=True)),
             initial_branch_lengths,
+        )
+
+    @classmethod
+    def of_pcp_df(cls, pcp_df, branch_length_multiplier=5.0):
+        """
+        Alternative constructor that takes in a pcp_df and calculates the
+        initial branch lengths.
+        """
+        assert "rates" in pcp_df.columns, "pcp_df must have a neutral rates column"
+        return cls.of_seriess(
+            pcp_df["parent"],
+            pcp_df["child"],
+            pcp_df["rates"],
+            pcp_df["subs_probs"],
+            branch_length_multiplier=branch_length_multiplier,
         )
 
     def clone(self):
@@ -266,36 +281,22 @@ class DNSMDataset(Dataset):
         self.all_subs_probs = self.all_subs_probs.to(device)
 
 
-def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multiplier=5.0):
-    nt_parents = pcp_df["parent"].reset_index(drop=True)
-    nt_children = pcp_df["child"].reset_index(drop=True)
-    rates = pcp_df["rates"].reset_index(drop=True)
-    subs_probs = pcp_df["subs_probs"].reset_index(drop=True)
+def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
+    """
+    Perform a train-val split based on a "in_train" column.
 
-    train_len = int(train_frac * len(nt_parents))
-    train_parents, val_parents = nt_parents[:train_len], nt_parents[train_len:]
-    train_children, val_children = nt_children[:train_len], nt_children[train_len:]
-    train_rates, val_rates = rates[:train_len], rates[train_len:]
-    train_subs_probs, val_subs_probs = (
-        subs_probs[:train_len],
-        subs_probs[train_len:],
+    Stays here so it can be used in tests.
+    """
+    train_df = pcp_df[pcp_df["in_train"]].reset_index(drop=True)
+    val_df = pcp_df[~pcp_df["in_train"]].reset_index(drop=True)
+    val_dataset = DNSMDataset.of_pcp_df(
+        val_df, branch_length_multiplier=branch_length_multiplier
     )
-    val_dataset = DNSMDataset.from_data(
-        val_parents,
-        val_children,
-        val_rates,
-        val_subs_probs,
-        branch_length_multiplier=branch_length_multiplier,
-    )
-    if train_frac == 0.0:
+    if len(train_df) == 0:
         return None, val_dataset
     # else:
-    train_dataset = DNSMDataset.from_data(
-        train_parents,
-        train_children,
-        train_rates,
-        train_subs_probs,
-        branch_length_multiplier=branch_length_multiplier,
+    train_dataset = DNSMDataset.of_pcp_df(
+        train_df, branch_length_multiplier=branch_length_multiplier
     )
     return train_dataset, val_dataset
 
