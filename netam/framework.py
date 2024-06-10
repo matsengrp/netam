@@ -25,8 +25,7 @@ from netam.common import (
     VRC01_NT_SEQ,
 )
 from netam import models
-
-from epam.torch_common import optimize_branch_length
+from netam import molevol
 
 
 def encode_mut_pos_and_base(parent, child, site_count=None):
@@ -905,7 +904,7 @@ class RSSHMBurrito(SHMBurrito):
             rate_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
             return -rate_loss
 
-        return optimize_branch_length(
+        return molevol.optimize_branch_length(
             log_pcp_probability,
             starting_branch_length.double().item(),
             **optimization_kwargs,

@@ -24,14 +24,7 @@ import pandas as pd
 
 from tqdm import tqdm
 
-from epam.torch_common import optimize_branch_length
 from epam.models import WrappedBinaryMutSel
-import epam.molevol as molevol
-import epam.sequences as sequences
-from epam.sequences import (
-    aa_subs_indicator_tensor_of,
-    translate_sequences,
-)
 
 from netam.common import (
     MAX_AMBIG_AA_IDX,
@@ -42,7 +35,12 @@ from netam.common import (
 )
 import netam.framework as framework
 from netam.hyper_burrito import HyperBurrito
-
+import netam.molevol as molevol
+import netam.sequences as sequences
+from netam.sequences import (
+    aa_subs_indicator_tensor_of,
+    translate_sequences,
+)
 
 class DNSMDataset(Dataset):
     def __init__(
@@ -357,7 +355,7 @@ class DNSMBurrito(framework.Burrito):
         )
         if type(starting_branch_length) == torch.Tensor:
             starting_branch_length = starting_branch_length.detach().item()
-        return optimize_branch_length(
+        return molevol.optimize_branch_length(
             log_pcp_probability, starting_branch_length, **optimization_kwargs
         )
 
