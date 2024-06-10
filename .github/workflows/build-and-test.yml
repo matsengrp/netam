@@ -27,7 +27,6 @@ jobs:
           environment-name: netam
           create-args: >-
             python=${{ matrix.python-version }}
-            datrie
             black
             flake8
           init-shell: bash
@@ -44,7 +43,7 @@ jobs:
         shell: bash -l {0}
         run: |
           cd main
-          pip install .
+          make install
 
       - name: Test
         shell: bash -l {0}
