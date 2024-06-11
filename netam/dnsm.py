@@ -420,7 +420,11 @@ class DNSMBurrito(framework.Burrito):
         training_hyperparameters = {
             key: self.__dict__[key]
             for key in [
+                "optimizer_name",
+                "batch_size",
                 "learning_rate",
+                "min_learning_rate",
+                "l2_regularization_coeff",
             ]
         }
         encoder = framework.PlaceholderEncoder()
