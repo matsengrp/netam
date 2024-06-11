@@ -360,6 +360,7 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
 
 def add_shm_model_outputs_to_pcp_df(pcp_df, crepe_prefix, device=None):
     crepe = load_crepe(crepe_prefix, device=device)
+    print(f"crepe is on {crepe.device}")
     rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent"])
     pcp_df["rates"] = rates
     pcp_df["subs_probs"] = csps
