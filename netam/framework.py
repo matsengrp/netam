@@ -323,7 +323,7 @@ def load_crepe(prefix, device=None):
     model.eval()
 
     crepe_instance = Crepe(encoder, model, config["training_hyperparameters"])
-    if device:
+    if device is not None:
         crepe_instance.to(device)
 
     return crepe_instance
