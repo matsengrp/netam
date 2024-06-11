@@ -19,6 +19,7 @@ from netam.common import (
     generate_kmers,
     kmer_to_index_of,
     nt_mask_tensor_of,
+    optimizer_of_name,
     BASES,
     BASES_AND_N_TO_INDEX,
     BIG,
@@ -371,6 +372,7 @@ class Burrito(ABC):
         train_dataset,
         val_dataset,
         model,
+        optimizer_name="AdamW",
         batch_size=1024,
         learning_rate=0.1,
         min_learning_rate=1e-4,
@@ -383,12 +385,13 @@ class Burrito(ABC):
         """
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
-        self.batch_size = batch_size
         if train_dataset is not None:
             self.writer = SummaryWriter(log_dir=f"./_logs/{name}")
             self.writer.add_text("model_name", model.__class__.__name__)
             self.writer.add_text("model_hyperparameters", str(model.hyperparameters))
         self.model = model
+        self.optimizer_name = optimizer_name
+        self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.min_learning_rate = min_learning_rate
         self.l2_regularization_coeff = l2_regularization_coeff
@@ -417,7 +420,9 @@ class Burrito(ABC):
         """Reset the optimizer and scheduler."""
         if learning_rate is None:
             learning_rate = self.learning_rate
-        self.optimizer = torch.optim.AdamW(
+        
+        self.optimizer = optimizer_of_name(
+            self.optimizer_name,
             self.model.parameters(),
             lr=learning_rate,
             weight_decay=self.l2_regularization_coeff,
