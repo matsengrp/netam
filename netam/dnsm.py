@@ -24,15 +24,6 @@ import pandas as pd
 
 from tqdm import tqdm
 
-from epam.torch_common import optimize_branch_length
-from epam.models import WrappedBinaryMutSel
-import epam.molevol as molevol
-import epam.sequences as sequences
-from epam.sequences import (
-    aa_subs_indicator_tensor_of,
-    translate_sequences,
-)
-
 from netam.common import (
     MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
@@ -42,6 +33,13 @@ from netam.common import (
 )
 import netam.framework as framework
 from netam.hyper_burrito import HyperBurrito
+import netam.molevol as molevol
+import netam.sequences as sequences
+from netam.sequences import (
+    aa_subs_indicator_tensor_of,
+    translate_sequence,
+    translate_sequences,
+)
 
 
 class DNSMDataset(Dataset):
@@ -304,7 +302,6 @@ def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
 class DNSMBurrito(framework.Burrito):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.wrapped_model = WrappedBinaryMutSel(self.model, weights_directory=None)
 
     def load_branch_lengths(self, in_csv_prefix):
         if self.train_dataset is not None:
@@ -341,6 +338,19 @@ class DNSMBurrito(framework.Burrito):
         predictions = self.predictions_of_batch(batch).masked_select(mask)
         return self.bce_loss(predictions, aa_subs_indicator)
 
+    def build_selection_matrix_from_parent(self, parent: str):
+        parent = translate_sequence(parent)
+        selection_factors = self.model.selection_factors_of_aa_str(parent)
+        selection_matrix = torch.zeros((len(selection_factors), 20), dtype=torch.float)
+        # Every "off-diagonal" entry of the selection matrix is set to the selection
+        # factor, where "diagonal" means keeping the same amino acid.
+        selection_matrix[:, :] = selection_factors[:, None]
+        # Set "diagonal" elements to one.
+        parent_idxs = sequences.aa_idx_array_of_str(parent)
+        selection_matrix[torch.arange(len(parent_idxs)), parent_idxs] = 1.0
+
+        return selection_matrix
+
     def _find_optimal_branch_length(
         self,
         parent,
@@ -352,12 +362,13 @@ class DNSMBurrito(framework.Burrito):
     ):
         if parent == child:
             return 0.0
-        log_pcp_probability = self.wrapped_model._build_log_pcp_probability(
-            parent, child, rates, subs_probs
+        sel_matrix = self.build_selection_matrix_from_parent(parent)
+        log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
+            sel_matrix, parent, child, rates, subs_probs
         )
         if type(starting_branch_length) == torch.Tensor:
             starting_branch_length = starting_branch_length.detach().item()
-        return optimize_branch_length(
+        return molevol.optimize_branch_length(
             log_pcp_probability, starting_branch_length, **optimization_kwargs
         )
 
