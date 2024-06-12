@@ -145,7 +145,12 @@ def stack_heterogeneous(tensors, pad_value=0.0):
 def optimizer_of_name(optimizer_name, model_parameters, **kwargs):
     """
     Build a torch.optim optimizer from a string name and model parameters.
+
+    Use a SGD optimizer with momentum if the optimizer_name is "SGDMomentum".
     """
+    if optimizer_name == "SGDMomentum":
+        optimizer_name = "SGD"
+        kwargs["momentum"] = 0.9
     try:
         optimizer_class = getattr(optim, optimizer_name)
         return optimizer_class(model_parameters, **kwargs)
