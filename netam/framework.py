@@ -431,11 +431,11 @@ class Burrito(ABC):
             self.optimizer, mode="min", factor=0.5, patience=10
         )
 
-    def execution_hours(self):
+    def execution_time(self):
         """
-        Return time in hours (rounded to 3 decimal places) since the Burrito was created.
+        Return time since the Burrito was created.
         """
-        return round((time() - self.start_time) / 3600, 3)
+        return time() - self.start_time
 
     def multi_train(self, epochs, max_tries=3):
         """
@@ -456,7 +456,7 @@ class Burrito(ABC):
         return train_history
 
     def write_loss(self, loss_name, loss, step):
-        self.writer.add_scalar(loss_name, loss, step, walltime=self.execution_hours())
+        self.writer.add_scalar(loss_name, loss, step, walltime=self.execution_time())
 
     def write_cuda_memory_info(self):
         megabyte_scaling_factor = 1 / 1024**2
@@ -695,7 +695,7 @@ class Burrito(ABC):
             "branch length optimization",
             cycle,
             self.global_epoch,
-            walltime=self.execution_hours(),
+            walltime=self.execution_time(),
         )
 
     def joint_train(
@@ -725,9 +725,7 @@ class Burrito(ABC):
         optimize_branch_lengths()
         self.mark_branch_lengths_optimized(0)
         for cycle in range(cycle_count):
-            print(
-                f"### Beginning cycle {cycle + 1}/{cycle_count} using optimizer {self.optimizer_name}"
-            )
+            print(f"### Beginning cycle {cycle + 1}/{cycle_count} using optimizer {self.optimizer_name}")
             self.mark_branch_lengths_optimized(cycle + 1)
             current_lr = self.optimizer.param_groups[0]["lr"]
             # set new_lr to be the geometric mean of current_lr and the
@@ -967,10 +965,10 @@ class RSSHMBurrito(SHMBurrito):
     def write_loss(self, loss_name, loss, step):
         rate_loss, csp_loss = loss.unbind()
         self.writer.add_scalar(
-            "Rate " + loss_name, rate_loss.item(), step, walltime=self.execution_hours()
+            "Rate " + loss_name, rate_loss.item(), step, walltime=self.execution_time()
         )
         self.writer.add_scalar(
-            "CSP " + loss_name, csp_loss.item(), step, walltime=self.execution_hours()
+            "CSP " + loss_name, csp_loss.item(), step, walltime=self.execution_time()
         )
 
 
