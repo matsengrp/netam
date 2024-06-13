@@ -424,7 +424,7 @@ class DNSMBurrito(framework.Burrito):
                 "batch_size",
                 "learning_rate",
                 "min_learning_rate",
-                "l2_regularization_coeff",
+                "weight_decay",
             ]
         }
         encoder = framework.PlaceholderEncoder()
@@ -448,7 +448,7 @@ class DNSMHyperBurrito(HyperBurrito):
         batch_size=1024,
         learning_rate=0.1,
         min_learning_rate=1e-4,
-        l2_regularization_coeff=1e-6,
+        weight_decay=1e-6,
     ):
         model.to(device)
         burrito = DNSMBurrito(
@@ -458,6 +458,6 @@ class DNSMHyperBurrito(HyperBurrito):
             batch_size=batch_size,
             learning_rate=learning_rate,
             min_learning_rate=min_learning_rate,
-            l2_regularization_coeff=l2_regularization_coeff,
+            weight_decay=weight_decay,
         )
         return burrito

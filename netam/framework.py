@@ -376,7 +376,7 @@ class Burrito(ABC):
         batch_size=1024,
         learning_rate=0.1,
         min_learning_rate=1e-4,
-        l2_regularization_coeff=1e-6,
+        weight_decay=1e-6,
         name="",
     ):
         """
@@ -394,7 +394,7 @@ class Burrito(ABC):
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.min_learning_rate = min_learning_rate
-        self.l2_regularization_coeff = l2_regularization_coeff
+        self.weight_decay = weight_decay
         self.name = name
         self.reset_optimization()
         self.bce_loss = nn.BCELoss()
@@ -425,7 +425,7 @@ class Burrito(ABC):
             self.optimizer_name,
             self.model.parameters(),
             lr=learning_rate,
-            weight_decay=self.l2_regularization_coeff,
+            weight_decay=self.weight_decay,
         )
         self.scheduler = ReduceLROnPlateau(
             self.optimizer, mode="min", factor=0.5, patience=10
@@ -763,7 +763,7 @@ class SHMBurrito(Burrito):
         batch_size=1024,
         learning_rate=0.1,
         min_learning_rate=1e-4,
-        l2_regularization_coeff=1e-6,
+        weight_decay=1e-6,
         name="",
     ):
         super().__init__(
@@ -774,7 +774,7 @@ class SHMBurrito(Burrito):
             batch_size=batch_size,
             learning_rate=learning_rate,
             min_learning_rate=min_learning_rate,
-            l2_regularization_coeff=l2_regularization_coeff,
+            weight_decay=weight_decay,
             name=name,
         )
 
@@ -829,7 +829,7 @@ class SHMBurrito(Burrito):
             for key in [
                 "learning_rate",
                 "min_learning_rate",
-                "l2_regularization_coeff",
+                "weight_decay",
             ]
         }
         encoder = KmerSequenceEncoder(
