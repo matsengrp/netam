@@ -142,6 +142,24 @@ def stack_heterogeneous(tensors, pad_value=0.0):
     return torch.stack(padded_tensors)
 
 
+def optimizer_of_name(optimizer_name, model_parameters, **kwargs):
+    """
+    Build a torch.optim optimizer from a string name and model parameters.
+
+    Use a SGD optimizer with momentum if the optimizer_name is "SGDMomentum".
+    """
+    if optimizer_name == "SGDMomentum":
+        optimizer_name = "SGD"
+        kwargs["momentum"] = 0.9
+    try:
+        optimizer_class = getattr(optim, optimizer_name)
+        return optimizer_class(model_parameters, **kwargs)
+    except AttributeError:
+        raise ValueError(
+            f"Optimizer '{optimizer_name}' is not recognized in torch.optim"
+        )
+
+
 def find_least_used_cuda_gpu():
     """
     Find the least used CUDA GPU on the system using nvidia-smi.

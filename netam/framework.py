@@ -19,6 +19,7 @@ from netam.common import (
     generate_kmers,
     kmer_to_index_of,
     nt_mask_tensor_of,
+    optimizer_of_name,
     BASES,
     BASES_AND_N_TO_INDEX,
     BIG,
@@ -322,7 +323,7 @@ def load_crepe(prefix, device=None):
     model.eval()
 
     crepe_instance = Crepe(encoder, model, config["training_hyperparameters"])
-    if device:
+    if device is not None:
         crepe_instance.to(device)
 
     return crepe_instance
@@ -371,10 +372,11 @@ class Burrito(ABC):
         train_dataset,
         val_dataset,
         model,
+        optimizer_name="RMSprop",
         batch_size=1024,
         learning_rate=0.1,
         min_learning_rate=1e-4,
-        l2_regularization_coeff=1e-6,
+        weight_decay=1e-6,
         name="",
     ):
         """
@@ -383,15 +385,16 @@ class Burrito(ABC):
         """
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
-        self.batch_size = batch_size
         if train_dataset is not None:
             self.writer = SummaryWriter(log_dir=f"./_logs/{name}")
             self.writer.add_text("model_name", model.__class__.__name__)
             self.writer.add_text("model_hyperparameters", str(model.hyperparameters))
         self.model = model
+        self.optimizer_name = optimizer_name
+        self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.min_learning_rate = min_learning_rate
-        self.l2_regularization_coeff = l2_regularization_coeff
+        self.weight_decay = weight_decay
         self.name = name
         self.reset_optimization()
         self.bce_loss = nn.BCELoss()
@@ -417,20 +420,22 @@ class Burrito(ABC):
         """Reset the optimizer and scheduler."""
         if learning_rate is None:
             learning_rate = self.learning_rate
-        self.optimizer = torch.optim.AdamW(
+
+        self.optimizer = optimizer_of_name(
+            self.optimizer_name,
             self.model.parameters(),
             lr=learning_rate,
-            weight_decay=self.l2_regularization_coeff,
+            weight_decay=self.weight_decay,
         )
         self.scheduler = ReduceLROnPlateau(
             self.optimizer, mode="min", factor=0.5, patience=10
         )
 
-    def execution_hours(self):
+    def execution_time(self):
         """
-        Return time in hours (rounded to 3 decimal places) since the Burrito was created.
+        Return time since the Burrito was created.
         """
-        return round((time() - self.start_time) / 3600, 3)
+        return time() - self.start_time
 
     def multi_train(self, epochs, max_tries=3):
         """
@@ -451,7 +456,7 @@ class Burrito(ABC):
         return train_history
 
     def write_loss(self, loss_name, loss, step):
-        self.writer.add_scalar(loss_name, loss, step, walltime=self.execution_hours())
+        self.writer.add_scalar(loss_name, loss, step, walltime=self.execution_time())
 
     def write_cuda_memory_info(self):
         megabyte_scaling_factor = 1 / 1024**2
@@ -690,11 +695,16 @@ class Burrito(ABC):
             "branch length optimization",
             cycle,
             self.global_epoch,
-            walltime=self.execution_hours(),
+            walltime=self.execution_time(),
         )
 
     def joint_train(
-        self, epochs=100, cycle_count=2, training_method="full", out_prefix=None
+        self,
+        epochs=100,
+        cycle_count=2,
+        training_method="full",
+        out_prefix=None,
+        optimize_bl_first_cycle=True,
     ):
         """
         Do joint optimization of model and branch lengths.
@@ -702,6 +712,10 @@ class Burrito(ABC):
         If training_method is "full", then we optimize the branch lengths using full ML optimization.
         If training_method is "yun", then we use Yun's approximation to the branch lengths.
         If training_method is "fixed", then we fix the branch lengths and only optimize the model.
+
+        We give an option to optimize the branch lengths in the first cycle (by
+        default we do). But, this can be useful to turn off e.g. if we've loaded
+        in some preoptimized branch lengths.
 
         We reset the optimization after each cycle, and we use a learning rate
         schedule that uses a weighted geometric mean of the current learning
@@ -717,10 +731,13 @@ class Burrito(ABC):
         else:
             raise ValueError(f"Unknown training method {training_method}")
         loss_history_l = []
-        optimize_branch_lengths()
+        if optimize_bl_first_cycle:
+            optimize_branch_lengths()
         self.mark_branch_lengths_optimized(0)
         for cycle in range(cycle_count):
-            print(f"### Beginning cycle {cycle + 1}/{cycle_count}")
+            print(
+                f"### Beginning cycle {cycle + 1}/{cycle_count} using optimizer {self.optimizer_name}"
+            )
             self.mark_branch_lengths_optimized(cycle + 1)
             current_lr = self.optimizer.param_groups[0]["lr"]
             # set new_lr to be the geometric mean of current_lr and the
@@ -752,21 +769,23 @@ class SHMBurrito(Burrito):
         train_dataset,
         val_dataset,
         model,
+        optimizer_name="RMSprop",
         batch_size=1024,
         learning_rate=0.1,
         min_learning_rate=1e-4,
-        l2_regularization_coeff=1e-6,
+        weight_decay=1e-6,
         name="",
     ):
         super().__init__(
             train_dataset,
             val_dataset,
             model,
-            batch_size,
-            learning_rate,
-            min_learning_rate,
-            l2_regularization_coeff,
-            name,
+            optimizer_name=optimizer_name,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            min_learning_rate=min_learning_rate,
+            weight_decay=weight_decay,
+            name=name,
         )
 
     def loss_of_batch(self, batch):
@@ -820,7 +839,7 @@ class SHMBurrito(Burrito):
             for key in [
                 "learning_rate",
                 "min_learning_rate",
-                "l2_regularization_coeff",
+                "weight_decay",
             ]
         }
         encoder = KmerSequenceEncoder(
@@ -958,10 +977,10 @@ class RSSHMBurrito(SHMBurrito):
     def write_loss(self, loss_name, loss, step):
         rate_loss, csp_loss = loss.unbind()
         self.writer.add_scalar(
-            "Rate " + loss_name, rate_loss.item(), step, walltime=self.execution_hours()
+            "Rate " + loss_name, rate_loss.item(), step, walltime=self.execution_time()
         )
         self.writer.add_scalar(
-            "CSP " + loss_name, csp_loss.item(), step, walltime=self.execution_hours()
+            "CSP " + loss_name, csp_loss.item(), step, walltime=self.execution_time()
         )
 
 
