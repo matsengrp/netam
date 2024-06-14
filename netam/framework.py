@@ -699,7 +699,12 @@ class Burrito(ABC):
         )
 
     def joint_train(
-        self, epochs=100, cycle_count=2, training_method="full", out_prefix=None, optimize_bl_first_cycle=True
+        self,
+        epochs=100,
+        cycle_count=2,
+        training_method="full",
+        out_prefix=None,
+        optimize_bl_first_cycle=True,
     ):
         """
         Do joint optimization of model and branch lengths.
