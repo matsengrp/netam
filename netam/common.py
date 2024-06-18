@@ -279,8 +279,16 @@ class IgnoreMetricLambdaLR:
 
 
 def linear_bump_lr(epoch, warmup_epochs, total_epochs, max_lr, min_lr):
+    """
+    Linearly increase the learning rate from min_lr to max_lr over warmup_epochs,
+    then linearly decrease the learning rate from max_lr to min_lr.
+    
+    pd.Series([
+        linear_bump_lr(epoch, warmup_epochs=20, total_epochs=200, max_lr=0.01, min_lr=1e-5)
+        for epoch in range(200)]).plot()
+    """
     if epoch < warmup_epochs:
-        return (max_lr / warmup_epochs) * epoch
+        return min_lr + ((max_lr - min_lr) / warmup_epochs) * epoch
     else:
         return max_lr - ((max_lr - min_lr) / (total_epochs - warmup_epochs)) * (
             epoch - warmup_epochs
@@ -295,6 +303,10 @@ def linear_bump_scheduler(optimizer, warmup_epochs, total_epochs, max_lr, min_lr
     return IgnoreMetricLambdaLR(
         optimizer,
         lambda epoch: linear_bump_lr(
-            epoch, warmup_epochs, total_epochs, max_lr, min_lr
+            epoch=epoch,
+            warmup_epochs=warmup_epochs,
+            total_epochs=total_epochs,
+            max_lr=max_lr,
+            min_lr=min_lr,
         ),
     )
