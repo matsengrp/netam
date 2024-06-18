@@ -1,6 +1,7 @@
 import math
 import inspect
 import itertools
+import resource
 import subprocess
 
 import numpy as np
@@ -226,6 +227,12 @@ def print_tensor_devices(scope="local"):
     for var_name, var_value in variables.items():
         if isinstance(var_value, torch.Tensor):
             print(f"{var_name}: {var_value.device}")
+
+
+def get_memory_usage_mb():
+    # Returns the peak memory usage in MB
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    return usage.ru_maxrss / 1024  # Convert from KB to MB
 
 
 # Reference: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
