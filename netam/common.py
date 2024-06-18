@@ -253,3 +253,48 @@ class PositionalEncoding(nn.Module):
         """
         x = x + self.pe[: x.size(0)]
         return self.dropout(x)
+
+
+class IgnoreMetricLambdaLR:
+    """
+    The sole purpose of this class is to wrap a LambdaLR scheduler so that we can pass
+    a metric to the step method without changing the underlying scheduler. This means
+    we don't have to change anything in our training loop to use this scheduler.
+    """
+
+    def __init__(self, optimizer, lr_lambda):
+        self.scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+
+    def step(self, metric=None):
+        self.scheduler.step()
+
+    def get_last_lr(self):
+        return self.scheduler.get_last_lr()
+
+    def state_dict(self):
+        return self.scheduler.state_dict()
+
+    def load_state_dict(self, state_dict):
+        self.scheduler.load_state_dict(state_dict)
+
+
+def linear_bump_lr(epoch, warmup_epochs, total_epochs, max_lr, min_lr):
+    if epoch < warmup_epochs:
+        return (max_lr / warmup_epochs) * epoch
+    else:
+        return max_lr - ((max_lr - min_lr) / (total_epochs - warmup_epochs)) * (
+            epoch - warmup_epochs
+        )
+
+
+def linear_bump_scheduler(optimizer, warmup_epochs, total_epochs, max_lr, min_lr):
+    """
+    A learning rate scheduler that linearly increases the learning rate from 0 to max_lr
+    over warmup_epochs, then linearly decreases the learning rate from max_lr to min_lr.
+    """
+    return IgnoreMetricLambdaLR(
+        optimizer,
+        lambda epoch: linear_bump_lr(
+            epoch, warmup_epochs, total_epochs, max_lr, min_lr
+        ),
+    )
