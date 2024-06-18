@@ -288,11 +288,13 @@ def linear_bump_lr(epoch, warmup_epochs, total_epochs, max_lr, min_lr):
         for epoch in range(200)]).plot()
     """
     if epoch < warmup_epochs:
-        return min_lr + ((max_lr - min_lr) / warmup_epochs) * epoch
+        lr = min_lr + ((max_lr - min_lr) / warmup_epochs) * epoch
     else:
-        return max_lr - ((max_lr - min_lr) / (total_epochs - warmup_epochs)) * (
+        lr = max_lr - ((max_lr - min_lr) / (total_epochs - warmup_epochs)) * (
             epoch - warmup_epochs
         )
+    print(f"Epoch {epoch}: lr = {lr}")
+    return lr
 
 
 def linear_bump_scheduler(optimizer, warmup_epochs, total_epochs, max_lr, min_lr):
