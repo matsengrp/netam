@@ -293,7 +293,6 @@ def linear_bump_lr(epoch, warmup_epochs, total_epochs, max_lr, min_lr):
         lr = max_lr - ((max_lr - min_lr) / (total_epochs - warmup_epochs)) * (
             epoch - warmup_epochs
         )
-    print(f"Epoch {epoch}: lr = {lr}")
     return lr
 
 
