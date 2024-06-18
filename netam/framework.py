@@ -20,6 +20,7 @@ from netam.common import (
     kmer_to_index_of,
     nt_mask_tensor_of,
     optimizer_of_name,
+    linear_bump_scheduler,
     BASES,
     BASES_AND_N_TO_INDEX,
     BIG,
@@ -427,9 +428,10 @@ class Burrito(ABC):
             lr=learning_rate,
             weight_decay=self.weight_decay,
         )
-        self.scheduler = ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.5, patience=10
-        )
+        # self.scheduler = ReduceLROnPlateau(
+        #     self.optimizer, mode="min", factor=0.5, patience=10
+        # )
+        self.scheduler = linear_bump_scheduler(self.optimizer, 20, 200, 0.01, 1e-5)
 
     def execution_time(self):
         """
