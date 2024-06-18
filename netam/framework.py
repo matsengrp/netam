@@ -585,7 +585,10 @@ class Burrito(ABC):
         with tqdm(range(1, epochs + 1), desc="Epoch") as pbar:
             for epoch in pbar:
                 current_lr = self.optimizer.param_groups[0]["lr"]
-                if current_lr < self.min_learning_rate:
+                if (
+                    isinstance(self.scheduler, ReduceLROnPlateau)
+                    and current_lr < self.min_learning_rate
+                ):
                     break
 
                 if self.device.type == "cuda":
