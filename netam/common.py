@@ -266,9 +266,9 @@ def linear_bump_lr(epoch, warmup_epochs, total_epochs, max_lr, min_lr):
     """
     Linearly increase the learning rate from min_lr to max_lr over warmup_epochs,
     then linearly decrease the learning rate from max_lr to min_lr.
-    
+
     See https://github.com/matsengrp/netam/pull/41 for more details.
-    
+
     pd.Series([
         linear_bump_lr(epoch, warmup_epochs=20, total_epochs=200, max_lr=0.01, min_lr=1e-5)
         for epoch in range(200)]).plot()
