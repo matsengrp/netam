@@ -428,11 +428,8 @@ class Burrito(ABC):
             lr=learning_rate,
             weight_decay=self.weight_decay,
         )
-        # self.scheduler = ReduceLROnPlateau(
-        #     self.optimizer, mode="min", factor=0.5, patience=10
-        # )
-        self.scheduler = linear_bump_scheduler(
-            self.optimizer, warmup_epochs=20, total_epochs=200, max_lr=0.01, min_lr=1e-5
+        self.scheduler = ReduceLROnPlateau(
+            self.optimizer, mode="min", factor=0.5, patience=10
         )
 
     def execution_time(self):
