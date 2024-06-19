@@ -20,7 +20,6 @@ from netam.common import (
     kmer_to_index_of,
     nt_mask_tensor_of,
     optimizer_of_name,
-    linear_bump_scheduler,
     BASES,
     BASES_AND_N_TO_INDEX,
     BIG,
