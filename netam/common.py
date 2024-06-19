@@ -1,6 +1,7 @@
 import math
 import inspect
 import itertools
+import resource
 import subprocess
 
 import numpy as np
@@ -228,6 +229,12 @@ def print_tensor_devices(scope="local"):
             print(f"{var_name}: {var_value.device}")
 
 
+def get_memory_usage_mb():
+    # Returns the peak memory usage in MB
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    return usage.ru_maxrss / 1024  # Convert from KB to MB
+
+
 # Reference: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
@@ -253,3 +260,23 @@ class PositionalEncoding(nn.Module):
         """
         x = x + self.pe[: x.size(0)]
         return self.dropout(x)
+
+
+def linear_bump_lr(epoch, warmup_epochs, total_epochs, max_lr, min_lr):
+    """
+    Linearly increase the learning rate from min_lr to max_lr over warmup_epochs,
+    then linearly decrease the learning rate from max_lr to min_lr.
+
+    See https://github.com/matsengrp/netam/pull/41 for more details.
+
+    pd.Series([
+        linear_bump_lr(epoch, warmup_epochs=20, total_epochs=200, max_lr=0.01, min_lr=1e-5)
+        for epoch in range(200)]).plot()
+    """
+    if epoch < warmup_epochs:
+        lr = min_lr + ((max_lr - min_lr) / warmup_epochs) * epoch
+    else:
+        lr = max_lr - ((max_lr - min_lr) / (total_epochs - warmup_epochs)) * (
+            epoch - warmup_epochs
+        )
+    return lr
