@@ -14,6 +14,17 @@ import copy
 from netam.common import aa_idx_tensor_of_str_ambig, aa_mask_tensor_of
 
 
+class SaveOutput:
+    def __init__(self):
+        self.outputs = []
+
+    def __call__(self, module, module_in, module_out):
+        self.outputs.append(module_out[1])
+
+    def clear(self):
+        self.outputs = []
+
+
 def patch_attention(m):
     forward_orig = m.forward
 
@@ -26,34 +37,22 @@ def patch_attention(m):
     m.forward = wrap
 
 
-class SaveOutput:
-    def __init__(self):
-        self.outputs = []
-
-    def __call__(self, module, module_in, module_out):
-        self.outputs.append(module_out[1])
-
-    def clear(self):
-        self.outputs = []
-
-
 def attention_mapss_of(model, which_layer, sequences):
+    """
+    Get a list of attention maps (across sequences) for the specified layer of
+    the model.
+    """
     model = copy.deepcopy(model)
     save_output = SaveOutput()
     patch_attention(model.encoder.layers[which_layer].self_attn)
     hook_handle = model.encoder.layers[which_layer].self_attn.register_forward_hook(
         save_output
     )
-
-    def attention_maps_of(sequence):
+    for sequence in sequences:
         sequence_idxs = aa_idx_tensor_of_str_ambig(sequence)
         mask = aa_mask_tensor_of(sequence)
         model(sequence_idxs.unsqueeze(0), mask.unsqueeze(0))
-
-        attention_maps = save_output.outputs[0][0].detach().numpy()
-        return attention_maps
-
-    return [attention_maps_of(sequence) for sequence in sequences]
+    return [out[0].detach().numpy() for out in save_output.outputs]
 
 
 def attention_profiles_of(model, which_layer, sequences):
