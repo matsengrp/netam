@@ -7,6 +7,13 @@ $$
 
 So this tells us that the rows of the attention map correspond to the queries, whereas the columns correspond to the keys.
 
+In our terminology, an attention map is the attention map for a single head. An
+"attention maps" object is a collection of attention maps, a tensor where the
+first dimension is the number of heads. An "attention mapss" is a list of
+attention maps objects, one for each sequence in the batch. An "attention
+profile" is some 1-D summary of an attention map, such as the maximum attention
+score for each key position. 
+
 # Adapted from https://gist.github.com/airalcorn2/50ec06517ce96ecc143503e21fa6cb91
 """
 
@@ -55,9 +62,9 @@ def attention_mapss_of(model, which_layer, sequences):
     return [out[0].detach().numpy() for out in save_output.outputs]
 
 
-def attention_profiles_of(model, which_layer, sequences):
+def attention_profiles_of(model, which_layer, sequences, axis):
     """
-    Take the average attention map across heads, then take the maximum attention
+    Take the mean attention map across heads, then take the maximum attention
     score along the specified axis.
 
     If axis=0, this will return the maximum attention score for each key position.
@@ -65,5 +72,5 @@ def attention_profiles_of(model, which_layer, sequences):
     """
     attention_mapss = attention_mapss_of(model, which_layer, sequences)
     return [
-        attention_maps.mean(axis=0).max(axis=1) for attention_maps in attention_mapss
+        attention_maps.mean(axis=0).max(axis=axis) for attention_maps in attention_mapss
     ]
