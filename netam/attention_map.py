@@ -62,14 +62,17 @@ def attention_mapss_of(model, which_layer, sequences):
     return [out[0].detach().numpy() for out in save_output.outputs]
 
 
-def attention_profiles_of(model, which_layer, sequences, axis):
+def attention_profiles_of(model, which_layer, sequences, by):
     """
-    Take the mean attention map across heads, then take the maximum attention
-    score along the specified axis.
+    Take the mean attention map by heads, then take the maximum attention
+    score to get a profile indexed by `by`.
 
-    If axis=0, this will return the maximum attention score for each key position.
-    If axis=1, this will return the maximum attention score for each query position.
+    If by="key", this will return the maximum attention score for each key position.
+    If by="query", this will return the maximum attention score for each query position.
     """
+    by_to_index_dict = {"key": 0, "query": 1}
+    assert by in by_to_index_dict, f"by must be one of {by_to_index_dict.keys()}"
+    axis = by_to_index_dict[by]
     attention_mapss = attention_mapss_of(model, which_layer, sequences)
     return [
         attention_maps.mean(axis=0).max(axis=axis) for attention_maps in attention_mapss
