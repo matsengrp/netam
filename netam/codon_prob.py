@@ -2,6 +2,7 @@ from framework import Burrito, trimmed_shm_model_outputs_of_crepe
 import torch
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
+import numpy as np
 
 from epam.molevol import (
     reshape_for_codons,
@@ -10,7 +11,7 @@ from epam.molevol import (
 )
 from epam.torch_common import optimize_branch_length
 from epam import sequences
-from netam.common import nt_mask_tensor_of, BASES
+from netam.common import nt_mask_tensor_of, BASES, stack_heterogeneous
 from netam.framework import encode_mut_pos_and_base
 
 def hit_class(codon1, codon2):
@@ -269,24 +270,75 @@ class CodonProbBurrito(Burrito):
         return torch.tensor(optimal_lengths)
 
 
+# class CodonProbDataset(Dataset):
+#     def __init__(self, pcp_df, crepe, site_count):
+#         super().__init__()
+#         pcp_df = _prepare_pcp_df(pcp_df, crepe, site_count)
+#         assert pcp_df["parent"].apply(len).max() <= site_count - site_count % 3
+
+#         # This constructor will take a data frame containing the following, and split it into series which will be stored as attributes on each instance.
+#         # First they'll be processed a bit, and we'll also compute the hit class probs seq for each pcp. Then we can remove some of that code from the branch length optimization
+#         # method above.
+#         parent, rates, subs_probs, branch_length = pcp_df.loc[0, ["parent", "rates", "subs_probs", "branch_length"]]
+#         # truncate each to be a multiple of 3 in length
+#         parent = parent[:len(parent) - len(parent) % 3]
+#         rates = rates[:len(rates) - len(rates) % 3]
+#         subs_probs = subs_probs[:len(subs_probs) - len(subs_probs) % 3]
+
+#         mask = nt_mask_tensor_of(parent)
+#         parent_idxs = sequences.nt_idx_tensor_of_str(parent.replace("N", "A"))
+#         parent_len = len(parent)
+#         scaled_rates = branch_length * rates[:parent_len]
+
+#         codon_probs = codon_probs_of_parent_scaled_rates_and_sub_probs(parent_idxs, scaled_rates, subs_probs)
+
+
+
 class CodonProbDataset(Dataset):
-    def __init__(self, pcp_df, crepe, site_count):
-        super().__init__()
-        pcp_df = _prepare_pcp_df(pcp_df, crepe, site_count)
-        assert pcp_df["parent"].apply(len).max() <= site_count - site_count % 3
+    def __init__(
+        self,
+        nt_parents,
+        nt_children,
+        all_rates,
+        all_subs_probs,
+        branch_length_multiplier=5.0,
+    ):
+        self.nt_parents = nt_parents
+        self.nt_children = nt_children
+        self.all_rates = stack_heterogeneous(all_rates.reset_index(drop=True))
+        self.all_subs_probs = stack_heterogeneous(all_subs_probs.reset_index(drop=True))
 
-        # This constructor will take a data frame containing the following, and split it into series which will be stored as attributes on each instance.
-        # First they'll be processed a bit, and we'll also compute the hit class probs seq for each pcp. Then we can remove some of that code from the branch length optimization
-        # method above.
-        parent, rates, subs_probs, branch_length = pcp_df.loc[0, ["parent", "rates", "subs_probs", "branch_length"]]
-        # truncate each to be a multiple of 3 in length
-        parent = parent[:len(parent) - len(parent) % 3]
-        rates = rates[:len(rates) - len(rates) % 3]
-        subs_probs = subs_probs[:len(subs_probs) - len(subs_probs) % 3]
+        assert len(self.nt_parents) == len(self.nt_children)
+        pcp_count = len(self.nt_parents)
 
-        mask = nt_mask_tensor_of(parent)
-        parent_idxs = sequences.nt_idx_tensor_of_str(parent.replace("N", "A"))
-        parent_len = len(parent)
-        scaled_rates = branch_length * rates[:parent_len]
+        for parent, child in zip(self.nt_parents, self.nt_children):
+            if parent == child:
+                raise ValueError(
+                    f"Found an identical parent and child sequence: {parent}"
+                )
 
-        codon_probs = codon_probs_of_parent_scaled_rates_and_sub_probs(parent_idxs, scaled_rates, subs_probs)
+        # Insert here hit classes and codon probs, as attributes...
+
+        # Make initial branch lengths (will get optimized later).
+        self._branch_lengths = np.array(
+            [
+                sequences.nt_mutation_frequency(parent, child)
+                * branch_length_multiplier
+                for parent, child in zip(self.nt_parents, self.nt_children)
+            ]
+        )
+
+    @property
+    def branch_lengths(self):
+        return self._branch_lengths
+
+    @branch_lengths.setter
+    def branch_lengths(self, new_branch_lengths):
+        assert len(new_branch_lengths) == len(self._branch_lengths), (
+            f"Expected {len(self._branch_lengths)} branch lengths, "
+            f"got {len(new_branch_lengths)}"
+        )
+        assert np.all(np.isfinite(new_branch_lengths) & (new_branch_lengths > 0))
+        self._branch_lengths = new_branch_lengths
+        self.update_neutral_aa_mut_probs()
+
