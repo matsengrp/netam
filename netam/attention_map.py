@@ -18,10 +18,13 @@ score for each key position.
 """
 
 import copy
+
+import torch
+
 from netam.common import aa_idx_tensor_of_str_ambig, aa_mask_tensor_of
 
 
-class SaveOutput:
+class SaveAttentionInfo:
     def __init__(self):
         self.outputs = []
 
@@ -45,26 +48,33 @@ def patch_attention(m):
     m.forward = wrap
 
 
-def attention_mapss_of(model, which_layer, sequences):
+def attention_mapss_of(model, sequences):
     """
     Get a list of attention maps (across sequences) for the specified layer of
     the model.
     """
     model = copy.deepcopy(model)
     model.eval()
-    save_output = SaveOutput()
-    patch_attention(model.encoder.layers[which_layer].self_attn)
-    hook_handle = model.encoder.layers[which_layer].self_attn.register_forward_hook(
-        save_output
-    )
+    layer_count = len(model.encoder.layers)
+    save_info = [SaveAttentionInfo() for _ in range(layer_count)]
+    for which_layer, layer in enumerate(model.encoder.layers):
+        patch_attention(layer.self_attn)
+        layer.self_attn.register_forward_hook(save_info[which_layer])
+
     for sequence in sequences:
         sequence_idxs = aa_idx_tensor_of_str_ambig(sequence)
         mask = aa_mask_tensor_of(sequence)
         model(sequence_idxs.unsqueeze(0), mask.unsqueeze(0))
 
-    hook_handle.remove()  # Remove the hook after use
+    # stack the attention maps across layers
+    # iterate across sequences, then across layers
+    attention_maps = []
+    for seq_idx in range(len(sequences)):
+        attention_maps.append(
+            torch.stack([save.outputs[seq_idx] for save in save_info], dim=0)
+        )
 
-    return [out.detach().numpy() for out in save_output.outputs]
+    return [amap.detach().numpy() for amap in attention_maps]
 
 
 def attention_profiles_of(model, which_layer, sequences, by):
