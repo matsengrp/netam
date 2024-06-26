@@ -67,8 +67,8 @@ def attention_profiles_of(model, which_layer, sequences, by):
     Take the mean attention map by heads, then take the maximum attention
     score to get a profile indexed by `by`.
 
-    If by="key", this will return the maximum attention score for each key position.
     If by="query", this will return the maximum attention score for each query position.
+    If by="key", this will return the maximum attention score for each key position.
     """
     by_to_index_dict = {"query": 1, "key": 0}
     assert by in by_to_index_dict, f"by must be one of {by_to_index_dict.keys()}"
