@@ -70,7 +70,7 @@ def attention_profiles_of(model, which_layer, sequences, by):
     If by="key", this will return the maximum attention score for each key position.
     If by="query", this will return the maximum attention score for each query position.
     """
-    by_to_index_dict = {"key": 0, "query": 1}
+    by_to_index_dict = {"query": 1, "key": 0}
     assert by in by_to_index_dict, f"by must be one of {by_to_index_dict.keys()}"
     axis = by_to_index_dict[by]
     attention_mapss = attention_mapss_of(model, which_layer, sequences)
