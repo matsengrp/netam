@@ -24,16 +24,37 @@ import torch
 from netam.common import aa_idx_tensor_of_str_ambig, aa_mask_tensor_of
 
 
+def reshape_tensor(tensor, head_count):
+    """
+    Reshape the tensor to include the head dimension.
+    Assumes batch size is 1 and squeezes it out.
+    """
+    assert tensor.size(0) == 1, "Batch size should be 1"
+    seq_len, embed_dim = tensor.size(1), tensor.size(2)
+    head_dim = embed_dim // head_count
+    return tensor.view(seq_len, head_count, head_dim).transpose(0, 1)
+
+
 class SaveAttentionInfo:
-    def __init__(self):
+    def __init__(self, head_count):
         self.outputs = []
+        self.queries = []
+        self.keys = []
+        self.values = []
+        self.head_count = head_count
 
     def __call__(self, module, module_in, module_out):
-        # squeeze out batch dimension
-        self.outputs.append(module_out[1].squeeze(0))
+        # module_in[0] is the input to the attention layer which contains queries, keys, and values
+        self.outputs.append(module_out[1].clone().squeeze(0))  # Attention maps
+        self.queries.append(reshape_tensor(module_in[0].clone(), self.head_count))  # Queries
+        self.keys.append(reshape_tensor(module_in[1].clone(), self.head_count))     # Keys
+        self.values.append(reshape_tensor(module_in[2].clone(), self.head_count))   # Values)
 
     def clear(self):
         self.outputs = []
+        self.keys = []
+        self.values = []
+        self.queries = []
 
 
 def patch_attention(m):
@@ -48,15 +69,16 @@ def patch_attention(m):
     m.forward = wrap
 
 
-def attention_mapss_of(model, sequences):
+def attention_infos_of(model, sequences):
     """
     Get a list of attention maps (across sequences) for the specified layer of
-    the model.
+    the model, along with keys, values, and queries.
     """
     model = copy.deepcopy(model)
     model.eval()
     layer_count = len(model.encoder.layers)
-    save_info = [SaveAttentionInfo() for _ in range(layer_count)]
+    head_count = model.encoder.layers[0].self_attn.num_heads  # Assuming all layers have the same number of heads
+    save_info = [SaveAttentionInfo(head_count) for _ in range(layer_count)]
     for which_layer, layer in enumerate(model.encoder.layers):
         patch_attention(layer.self_attn)
         layer.self_attn.register_forward_hook(save_info[which_layer])
@@ -66,15 +88,31 @@ def attention_mapss_of(model, sequences):
         mask = aa_mask_tensor_of(sequence)
         model(sequence_idxs.unsqueeze(0), mask.unsqueeze(0))
 
-    # stack the attention maps across layers
-    # iterate across sequences, then across layers
     attention_maps = []
+    queries = []
+    keys = []
+    values = []
+
     for seq_idx in range(len(sequences)):
         attention_maps.append(
             torch.stack([save.outputs[seq_idx] for save in save_info], dim=0)
         )
+        queries.append(
+            torch.stack([save.queries[seq_idx] for save in save_info], dim=0)
+        )
+        keys.append(
+            torch.stack([save.keys[seq_idx] for save in save_info], dim=0)
+        )
+        values.append(
+            torch.stack([save.values[seq_idx] for save in save_info], dim=0)
+        )
 
-    return [amap.detach().numpy() for amap in attention_maps]
+    return (
+        [amap.detach().numpy() for amap in attention_maps],
+        [query.detach().numpy() for query in queries],
+        [key.detach().numpy() for key in keys],
+        [value.detach().numpy() for value in values],
+    )
 
 
 def attention_profiles_of(model, which_layer, sequences, by):
