@@ -26,7 +26,8 @@ class SaveOutput:
         self.outputs = []
 
     def __call__(self, module, module_in, module_out):
-        self.outputs.append(module_out[1])
+        # squeeze out batch dimension
+        self.outputs.append(module_out[1].squeeze(0))
 
     def clear(self):
         self.outputs = []
@@ -50,6 +51,7 @@ def attention_mapss_of(model, which_layer, sequences):
     the model.
     """
     model = copy.deepcopy(model)
+    model.eval()
     save_output = SaveOutput()
     patch_attention(model.encoder.layers[which_layer].self_attn)
     hook_handle = model.encoder.layers[which_layer].self_attn.register_forward_hook(
@@ -59,7 +61,10 @@ def attention_mapss_of(model, which_layer, sequences):
         sequence_idxs = aa_idx_tensor_of_str_ambig(sequence)
         mask = aa_mask_tensor_of(sequence)
         model(sequence_idxs.unsqueeze(0), mask.unsqueeze(0))
-    return [out[0].detach().numpy() for out in save_output.outputs]
+
+    hook_handle.remove()  # Remove the hook after use
+
+    return [out.detach().numpy() for out in save_output.outputs]
 
 
 def attention_profiles_of(model, which_layer, sequences, by):
