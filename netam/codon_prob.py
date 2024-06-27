@@ -12,7 +12,6 @@ from epam.molevol import (
 )
 from epam.torch_common import optimize_branch_length
 from epam import sequences
-from epam.models import WrappedBinaryMutSel
 from netam.common import BASES, stack_heterogeneous
 
 def hit_class(codon1, codon2):
@@ -155,7 +154,6 @@ def _observed_hit_classes(parents, children):
             parent_codon = parent_seq[i : i + 3]
             child_codon = child_seq[i : i + 3]
 
-            # TODO this will need to get masked at some point I think
             if "N" in parent_codon or "N" in child_codon:
                 num_mutations.append(-100)
             else:
@@ -189,7 +187,6 @@ class CodonProbDataset(Dataset):
         self.nt_children = pd.Series(child[: len(child) - len(child) % 3] for child in nt_children)
         self.all_rates = stack_heterogeneous(pd.Series(rates[: len(rates) - len(rates) % 3] for rates in all_rates).reset_index(drop=True))
         self.all_subs_probs = stack_heterogeneous(pd.Series(subs_probs[: len(subs_probs) - len(subs_probs) % 3] for subs_probs in all_subs_probs).reset_index(drop=True))
-        self.all_subs_probs = stack_heterogeneous(all_subs_probs.reset_index(drop=True)))
 
         assert len(self.nt_parents) == len(self.nt_children)
 
@@ -200,11 +197,9 @@ class CodonProbDataset(Dataset):
                 )
             assert len(parent) == len(child)
 
-        # Insert here hit classes and codon probs, as attributes...
-        # These will be really bad until a burrito does proper branch length optimization on them
-        # see neutral codon notebook use of hc_site_df_of_pcp_df
-        # TODO: Do we need to filter codons with N's as in hc_site_df_of_pcp_df?
-        self.observed_hcs = _observed_hit_classes(self.nt_parents, self.nt_children)
+        self.observed_hcs = stack_heterogeneous(_observed_hit_classes(self.nt_parents, self.nt_children), pad_value=-100)
+        # At some point, we may want a nt_parents mask for N's, but this ignores codons with N's, anyway.
+        self.codon_mask = self.observed_hcs > -1
 
         # Make initial branch lengths (will get optimized later).
         self._branch_lengths = np.array(
@@ -244,6 +239,9 @@ class CodonProbDataset(Dataset):
             self.all_subs_probs,
             self.branch_lengths,
         ):
+            # This encodes bases as indices in a sorted nucleotide list. Codons containing
+            # N's should already be masked in self.codon_mask, so treating them as A's here shouldn't matter...
+            # TODO Check that assertion ^^
             parent_idxs = sequences.nt_idx_tensor_of_str(parent.replace("N", "A"))
 
             scaled_rates = branch_length * rates
@@ -253,7 +251,8 @@ class CodonProbDataset(Dataset):
             )
 
             new_hc_probs.append(hit_class_probs_seq(parent, codon_probs, hit_class_tensors))
-        self.hit_class_probs = new_hc_probs
+        # We must store probability of all hit classes for arguments to cce_loss in loss_of_batch.
+        self.hit_class_probs = stack_heterogeneous(new_hc_probs, pad_value=-100)
 
     # A couple of these methods could be moved to a super class, which itself subclasses Dataset
     def export_branch_lengths(self, out_csv_path):
@@ -268,20 +267,46 @@ class CodonProbDataset(Dataset):
         return len(self.nt_parents)
 
     def __getitem__(self, idx):
-        # Not sure what should be included here (TODO [:menagerie:])
         return {
             "parent": self.nt_parents[idx],
             "child": self.nt_children[idx],
             "observed_hcs": self.observed_hcs[idx],
             "rates": self.all_rates[idx],
             "subs_probs": self.all_subs_probs[idx],
+            "hit_class_probs": self.hit_class_probs[idx],
+            "codon_mask": self.codon_mask[idx],
         }
 
     def to(self, device):
-        # Not sure what should be included here (TODO [:menagerie:])
-        self.mask = self.mask.to(device)
+        # TODO update this (and might have to encode sequences as Tensors), if used!
+        raise NotImplementedError
+        self.codon_mask = self.mask.to(device)
         self.all_rates = self.all_rates.to(device)
         self.all_subs_probs = self.all_subs_probs.to(device)
+        self.hit_class_probs = self.hit_class_probs.to(device)
+
+def flatten_and_mask_sequence_codons(input_tensor, codon_mask=None):
+        """Flatten first dimension, that is over sequences, to return tensor
+        whose first dimension contains all codons, instead of sequences.
+
+        input_tensor should have at least two dimensions, with the second dimension representing codons
+        codon_mask should have two dimensions
+        
+        If mask is provided, also mask the result"""
+        # If N is number pcps, and C is number codons per seq, then
+        # hit_class_probs is of dimension (N, C, 4)
+        # codon_mask is of dimension (N, C)
+        # observed_hcs is of dimension (N, C)
+
+        # Since there's a different number of codons in each sequence, we need to flatten so we just
+        # have a big list of codons, before we do masking (otherwise we'll get everything flattened to a single dimension)
+        flat_input = input_tensor.flatten(start_dim=0, end_dim=1)
+        if codon_mask is not None:
+            flat_codon_mask = codon_mask.flatten()
+            flat_input = flat_input[flat_codon_mask]
+
+        # Now this should be shape (N*C, 4) or (N*C,)
+        return flat_input
 
 class CodonProbBurrito(Burrito):
     def __init__(
@@ -299,9 +324,11 @@ class CodonProbBurrito(Burrito):
             *args,
             **kwargs,
         )
-        # TODO What's this about? Do we need it here?
-        self.wrapped_model = WrappedBinaryMutSel(self.model, weights_directory=None)
+        self.cce_loss = torch.nn.CrossEntropyLoss()
 
+
+    # For loss want categorical cross-entropy, appears in framework.py for another model
+    # When computing overall log-likelihood will need to account for the different sequence lengths
     def load_branch_lengths(self, in_csv_prefix):
         if self.train_loader is not None:
             self.train_loader.dataset.load_branch_lengths(
@@ -312,8 +339,23 @@ class CodonProbBurrito(Burrito):
         )
 
     def loss_of_batch(self, batch):
-        # TODO
-        raise NotImplementedError
+        # different sequence lengths, and codons containing N's, are marked in the mask.
+        (
+            _,
+            _,
+            observed_hcs,
+            _,
+            _,
+            hit_class_probs,
+            codon_mask,
+        ) = batch
+
+        flat_masked_hit_class_probs = flatten_and_mask_sequence_codons(hit_class_probs, codon_mask=codon_mask)
+        flat_masked_observed_hcs = flatten_and_mask_sequence_codons(observed_hcs, codon_mask=codon_mask)
+
+        return self.cce_loss(flat_masked_hit_class_probs, flat_masked_observed_hcs)
+
+
 
     # These are from DNSMBurrito, as a start
     def _find_optimal_branch_length(
@@ -322,15 +364,11 @@ class CodonProbBurrito(Burrito):
         observed_hcs,
         rates,
         subs_probs,
+        codon_mask,
         starting_branch_length,
         **optimization_kwargs,
     ):
 
-        # Each has already been truncated to multiple of 3 length in constructor for CodonProbDataset
-        # (TODO should it have been done there?)
-
-        # From hit_class_probs_of_pcp_df
-        # Should this also be done/stored in Dataset constructor?
         parent_idxs = sequences.nt_idx_tensor_of_str(parent.replace("N", "A"))
 
         def log_pcp_probability(log_branch_length):
@@ -343,8 +381,10 @@ class CodonProbBurrito(Burrito):
 
             hc_probs = hit_class_probs_seq(parent, codon_probs, hit_class_tensors)
             assert len(hc_probs) == len(observed_hcs)
-            # Probably a faster way to do this TODO
-            return sum(torch.log(hc_prob[idx]) for hc_prob, idx in zip(hc_probs, observed_hcs))
+            # Mask, and use observed hc indices to select observed hit class probabilities
+            observed_hcs_expanded = observed_hcs[codon_mask].unsqueeze(-1)
+            observed_hc_probs = torch.gather(hc_probs[codon_mask], 1, observed_hcs_expanded)
+            return observed_hc_probs.log().sum()
 
         return optimize_branch_length(
             log_pcp_probability,
@@ -355,12 +395,13 @@ class CodonProbBurrito(Burrito):
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         optimal_lengths = []
 
-        for parent, observed_hcs, rates, subs_probs, starting_length in tqdm(
+        for parent, observed_hcs, rates, subs_probs, codon_mask, starting_length in tqdm(
             zip(
                 dataset.nt_parents,
                 dataset.observed_hcs,
                 dataset.all_rates,
                 dataset.all_subs_probs,
+                dataset.codon_mask,
                 dataset.branch_lengths,
             ),
             total=len(dataset.nt_parents),
@@ -372,6 +413,7 @@ class CodonProbBurrito(Burrito):
                     observed_hcs,
                     rates[: len(parent)],
                     subs_probs[: len(parent), :],
+                    codon_mask,
                     starting_length,
                     **optimization_kwargs,
                 )
