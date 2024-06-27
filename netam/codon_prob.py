@@ -324,7 +324,7 @@ class CodonProbBurrito(Burrito):
             *args,
             **kwargs,
         )
-        self.cce_loss = torch.nn.CrossEntropyLoss()
+        self.cce_loss = torch.nn.CrossEntropyLoss(reduction='mean')
 
 
     # For loss want categorical cross-entropy, appears in framework.py for another model
@@ -420,3 +420,50 @@ class CodonProbBurrito(Burrito):
             )
 
         return np.array(optimal_lengths)
+
+
+def codon_prob_dataset_from_pcp_df(pcp_df, branch_length_multiplier=1.0):
+    nt_parents = pcp_df["parent"].reset_index(drop=True)
+    nt_children = pcp_df["child"].reset_index(drop=True)
+    rates = pcp_df["rates"].reset_index(drop=True)
+    subs_probs = pcp_df["subs_probs"].reset_index(drop=True)
+
+    return CodonProbDataset(
+        val_parents,
+        val_children,
+        val_rates,
+        val_subs_probs,
+        branch_length_multiplier=branch_length_multiplier,
+    )
+
+def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multiplier=1.0):
+    nt_parents = pcp_df["parent"].reset_index(drop=True)
+    nt_children = pcp_df["child"].reset_index(drop=True)
+    rates = pcp_df["rates"].reset_index(drop=True)
+    subs_probs = pcp_df["subs_probs"].reset_index(drop=True)
+
+    train_len = int(train_frac * len(nt_parents))
+    train_parents, val_parents = nt_parents[:train_len], nt_parents[train_len:]
+    train_children, val_children = nt_children[:train_len], nt_children[train_len:]
+    train_rates, val_rates = rates[:train_len], rates[train_len:]
+    train_subs_probs, val_subs_probs = (
+        subs_probs[:train_len],
+        subs_probs[train_len:],
+    )
+    val_dataset = CodonProbDataset(
+        val_parents,
+        val_children,
+        val_rates,
+        val_subs_probs,
+        branch_length_multiplier=branch_length_multiplier,
+    )
+    if train_frac == 0.0:
+        return None, val_dataset
+    # else:
+    train_dataset = CodonProbDataset(
+        train_parents,
+        train_children,
+        train_rates,
+        train_subs_probs,
+        branch_length_multiplier=branch_length_multiplier,
+    )
