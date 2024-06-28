@@ -421,9 +421,20 @@ class Burrito(ABC):
         if learning_rate is None:
             learning_rate = self.learning_rate
 
+        # copied from # https://github.com/karpathy/nanoGPT/blob/9755682b981a45507f6eb9b11eadef8cb83cebd5/model.py#L264
+        param_dict = {pn: p for pn, p in self.named_parameters() if p.requires_grad}
+        # create optim groups. Any >= 2D parameters will be weight decayed, otherwise no.
+        # i.e. all weight tensors in matmuls + embeddings decay, all biases and layernorms don't.
+        decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
+        nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
+        optim_groups = [
+            {"params": decay_params, "weight_decay": self.weight_decay},
+            {"params": nodecay_params, "weight_decay": 0.0},
+        ]
+
         self.optimizer = optimizer_of_name(
             self.optimizer_name,
-            self.model.parameters(),
+            optim_groups,
             lr=learning_rate,
             weight_decay=self.weight_decay,
         )
