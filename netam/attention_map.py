@@ -46,9 +46,9 @@ class SaveAttentionInfo:
     def __call__(self, module, module_in, module_out):
         # module_in[0] is the input to the attention layer which contains queries, keys, and values
         self.outputs.append(module_out[1].clone().squeeze(0))  # Attention maps
-        self.queries.append(reshape_tensor(module_in[0].clone(), self.head_count))  # Queries
-        self.keys.append(reshape_tensor(module_in[1].clone(), self.head_count))     # Keys
-        self.values.append(reshape_tensor(module_in[2].clone(), self.head_count))   # Values)
+        self.queries.append(reshape_tensor(module_in[0].clone().detach(), self.head_count))  # Queries
+        self.keys.append(reshape_tensor(module_in[1].clone().detach(), self.head_count))     # Keys
+        self.values.append(reshape_tensor(module_in[2].clone().detach(), self.head_count))   # Values)
 
     def clear(self):
         self.outputs = []
