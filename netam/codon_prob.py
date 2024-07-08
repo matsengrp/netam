@@ -1,6 +1,6 @@
-from framework import Burrito
 import torch
 from torch.utils.data import Dataset, DataLoader
+import torch.nn as nn
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
@@ -13,6 +13,9 @@ from epam.molevol import (
 from epam.torch_common import optimize_branch_length
 from epam import sequences
 from netam.common import BASES, stack_heterogeneous
+import netam.framework as framework
+from netam.framework import Burrito
+from netam.models import AbstractBinarySelectionModel
 
 def hit_class(codon1, codon2):
     return sum(c1 != c2 for c1, c2 in zip(codon1, codon2))
@@ -202,7 +205,7 @@ class CodonProbDataset(Dataset):
         self.codon_mask = self.observed_hcs > -1
 
         # Make initial branch lengths (will get optimized later).
-        self._branch_lengths = np.array(
+        self._branch_lengths = torch.tensor(
             [
                 sequences.nt_mutation_frequency(parent, child)
                 * branch_length_multiplier
@@ -247,10 +250,10 @@ class CodonProbDataset(Dataset):
             scaled_rates = branch_length * rates
 
             codon_probs = codon_probs_of_parent_scaled_rates_and_sub_probs(
-                parent_idxs, scaled_rates, subs_probs
+                parent_idxs, scaled_rates[:len(parent_idxs)], subs_probs[:len(parent_idxs)]
             )
 
-            new_hc_probs.append(hit_class_probs_seq(parent, codon_probs, hit_class_tensors))
+            new_hc_probs.append(hit_class_probs_seq(parent, codon_probs))
         # We must store probability of all hit classes for arguments to cce_loss in loss_of_batch.
         self.hit_class_probs = stack_heterogeneous(new_hc_probs, pad_value=-100)
 
@@ -308,12 +311,25 @@ def flatten_and_mask_sequence_codons(input_tensor, codon_mask=None):
         # Now this should be shape (N*C, 4) or (N*C,)
         return flat_input
 
+class TwoValueBinarySelectionModel(AbstractBinarySelectionModel):
+    def __init__(self):
+        super().__init__()
+        self.values = nn.Parameter(torch.tensor([0, 0]))
+
+    @property
+    def hyperparameters(self):
+        return {}
+
+    def forward(self, codon_hit_classes: torch.Tensor, mask: torch.Tensor):
+        raise NotImplementedError
+
+
 class CodonProbBurrito(Burrito):
     def __init__(
         self,
         train_dataset: CodonProbDataset,
         val_dataset: CodonProbDataset,
-        model,
+        model: TwoValueBinarySelectionModel,
         *args,
         **kwargs,
     ):
@@ -338,22 +354,19 @@ class CodonProbBurrito(Burrito):
             in_csv_prefix + ".val_branch_lengths.csv"
         )
 
+# Once optimized branch lengths, store the baseline codon-level predictions somewhere.
     def loss_of_batch(self, batch):
         # different sequence lengths, and codons containing N's, are marked in the mask.
-        (
-            _,
-            _,
-            observed_hcs,
-            _,
-            _,
-            hit_class_probs,
-            codon_mask,
-        ) = batch
+        observed_hcs = batch["observed_hcs"]
+        hit_class_probs = batch["hit_class_probs"]
+        codon_mask = batch["codon_mask"]
+        uncorrected_rates = batch["rates"]
+        uncorrected_subs_probs = batch["subs_probs"]
 
         flat_masked_hit_class_probs = flatten_and_mask_sequence_codons(hit_class_probs, codon_mask=codon_mask)
-        flat_masked_observed_hcs = flatten_and_mask_sequence_codons(observed_hcs, codon_mask=codon_mask)
+        flat_masked_observed_hcs = flatten_and_mask_sequence_codons(observed_hcs, codon_mask=codon_mask).long()
 
-        return self.cce_loss(flat_masked_hit_class_probs, flat_masked_observed_hcs)
+        return self.cce_loss(flat_masked_hit_class_probs.requires_grad_(), flat_masked_observed_hcs)
 
 
 
@@ -379,13 +392,15 @@ class CodonProbBurrito(Burrito):
                 parent_idxs, scaled_rates, subs_probs
             )
 
-            hc_probs = hit_class_probs_seq(parent, codon_probs, hit_class_tensors)
+            hc_probs = hit_class_probs_seq(parent, codon_probs)
             assert len(hc_probs) == len(observed_hcs)
             # Mask, and use observed hc indices to select observed hit class probabilities
             observed_hcs_expanded = observed_hcs[codon_mask].unsqueeze(-1)
             observed_hc_probs = torch.gather(hc_probs[codon_mask], 1, observed_hcs_expanded)
             return observed_hc_probs.log().sum()
 
+        print("Optimizing new branch length ###########")
+        print("starting branch length", starting_branch_length)
         return optimize_branch_length(
             log_pcp_probability,
             starting_branch_length.double().item(),
@@ -421,6 +436,15 @@ class CodonProbBurrito(Burrito):
 
         return np.array(optimal_lengths)
 
+    def to_crepe(self):
+        training_hyperparameters = {
+            key: self.__dict__[key]
+            for key in [
+                "learning_rate",
+            ]
+        }
+        encoder = framework.PlaceholderEncoder()
+        return framework.Crepe(encoder, self.model, training_hyperparameters)
 
 def codon_prob_dataset_from_pcp_df(pcp_df, branch_length_multiplier=1.0):
     nt_parents = pcp_df["parent"].reset_index(drop=True)
@@ -429,10 +453,10 @@ def codon_prob_dataset_from_pcp_df(pcp_df, branch_length_multiplier=1.0):
     subs_probs = pcp_df["subs_probs"].reset_index(drop=True)
 
     return CodonProbDataset(
-        val_parents,
-        val_children,
-        val_rates,
-        val_subs_probs,
+        nt_parents,
+        nt_children,
+        rates,
+        subs_probs,
         branch_length_multiplier=branch_length_multiplier,
     )
 
@@ -467,3 +491,4 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multipli
         train_subs_probs,
         branch_length_multiplier=branch_length_multiplier,
     )
+    return val_dataset, train_dataset

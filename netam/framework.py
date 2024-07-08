@@ -406,7 +406,7 @@ class Burrito(ABC):
             weight_decay=self.l2_regularization_coeff,
         )
         self.scheduler = ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.5, patience=10, verbose=self.verbose
+            self.optimizer, mode="min", factor=0.5, patience=10
         )
 
     def multi_train(self, epochs, max_tries=3):
@@ -497,7 +497,7 @@ class Burrito(ABC):
                 first_value_of_batch = (
                     list(batch.values())[0] if isinstance(batch, dict) else batch[0]
                 )
-                batch_size = first_value_of_batch.shape[0]
+                batch_size = len(first_value_of_batch)
                 # If we multiply the loss by the batch size, then the loss will be the sum of the
                 # losses for each example in the batch. Then, when we divide by the number of
                 # examples in the dataset below, we will get the average loss per example.
