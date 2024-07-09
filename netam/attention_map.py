@@ -9,10 +9,10 @@ So this tells us that the rows of the attention map correspond to the queries, w
 
 In our terminology, an attention map is the attention map for a single head. An
 "attention maps" object is a collection of attention maps: a tensor where the
-first dimension is the number of heads. An "attention mapss" is a list of
-attention maps objects, one for each sequence in the batch. An "attention
-profile" is some 1-D summary of an attention map, such as the maximum attention
-score for each key position. 
+first dimension is the number of heads. This assumes all layers have the same 
+number of heads. An "attention mapss" is a list of attention maps objects, one
+for each sequence in the batch. An "attention profile" is some 1-D summary of an
+attention map, such as the maximum attention score for each key position. 
 
 # Adapted from https://gist.github.com/airalcorn2/50ec06517ce96ecc143503e21fa6cb91
 """
@@ -46,6 +46,7 @@ class SaveAttentionInfo:
     def clear(self):
         self.attention_maps = []
 
+
 def patch_attention(m):
     forward_orig = m.forward
 
@@ -66,7 +67,8 @@ def attention_mapss_of(model, sequences):
     model = copy.deepcopy(model)
     model.eval()
     layer_count = len(model.encoder.layers)
-    head_count = model.encoder.layers[0].self_attn.num_heads  # Assuming all layers have the same number of heads
+    # The below assumes all layers have the same number of heads.
+    head_count = model.encoder.layers[0].self_attn.num_heads
     save_info = [SaveAttentionInfo(head_count) for _ in range(layer_count)]
     for which_layer, layer in enumerate(model.encoder.layers):
         patch_attention(layer.self_attn)
