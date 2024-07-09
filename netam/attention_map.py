@@ -41,7 +41,7 @@ class SaveAttentionInfo:
         self.attention_maps = []
 
     def __call__(self, module, module_in, module_out):
-        self.attention_maps.append(module_out[1].clone().squeeze(0))  # Attention maps
+        self.attention_maps.append(module_out[1].clone().squeeze(0))
 
     def clear(self):
         self.attention_maps = []
@@ -61,8 +61,8 @@ def patch_attention(m):
 
 def attention_mapss_of(model, sequences):
     """
-    Get a list of attention maps (across sequences) for the specified layer of
-    the model, along with keys, values, and queries.
+    Get a list of attention maps (across sequences) as described in the module
+    docstring.
     """
     model = copy.deepcopy(model)
     model.eval()
