@@ -8,7 +8,7 @@ $$
 So this tells us that the rows of the attention map correspond to the queries, whereas the columns correspond to the keys.
 
 In our terminology, an attention map is the attention map for a single head. An
-"attention maps" object is a collection of attention maps, a tensor where the
+"attention maps" object is a collection of attention maps: a tensor where the
 first dimension is the number of heads. An "attention mapss" is a list of
 attention maps objects, one for each sequence in the batch. An "attention
 profile" is some 1-D summary of an attention map, such as the maximum attention
@@ -37,25 +37,14 @@ def reshape_tensor(tensor, head_count):
 
 class SaveAttentionInfo:
     def __init__(self, head_count):
-        self.outputs = []
-        self.queries = []
-        self.keys = []
-        self.values = []
         self.head_count = head_count
+        self.attention_maps = []
 
     def __call__(self, module, module_in, module_out):
-        # module_in[0] is the input to the attention layer which contains queries, keys, and values
-        self.outputs.append(module_out[1].clone().squeeze(0))  # Attention maps
-        self.queries.append(reshape_tensor(module_in[0].clone().detach(), self.head_count))  # Queries
-        self.keys.append(reshape_tensor(module_in[1].clone().detach(), self.head_count))     # Keys
-        self.values.append(reshape_tensor(module_in[2].clone().detach(), self.head_count))   # Values)
+        self.attention_maps.append(module_out[1].clone().squeeze(0))  # Attention maps
 
     def clear(self):
-        self.outputs = []
-        self.keys = []
-        self.values = []
-        self.queries = []
-
+        self.attention_maps = []
 
 def patch_attention(m):
     forward_orig = m.forward
@@ -69,7 +58,7 @@ def patch_attention(m):
     m.forward = wrap
 
 
-def attention_infos_of(model, sequences):
+def attention_mapss_of(model, sequences):
     """
     Get a list of attention maps (across sequences) for the specified layer of
     the model, along with keys, values, and queries.
@@ -89,44 +78,10 @@ def attention_infos_of(model, sequences):
         model(sequence_idxs.unsqueeze(0), mask.unsqueeze(0))
 
     attention_maps = []
-    queries = []
-    keys = []
-    values = []
 
     for seq_idx in range(len(sequences)):
         attention_maps.append(
-            torch.stack([save.outputs[seq_idx] for save in save_info], dim=0)
-        )
-        queries.append(
-            torch.stack([save.queries[seq_idx] for save in save_info], dim=0)
-        )
-        keys.append(
-            torch.stack([save.keys[seq_idx] for save in save_info], dim=0)
-        )
-        values.append(
-            torch.stack([save.values[seq_idx] for save in save_info], dim=0)
+            torch.stack([save.attention_maps[seq_idx] for save in save_info], dim=0)
         )
 
-    return (
-        [amap.detach().numpy() for amap in attention_maps],
-        [query.detach().numpy() for query in queries],
-        [key.detach().numpy() for key in keys],
-        [value.detach().numpy() for value in values],
-    )
-
-
-def attention_profiles_of(model, which_layer, sequences, by):
-    """
-    Take the mean attention map by heads, then take the maximum attention
-    score to get a profile indexed by `by`.
-
-    If by="query", this will return the maximum attention score for each query position.
-    If by="key", this will return the maximum attention score for each key position.
-    """
-    by_to_index_dict = {"query": 1, "key": 0}
-    assert by in by_to_index_dict, f"by must be one of {by_to_index_dict.keys()}"
-    axis = by_to_index_dict[by]
-    attention_mapss = attention_mapss_of(model, which_layer, sequences)
-    return [
-        attention_maps.mean(axis=0).max(axis=axis) for attention_maps in attention_mapss
-    ]
+    return [amap.detach().numpy() for amap in attention_maps]
