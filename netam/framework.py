@@ -421,7 +421,7 @@ class Burrito(ABC):
         if learning_rate is None:
             learning_rate = self.learning_rate
 
-        # copied from # https://github.com/karpathy/nanoGPT/blob/9755682b981a45507f6eb9b11eadef8cb83cebd5/model.py#L264
+        # copied from https://github.com/karpathy/nanoGPT/blob/9755682b981a45507f6eb9b11eadef8cb83cebd5/model.py#L264
         param_dict = {
             pn: p for pn, p in self.model.named_parameters() if p.requires_grad
         }
