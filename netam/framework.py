@@ -218,7 +218,7 @@ class SHMoofDataset(Dataset):
     def export_branch_lengths(self, out_csv_path):
         pd.DataFrame(
             {
-                "branch_length": tensor_to_numpy_if_needed(branch_lengths),
+                "branch_length": tensor_to_np_if_needed(branch_lengths),
                 "mut_freq": tensor_to_np_if_needed(
                     self.normalized_mutation_frequency()
                 ),
