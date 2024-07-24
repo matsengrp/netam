@@ -201,7 +201,8 @@ def pick_device(gpu_index=None):
         if which_gpu is None:
             if gpu_index is None:
                 which_gpu = np.random.randint(torch.cuda.device_count())
-            which_gpu = gpu_index % torch.cuda.device_count()
+            else:
+                which_gpu = gpu_index % torch.cuda.device_count()
         print(f"Using CUDA GPU {which_gpu}")
         return torch.device(f"cuda:{which_gpu}")
     elif torch.backends.mps.is_available():
