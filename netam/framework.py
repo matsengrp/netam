@@ -20,6 +20,7 @@ from netam.common import (
     kmer_to_index_of,
     nt_mask_tensor_of,
     optimizer_of_name,
+    tensor_to_numpy_if_needed,
     BASES,
     BASES_AND_N_TO_INDEX,
     BIG,
@@ -215,16 +216,12 @@ class SHMoofDataset(Dataset):
         return self.mutation_indicators.sum(axis=1) / self.masks.sum(axis=1)
 
     def export_branch_lengths(self, out_csv_path):
-        if isinstance(self.branch_lengths, torch.Tensor):
-            branch_lengths = self.branch_lengths.cpu().numpy()
-        else:
-            branch_lengths = self.branch_lengths
-        assert isinstance(branch_lengths, np.ndarray)
-
         pd.DataFrame(
             {
-                "branch_length": branch_lengths,
-                "mut_freq": self.normalized_mutation_frequency(),
+                "branch_length": tensor_to_numpy_if_needed(branch_lengths),
+                "mut_freq": tensor_to_numpy_if_needed(
+                    self.normalized_mutation_frequency()
+                ),
             }
         ).to_csv(out_csv_path, index=False)
 

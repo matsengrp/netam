@@ -239,6 +239,14 @@ def get_memory_usage_mb():
     return usage.ru_maxrss / 1024  # Convert from KB to MB
 
 
+def tensor_to_np_if_needed(x):
+    if isinstance(x, torch.Tensor):
+        return x.cpu().numpy()
+    else:
+        assert isinstance(x, np.ndarray)
+        return x
+
+
 # Reference: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
