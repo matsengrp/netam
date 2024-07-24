@@ -181,10 +181,11 @@ def find_least_used_cuda_gpu():
     return utilization.index(min(utilization))
 
 
-def pick_device(gpu_index=0):
+def pick_device(gpu_index=None):
     """
     Pick a device for PyTorch to use. If CUDA is available, use the least used
-    GPU, and if all are idle use the gpu_index modulo the number of GPUs.
+    GPU, and if all are idle use the gpu_index modulo the number of GPUs. If
+    gpu_index is None, then use a random GPU.
     """
 
     # check that CUDA is usable
@@ -198,6 +199,8 @@ def pick_device(gpu_index=0):
     if torch.backends.cudnn.is_available() and check_CUDA():
         which_gpu = find_least_used_cuda_gpu()
         if which_gpu is None:
+            if gpu_index is None:
+                which_gpu = np.random.randint(torch.cuda.device_count())
             which_gpu = gpu_index % torch.cuda.device_count()
         print(f"Using CUDA GPU {which_gpu}")
         return torch.device(f"cuda:{which_gpu}")
