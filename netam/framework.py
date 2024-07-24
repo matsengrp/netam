@@ -891,9 +891,6 @@ class RSSHMBurrito(SHMBurrito):
             wt_base_modifier,
             branch_lengths,
         ) = batch
-        
-        from netam.common import print_tensor_devices
-        print_tensor_devices()
         rates, csp_logits = self.model(encoded_parents, masks, wt_base_modifier)
 
         mut_prob = 1 - torch.exp(-rates * branch_lengths.unsqueeze(-1))
