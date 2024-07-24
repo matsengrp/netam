@@ -219,6 +219,7 @@ class SHMoofDataset(Dataset):
             branch_lengths = self.branch_lengths.cpu().numpy()
         else:
             branch_lengths = self.branch_lengths
+        assert isinstance(branch_lengths, np.ndarray)
 
         pd.DataFrame(
             {
