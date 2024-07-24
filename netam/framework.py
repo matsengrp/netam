@@ -215,9 +215,14 @@ class SHMoofDataset(Dataset):
         return self.mutation_indicators.sum(axis=1) / self.masks.sum(axis=1)
 
     def export_branch_lengths(self, out_csv_path):
+        if isinstance(self.branch_lengths, torch.Tensor):
+            branch_lengths = self.branch_lengths.cpu().numpy()
+        else:
+            branch_lengths = self.branch_lengths
+
         pd.DataFrame(
             {
-                "branch_length": self.branch_lengths,
+                "branch_length": branch_lengths,
                 "mut_freq": self.normalized_mutation_frequency(),
             }
         ).to_csv(out_csv_path, index=False)
