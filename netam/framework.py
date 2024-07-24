@@ -20,7 +20,7 @@ from netam.common import (
     kmer_to_index_of,
     nt_mask_tensor_of,
     optimizer_of_name,
-    tensor_to_numpy_if_needed,
+    tensor_to_np_if_needed,
     BASES,
     BASES_AND_N_TO_INDEX,
     BIG,
@@ -219,7 +219,7 @@ class SHMoofDataset(Dataset):
         pd.DataFrame(
             {
                 "branch_length": tensor_to_numpy_if_needed(branch_lengths),
-                "mut_freq": tensor_to_numpy_if_needed(
+                "mut_freq": tensor_to_np_if_needed(
                     self.normalized_mutation_frequency()
                 ),
             }
