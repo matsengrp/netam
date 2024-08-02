@@ -12,6 +12,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         "biopython",
+        "natsort",
         "optuna",
         "pandas",
         "pyyaml",
