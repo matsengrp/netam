@@ -352,13 +352,13 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
     """
     Load a PCP dataframe from a gzipped CSV file.
     
-    `pcp_index` is an index into the original file, even if we subset by
+    `orig_pcp_idx` is an index into the original file, even if we subset by
     sampling or by choosing V families.
     """
     pcp_df = (
         pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0)
         .reset_index()
-        .rename(columns={"index": "pcp_index"})
+        .rename(columns={"index": "orig_pcp_idx"})
     )
     pcp_df["v_family"] = pcp_df["v_gene"].str.split("-").str[0]
     if chosen_v_families is not None:
