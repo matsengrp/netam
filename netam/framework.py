@@ -352,7 +352,7 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
     """
     Load a PCP dataframe from a gzipped CSV file.
 
-    `orig_pcp_idx` is an index into the original file, even if we subset by
+    `orig_pcp_idx` is the index column from the original file, even if we subset by
     sampling or by choosing V families.
     """
     pcp_df = (
