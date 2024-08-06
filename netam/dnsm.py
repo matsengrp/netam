@@ -330,7 +330,7 @@ class DNSMBurrito(framework.Burrito):
         assert torch.isfinite(predictions).all()
         predictions = clamp_probability(predictions)
         return predictions
- 
+
     def predictions_of_batch(self, batch):
         """
         Make predictions for a batch of data.
@@ -338,7 +338,9 @@ class DNSMBurrito(framework.Burrito):
         Note that we use the mask for prediction as part of the input for the
         transformer, though we don't mask the predictions themselves.
         """
-        log_neutral_aa_mut_probs, log_selection_factors = self.prediction_pair_of_batch(batch)
+        log_neutral_aa_mut_probs, log_selection_factors = self.prediction_pair_of_batch(
+            batch
+        )
         return self.predictions_of_pair(log_neutral_aa_mut_probs, log_selection_factors)
 
     def loss_of_batch(self, batch):
