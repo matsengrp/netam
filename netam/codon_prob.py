@@ -5,13 +5,13 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 
-from epam.molevol import (
+from netam.molevol import (
     reshape_for_codons,
     build_mutation_matrices,
     codon_probs_of_mutation_matrices,
+    optimize_branch_length,
 )
-from epam.torch_common import optimize_branch_length
-from epam import sequences
+from netam import sequences
 from netam.common import BASES, stack_heterogeneous, clamp_probability
 import netam.framework as framework
 from netam.framework import Burrito
@@ -308,6 +308,8 @@ class HitClassModel(nn.Module):
         return {}
 
     def forward(self, codon_hc_probs_uncorrected: torch.Tensor):
+        # What should this actually do? Maybe it should provide adjusted corrections for each hit class, for each provided target codon distribution?
+        # or just adjust the target codon distribution instead of the hit class distribution?
         corrections = torch.cat([torch.tensor([1]), self.values])
         corrected_probs = codon_hc_probs_uncorrected * corrections
         return corrected_probs / corrected_probs.sum(dim=1, keepdim=True)
@@ -414,7 +416,7 @@ class CodonProbBurrito(Burrito):
             log_pcp_probability,
             starting_branch_length.double().item(),
             **optimization_kwargs,
-        )
+        )[0]
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         optimal_lengths = []
@@ -445,7 +447,7 @@ class CodonProbBurrito(Burrito):
                 )
             )
 
-        return np.array(optimal_lengths)
+        return torch.tensor(optimal_lengths)
 
     def to_crepe(self):
         training_hyperparameters = {
