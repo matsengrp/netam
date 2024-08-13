@@ -212,7 +212,7 @@ class CodonProbDataset(Dataset):
             f"Expected {len(self._branch_lengths)} branch lengths, "
             f"got {len(new_branch_lengths)}"
         )
-        assert np.all(np.isfinite(new_branch_lengths) & (new_branch_lengths > 0))
+        assert (torch.isfinite(new_branch_lengths) & (new_branch_lengths > 0)).all()
         self._branch_lengths = new_branch_lengths
         self.update_hit_class_probs()
     
@@ -363,10 +363,11 @@ class CodonProbBurrito(Burrito):
         corrected_probs = (corrected_probs - torch.logsumexp(corrected_probs, dim=1, keepdim=True)).exp()
         assert torch.isfinite(corrected_probs).all()
         adjusted_probs = clamp_probability(corrected_probs)
+        logits = torch.log(adjusted_probs / (1 - adjusted_probs))
 
         # Just need to adjust hit class probs by model coefficients, and re-normalize.
 
-        return self.cce_loss(adjusted_probs, flat_masked_observed_hcs)
+        return self.cce_loss(logits, flat_masked_observed_hcs)
         # nt_parents = batch["nt_parents"]
         # nt_children = batch["nt_children"]
         # brlens = batch["branch_lengths"]
