@@ -301,18 +301,21 @@ def flatten_and_mask_sequence_codons(input_tensor, codon_mask=None):
 class HitClassModel(nn.Module):
     def __init__(self):
         super().__init__()
-        self.values = nn.Parameter(torch.tensor([1.0, 1.0, 1.0]))
+        self.values = nn.Parameter(torch.tensor([0.0, 0.0, 0.0]))
 
     @property
     def hyperparameters(self):
         return {}
 
-    def forward(self, codon_hc_probs_uncorrected: torch.Tensor):
-        # What should this actually do? Maybe it should provide adjusted corrections for each hit class, for each provided target codon distribution?
-        # or just adjust the target codon distribution instead of the hit class distribution?
-        corrections = torch.cat([torch.tensor([1]), self.values])
-        corrected_probs = codon_hc_probs_uncorrected * corrections
-        return corrected_probs / corrected_probs.sum(dim=1, keepdim=True)
+    def forward(self, parent_codon_idxs: torch.Tensor, uncorrected_log_codon_probs: torch.Tensor):
+        hit_class_tensor_t = hit_class_tensor_full[parent_codon_idxs[:, 0], 
+                                                   parent_codon_idxs[:, 1], 
+                                                   parent_codon_idxs[:, 2]].int()
+        corrections = torch.cat([torch.tensor([0.0]), self.values])
+        adjustments = corrections[hit_class_tensor_t]
+        unnormalized_corrected_probs = uncorrected_log_codon_probs + adjustments
+        normalizations = torch.logsumexp(unnormalized_corrected_probs, dim=[1,2,3], keepdim=True)
+        return unnormalized_corrected_probs - normalizations
 
 
 class CodonProbBurrito(Burrito):
@@ -345,8 +348,8 @@ class CodonProbBurrito(Burrito):
             in_csv_prefix + ".val_branch_lengths.csv"
         )
 
-# Once optimized branch lengths, store the baseline codon-level predictions somewhere. See DNSMBurrito::predictions_of_batch
-# Rates stay same, and are used to re-compute branch lengths whenever codon probs are adjusted.
+    # Once optimized branch lengths, store the baseline codon-level predictions somewhere. See DNSMBurrito::predictions_of_batch
+    # Rates stay same, and are used to re-compute branch lengths whenever codon probs are adjusted.
     def loss_of_batch(self, batch):
         # different sequence lengths, and codons containing N's, are marked in the mask.
         observed_hcs = batch["observed_hcs"]
@@ -355,13 +358,24 @@ class CodonProbBurrito(Burrito):
 
         flat_masked_hit_class_probs = flatten_and_mask_sequence_codons(hit_class_probs, codon_mask=codon_mask)
         flat_masked_observed_hcs = flatten_and_mask_sequence_codons(observed_hcs, codon_mask=codon_mask).long()
-        adjusted_probs = self.model(flat_masked_hit_class_probs)
-        assert torch.isfinite(adjusted_probs).all()
-        adjusted_probs = clamp_probability(adjusted_probs)
+        corrections = torch.cat([torch.tensor([0.0]), self.model.values])
+        corrected_probs = flat_masked_hit_class_probs.log() + corrections
+        corrected_probs = (corrected_probs - torch.logsumexp(corrected_probs, dim=1, keepdim=True)).exp()
+        assert torch.isfinite(corrected_probs).all()
+        adjusted_probs = clamp_probability(corrected_probs)
 
         # Just need to adjust hit class probs by model coefficients, and re-normalize.
 
         return self.cce_loss(adjusted_probs, flat_masked_observed_hcs)
+        # nt_parents = batch["nt_parents"]
+        # nt_children = batch["nt_children"]
+        # brlens = batch["branch_lengths"]
+        # codon_mask = batch["codon_mask"]
+        # rates = batch["rates"]
+        # subs_probs = batch["subs_probs"]
+        # scaled_rates = rates * brlens
+        # codon_probs = torch.tensor([codon_probs_of_parent_scaled_rates_and_sub_probs(parent_idxs, scaled_rates_it, subs_probs_it)
+        #                             for parent_idxs, scaled_rates_it, subs_probs_it in zip(nt_parents, scaled_rates, subs_probs)])
 
 
 
@@ -378,8 +392,8 @@ class CodonProbBurrito(Burrito):
         **optimization_kwargs,
     ):
 
-        # A stand-in for the adjustment model we're fitting:
-        codon_adjustment = self.model.values
+        # # A stand-in for the adjustment model we're fitting:
+        # codon_adjustment = self.model.values
 
         def log_pcp_probability(log_branch_length):
             # We want to first return the log-probability of the observed branch, using codon probs.
@@ -396,20 +410,21 @@ class CodonProbBurrito(Burrito):
 
             child_codon_idxs = reshape_for_codons(child_idxs)[codon_mask]
             parent_codon_idxs = reshape_for_codons(parent_idxs)[codon_mask]
-            # this is the pcp prob without the codon correction
-            child_codon_probs = codon_probs[torch.arange(child_codon_idxs.size(0)), child_codon_idxs[:, 0], child_codon_idxs[:, 1], child_codon_idxs[:, 2]]
+            corrected_codon_probs = self.model(parent_codon_idxs, codon_probs.log())
+            child_codon_probs = corrected_codon_probs[torch.arange(child_codon_idxs.size(0)), child_codon_idxs[:, 0], child_codon_idxs[:, 1], child_codon_idxs[:, 2]]
+            return child_codon_probs.sum()
 
-            # hc_probs is a Cx4 tensor containing codon probs aggregated by hit class
-            hc_probs = hit_class_probs_tensor(parent_codon_idxs, codon_probs)
+            # # hc_probs is a Cx4 tensor containing codon probs aggregated by hit class
+            # hc_probs = hit_class_probs_tensor(parent_codon_idxs, codon_probs)
 
-            # Add fixed 1 adjustment for hit class 0:
-            _adjust = torch.cat([torch.tensor([1]), codon_adjustment])
-            # Get adjustments for each site's observed hit class
-            observed_hc_adjustments = _adjust.gather(0, observed_hcs[codon_mask])
-            numerators = (child_codon_probs * observed_hc_adjustments).log()
-            # This is a dot product of the distribution and the adjustments at each site
-            denominators = (torch.matmul(hc_probs, _adjust)).log()
-            return (numerators - denominators).sum()
+            # # Add fixed 1 adjustment for hit class 0:
+            # _adjust = torch.cat([torch.tensor([1]), codon_adjustment])
+            # # Get adjustments for each site's observed hit class
+            # observed_hc_adjustments = _adjust.gather(0, observed_hcs[codon_mask])
+            # numerators = (child_codon_probs * observed_hc_adjustments).log()
+            # # This is a dot product of the distribution and the adjustments at each site
+            # denominators = (torch.matmul(hc_probs, _adjust)).log()
+            # return (numerators - denominators).sum()
 
 
         return optimize_branch_length(
