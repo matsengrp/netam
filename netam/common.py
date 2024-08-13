@@ -181,10 +181,11 @@ def find_least_used_cuda_gpu():
     return utilization.index(min(utilization))
 
 
-def pick_device(gpu_index=0):
+def pick_device(gpu_index=None):
     """
     Pick a device for PyTorch to use. If CUDA is available, use the least used
-    GPU, and if all are idle use the gpu_index modulo the number of GPUs.
+    GPU, and if all are idle use the gpu_index modulo the number of GPUs. If
+    gpu_index is None, then use a random GPU.
     """
 
     # check that CUDA is usable
@@ -198,7 +199,10 @@ def pick_device(gpu_index=0):
     if torch.backends.cudnn.is_available() and check_CUDA():
         which_gpu = find_least_used_cuda_gpu()
         if which_gpu is None:
-            which_gpu = gpu_index % torch.cuda.device_count()
+            if gpu_index is None:
+                which_gpu = np.random.randint(torch.cuda.device_count())
+            else:
+                which_gpu = gpu_index % torch.cuda.device_count()
         print(f"Using CUDA GPU {which_gpu}")
         return torch.device(f"cuda:{which_gpu}")
     elif torch.backends.mps.is_available():
@@ -233,6 +237,14 @@ def get_memory_usage_mb():
     # Returns the peak memory usage in MB
     usage = resource.getrusage(resource.RUSAGE_SELF)
     return usage.ru_maxrss / 1024  # Convert from KB to MB
+
+
+def tensor_to_np_if_needed(x):
+    if isinstance(x, torch.Tensor):
+        return x.cpu().numpy()
+    else:
+        assert isinstance(x, np.ndarray)
+        return x
 
 
 # Reference: https://pytorch.org/tutorials/beginner/transformer_tutorial.html

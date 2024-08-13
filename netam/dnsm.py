@@ -310,12 +310,9 @@ class DNSMBurrito(framework.Burrito):
             )
         self.val_dataset.load_branch_lengths(in_csv_prefix + ".val_branch_lengths.csv")
 
-    def predictions_of_batch(self, batch):
+    def prediction_pair_of_batch(self, batch):
         """
-        Make predictions for a batch of data.
-
-        Note that we use the mask for prediction as part of the input for the
-        transformer, though we don't mask the predictions themselves.
+        Get log neutral mutation probabilities and log selection factors for a batch of data.
         """
         aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
         mask = batch["mask"].to(self.device)
@@ -325,11 +322,26 @@ class DNSMBurrito(framework.Burrito):
                 f"log_neutral_aa_mut_probs has non-finite values at relevant positions: {log_neutral_aa_mut_probs[mask]}"
             )
         log_selection_factors = self.model(aa_parents_idxs, mask)
+        return log_neutral_aa_mut_probs, log_selection_factors
+
+    def predictions_of_pair(self, log_neutral_aa_mut_probs, log_selection_factors):
         # Take the product of the neutral mutation probabilities and the selection factors.
         predictions = torch.exp(log_neutral_aa_mut_probs + log_selection_factors)
         assert torch.isfinite(predictions).all()
         predictions = clamp_probability(predictions)
         return predictions
+
+    def predictions_of_batch(self, batch):
+        """
+        Make predictions for a batch of data.
+
+        Note that we use the mask for prediction as part of the input for the
+        transformer, though we don't mask the predictions themselves.
+        """
+        log_neutral_aa_mut_probs, log_selection_factors = self.prediction_pair_of_batch(
+            batch
+        )
+        return self.predictions_of_pair(log_neutral_aa_mut_probs, log_selection_factors)
 
     def loss_of_batch(self, batch):
         aa_subs_indicator = batch["subs_indicator"].to(self.device)
@@ -408,6 +420,9 @@ class DNSMBurrito(framework.Burrito):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         worker_count = min(mp.cpu_count() // 2, 10)
+        # The following can be used when one wants a better traceback.
+        # burrito = DNSMBurrito(None, dataset, copy.deepcopy(self.model))
+        # return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
         with mp.Pool(worker_count) as pool:
             splits = dataset.split(worker_count)
             results = pool.starmap(
