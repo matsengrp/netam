@@ -765,7 +765,6 @@ class Burrito(ABC):
             print(
                 f"### Beginning cycle {cycle + 1}/{cycle_count} using optimizer {self.optimizer_name}"
             )
-            self.mark_branch_lengths_optimized(cycle + 1)
             current_lr = self.optimizer.param_groups[0]["lr"]
             # set new_lr to be the geometric mean of current_lr and the
             # originally-specified learning rate
