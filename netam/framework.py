@@ -765,7 +765,6 @@ class Burrito(ABC):
             print(
                 f"### Beginning cycle {cycle + 1}/{cycle_count} using optimizer {self.optimizer_name}"
             )
-            self.mark_branch_lengths_optimized(cycle + 1)
             current_lr = self.optimizer.param_groups[0]["lr"]
             # set new_lr to be the geometric mean of current_lr and the
             # originally-specified learning rate
@@ -775,8 +774,8 @@ class Burrito(ABC):
             )
             self.reset_optimization(new_lr)
             loss_history_l.append(self.train(epochs, out_prefix=out_prefix))
-            if cycle < cycle_count - 1:
-                optimize_branch_lengths()
+            # We standardize and optimize the branch lengths after each cycle, even the last one.
+            optimize_branch_lengths()
             self.mark_branch_lengths_optimized(cycle + 1)
 
         return pd.concat(loss_history_l, ignore_index=True)
@@ -932,7 +931,7 @@ class RSSHMBurrito(SHMBurrito):
         **optimization_kwargs,
     ):
         if torch.sum(mutation_indicator) == 0:
-            return 0.0
+            return 0.0, False
 
         rates, _ = self.model(
             encoded_parent.unsqueeze(0),
