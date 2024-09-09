@@ -597,11 +597,6 @@ class Burrito(ABC):
             train_losses.append(train_loss)
             val_losses.append(val_loss)
 
-        # Record the initial loss before training.
-        train_loss = self.process_data_loader(train_loader, train_mode=False).item()
-        val_loss = self.process_data_loader(val_loader, train_mode=False).item()
-        record_losses(train_loss, val_loss)
-
         with tqdm(range(1, epochs + 1), desc="Epoch") as pbar:
             for epoch in pbar:
                 current_lr = self.optimizer.param_groups[0]["lr"]
