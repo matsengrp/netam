@@ -26,7 +26,7 @@ from netam.common import (
     VRC01_NT_SEQ,
 )
 from netam import models
-from netam import molevol
+import netam.molevol as molevol
 
 
 def encode_mut_pos_and_base(parent, child, site_count=None):

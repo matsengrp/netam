@@ -10,117 +10,15 @@ from netam.molevol import (
     build_mutation_matrices,
     codon_probs_of_mutation_matrices,
     optimize_branch_length,
+    codon_probs_of_parent_scaled_rates_and_sub_probs,
+    hit_class_probs_tensor,
 )
 from netam import sequences
 from netam.common import BASES, stack_heterogeneous, clamp_probability
 import netam.framework as framework
 from netam.framework import Burrito
+from netam.models import HitClassModel
 
-def hit_class(codon1, codon2):
-    return sum(c1 != c2 for c1, c2 in zip(codon1, codon2))
-
-
-# Initialize the 4D tensor to store the hit class tensors
-# The shape is [4, 4, 4, 4, 4, 4], corresponding to three nucleotide indices and the hit class tensor (4x4x4)
-num_bases = len(BASES)
-hit_class_tensor_full = torch.zeros(num_bases, num_bases, num_bases, num_bases, num_bases, num_bases, dtype=torch.int)
-
-# Populate the tensor
-for i,_ in enumerate(BASES):
-    for j, _ in enumerate(BASES):
-        for k, _ in enumerate(BASES):
-            codon1 = (i, j, k)
-            for i2, _ in enumerate(BASES):
-                for j2, _ in enumerate(BASES):
-                    for k2, _ in enumerate(BASES):
-                        codon_2 = (i2, j2, k2)
-                        hit_class_tensor_full[i, j, k, i2, j2, k2] = hit_class(codon1, codon_2)
-
-
-# make a dict mapping from codon to triple integer index
-codon_to_idxs = {base_1+base_2+base_3: (i, j, k) for i, base_1 in enumerate(BASES) for j, base_2 in enumerate(BASES) for k, base_3 in enumerate(BASES)}
-
-# def hit_class_probs(hit_class_tensor, codon_probs):
-#     """
-#     Calculate total probabilities for each number of differences between codons.
-
-#     Args:
-#     - hit_class_tensor (torch.Tensor): A 4x4x4 integer tensor containing the number of differences
-#                                        between each codon and a reference codon.
-#     - codon_probs (torch.Tensor): A 4x4x4 tensor containing the probabilities of various codons.
-
-#     Returns:
-#     - total_probs (torch.Tensor): A 1D tensor containing the total probabilities for each number
-#                                    of differences (0 to 3).
-#     """
-#     total_probs = []
-
-#     for hit_class in range(4):
-#         # Create a mask of codons with the desired number of differences
-#         mask = hit_class_tensor == hit_class
-
-#         # Multiply componentwise with the codon_probs tensor and sum
-#         total_prob = (codon_probs * mask.float()).sum()
-
-#         # Append the total probability to the list
-#         total_probs.append(total_prob.item())
-
-#     return torch.tensor(total_probs)
-
-def hit_class_probs_tensor(parent_codon_idxs, codon_probs):
-    """
-    Calculate probabilities of hit classes between parent codons and all other codons for all the sites of a sequence.
-
-    Args:
-    - parent_codon_idxs (torch.Tensor): The parent nucleotide sequence encoded as a tensor of length Cx3, containing the nt indices of each codon.
-    - codon_probs (torch.Tensor): A Cx4x4x4 tensor containing the probabilities of various codons, for each codon in parent seq.
-
-    Returns:
-    - probs (torch.Tensor): A tensor containing the probabilities of different
-                            counts of hit classes between parent codons and
-                            all other codons.
-    
-    Notes:
-
-    Uses hit_class_tensor_full (torch.Tensor): A 4x4x4x4x4x4 tensor which when indexed with a parent codon produces
-    the hit classes to all possible child codons.
-    """
-
-    # Get a Cx4x4x4 tensor describing for each parent codon the hit classes of all child codons
-    hit_class_tensor_t = hit_class_tensor_full[parent_codon_idxs[:, 0], 
-                                               parent_codon_idxs[:, 1], 
-                                               parent_codon_idxs[:, 2]].int()
-    C = hit_class_tensor_t.size(0)
-    hc_prob_tensor = torch.zeros(C, 4)
-    for k in range(4):
-        mask = (hit_class_tensor_t == k)
-        hc_prob_tensor[:, k] = (codon_probs * mask).sum(dim=(1,2,3))
-
-    return hc_prob_tensor
-
-
-def codon_probs_of_parent_scaled_rates_and_sub_probs(
-    parent_idxs, scaled_rates, sub_probs
-):
-    """
-    Compute the probabilities of mutating to various codons for a parent sequence.
-
-    This uses the same machinery as we use for fitting the DNSM, but we stay on
-    the codon level rather than moving to syn/nonsyn changes.
-    """
-    # This is from `aaprobs_of_parent_scaled_rates_and_sub_probs`:
-    mut_probs = 1.0 - torch.exp(-scaled_rates)
-    parent_codon_idxs = reshape_for_codons(parent_idxs)
-    codon_mut_probs = reshape_for_codons(mut_probs)
-    codon_sub_probs = reshape_for_codons(sub_probs)
-
-    # This is from `aaprob_of_mut_and_sub`:
-    mut_matrices = build_mutation_matrices(
-        parent_codon_idxs, codon_mut_probs, codon_sub_probs
-    )
-    codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
-
-    return codon_probs
 
 # From hit_classes_of_pcp_df
 def _observed_hit_classes(parents, children):
@@ -213,6 +111,7 @@ class CodonProbDataset(Dataset):
     
     def update_hit_class_probs(self):
         """Compute hit class probabilities for all codons in each sequence based on current branch lengths"""
+        new_codon_probs = []
         new_hc_probs = []
         for (
             encoded_parent,
@@ -230,9 +129,10 @@ class CodonProbDataset(Dataset):
             codon_probs = codon_probs_of_parent_scaled_rates_and_sub_probs(
                 encoded_parent, scaled_rates[:len(encoded_parent)], subs_probs[:len(encoded_parent)]
             )
+            new_codon_probs.append(codon_probs)
 
             new_hc_probs.append(hit_class_probs_tensor(reshape_for_codons(encoded_parent), codon_probs))
-        # We must store probability of all hit classes for arguments to cce_loss in loss_of_batch.
+        self.codon_probs = torch.stack(new_codon_probs)
         self.hit_class_probs = torch.stack(new_hc_probs)
 
     # A couple of these methods could maybe be moved to a super class, which itself subclasses Dataset
@@ -255,6 +155,7 @@ class CodonProbDataset(Dataset):
             "rates": self.all_rates[idx],
             "subs_probs": self.all_subs_probs[idx],
             "hit_class_probs": self.hit_class_probs[idx],
+            "codon_probs": self.codon_probs[idx],
             "codon_mask": self.codon_mask[idx],
         }
 
@@ -291,27 +192,6 @@ def flatten_and_mask_sequence_codons(input_tensor, codon_mask=None):
         # Now this should be shape (N*C, 4) or (N*C,)
         return flat_input
 
-class HitClassModel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.values = nn.Parameter(torch.tensor([0.0, 0.0, 0.0]))
-
-    @property
-    def hyperparameters(self):
-        return {}
-
-    def forward(self, parent_codon_idxs: torch.Tensor, uncorrected_log_codon_probs: torch.Tensor):
-        """Forward function takes a tensor of target codon distributions, for each observed parent codon,
-        and adjusts the distributions according to the hit class adjustments."""
-        hit_class_tensor_t = hit_class_tensor_full[parent_codon_idxs[:, 0], 
-                                                   parent_codon_idxs[:, 1], 
-                                                   parent_codon_idxs[:, 2]].int()
-        corrections = torch.cat([torch.tensor([0.0]), self.values])
-        adjustments = corrections[hit_class_tensor_t]
-        unnormalized_corrected_probs = uncorrected_log_codon_probs + adjustments
-        normalizations = torch.logsumexp(unnormalized_corrected_probs, dim=[1,2,3], keepdim=True)
-        return unnormalized_corrected_probs - normalizations
-
 
 class CodonProbBurrito(Burrito):
     def __init__(
@@ -329,7 +209,6 @@ class CodonProbBurrito(Burrito):
             *args,
             **kwargs,
         )
-        self.cce_loss = torch.nn.CrossEntropyLoss(reduction='mean')
 
 
     def load_branch_lengths(self, in_csv_prefix):
@@ -342,23 +221,23 @@ class CodonProbBurrito(Burrito):
         )
 
     def loss_of_batch(self, batch):
-        # different sequence lengths, and codons containing N's, are marked in the mask.
-        observed_hcs = batch["observed_hcs"]
-        hit_class_probs = batch["hit_class_probs"]
+        child_idxs = batch["child"]
+        parent_idxs = batch["parent"]
+        codon_probs = batch["codon_probs"]
         codon_mask = batch["codon_mask"]
 
-        flat_masked_hit_class_probs = flatten_and_mask_sequence_codons(hit_class_probs, codon_mask=codon_mask)
-        flat_masked_observed_hcs = flatten_and_mask_sequence_codons(observed_hcs, codon_mask=codon_mask).long()
-        corrections = torch.cat([torch.tensor([0.0]), self.model.values])
-        scaled_log_probs = flat_masked_hit_class_probs.log() + corrections
-        corrected_probs = (scaled_log_probs - torch.logsumexp(scaled_log_probs, dim=1, keepdim=True)).exp()
-        assert torch.isfinite(corrected_probs).all()
-        adjusted_probs = clamp_probability(corrected_probs)
-        logits = torch.log(adjusted_probs / (1 - adjusted_probs))
+        flat_masked_codon_probs = flatten_and_mask_sequence_codons(codon_probs, codon_mask=codon_mask)
+        # remove first dimension of parent_idxs by concatenating all of its elements
+        codon_mask_flat = codon_mask.flatten(start_dim=0, end_dim=1)
+        parent_codons_flat = reshape_for_codons(parent_idxs.flatten(start_dim=0, end_dim=1))[codon_mask_flat]
+        child_codons_flat = reshape_for_codons(child_idxs.flatten(start_dim=0, end_dim=1))[codon_mask_flat]
+        corrected_codon_log_probs = self.model(parent_codons_flat, flat_masked_codon_probs.log())
+        child_codon_log_probs = corrected_codon_log_probs[torch.arange(child_codons_flat.size(0)),
+                                                  child_codons_flat[:, 0],
+                                                  child_codons_flat[:, 1],
+                                                  child_codons_flat[:, 2]]
+        return -child_codon_log_probs.sum()
 
-        return self.cce_loss(logits, flat_masked_observed_hcs)
-
-    # These are from DNSMBurrito, as a start
     def _find_optimal_branch_length(
         self,
         parent_idxs,
