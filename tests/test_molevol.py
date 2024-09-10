@@ -13,12 +13,79 @@ from netam.sequences import (
 # These happen to be the same as some examples in test_models.py but that's fine.
 # If it was important that they were shared, we should put them in a conftest.py.
 ex_mut_probs = torch.tensor([0.01, 0.02, 0.03])
+ex_scaled_rates = torch.tensor([0.01, 0.001, 0.005])
 ex_sub_probs = torch.tensor(
     [[0.0, 0.3, 0.5, 0.2], [0.4, 0.0, 0.1, 0.5], [0.2, 0.3, 0.0, 0.5]]
 )
+# This is an example, and the correct output for test_codon_probs_of_parent_scaled_rates_and_sub_probs
+ex_codon_probs = torch.tensor(
+    [
+        [
+            [
+                [3.9484e-07, 5.9226e-07, 3.9385e-04, 9.8710e-07],
+                [9.8660e-04, 1.4799e-03, 9.8413e-01, 2.4665e-03],
+                [9.8710e-08, 1.4806e-07, 9.8463e-05, 2.4677e-07],
+                [4.9355e-07, 7.4032e-07, 4.9231e-04, 1.2339e-06],
+            ],
+            [
+                [1.1905e-09, 1.7857e-09, 1.1875e-06, 2.9762e-09],
+                [2.9746e-06, 4.4619e-06, 2.9672e-03, 7.4366e-06],
+                [2.9762e-10, 4.4642e-10, 2.9687e-07, 7.4404e-10],
+                [1.4881e-09, 2.2321e-09, 1.4844e-06, 3.7202e-09],
+            ],
+            [
+                [1.9841e-09, 2.9762e-09, 1.9791e-06, 4.9602e-09],
+                [4.9577e-06, 7.4366e-06, 4.9453e-03, 1.2394e-05],
+                [4.9602e-10, 7.4404e-10, 4.9478e-07, 1.2401e-09],
+                [2.4801e-09, 3.7202e-09, 2.4739e-06, 6.2003e-09],
+            ],
+            [
+                [7.9364e-10, 1.1905e-09, 7.9165e-07, 1.9841e-09],
+                [1.9831e-06, 2.9746e-06, 1.9781e-03, 4.9577e-06],
+                [1.9841e-10, 2.9762e-10, 1.9791e-07, 4.9602e-10],
+                [9.9205e-10, 1.4881e-09, 9.8957e-07, 2.4801e-09],
+            ],
+        ]
+    ]
+)
+
 ex_parent_codon_idxs = nt_idx_tensor_of_str("ACG")
 parent_nt_seq = "CAGGTGCAGCTGGTGGAG"  # QVQLVE
 weights_path = "data/shmple_weights/my_shmoof"
+
+
+def test_codon_probs_of_parent_scaled_rates_and_sub_probs():
+    computed_tensor = molevol.codon_probs_of_parent_scaled_rates_and_sub_probs(
+        ex_parent_codon_idxs, ex_scaled_rates, ex_sub_probs
+    )
+    correct_tensor = ex_codon_probs
+    assert torch.allclose(correct_tensor, computed_tensor)
+    assert torch.allclose(
+        computed_tensor.sum(dim=(1, 2, 3)), torch.ones(computed_tensor.shape[0])
+    )
+
+
+def test_multihit_adjustment():
+    hit_class_factors = torch.tensor([-0.1, 1, 2.3])
+    # We'll verify that aggregating by hit class then adjusting is the same as adjusting then aggregating by hit class.
+    codon_idxs = molevol.reshape_for_codons(ex_parent_codon_idxs)
+    adjusted_codon_probs = molevol.apply_multihit_adjustment(
+        codon_idxs, ex_codon_probs.log(), hit_class_factors
+    ).exp()
+    aggregate_last = molevol.hit_class_probs_tensor(codon_idxs, adjusted_codon_probs)
+
+    uncorrected_hc_log_probs = molevol.hit_class_probs_tensor(
+        codon_idxs, ex_codon_probs
+    ).log()
+
+    corrections = torch.cat([torch.tensor([0.0]), hit_class_factors])
+    # we'll use the corrections to adjust the uncorrected hit class probs
+    adjustments = corrections[
+        torch.arange(4).unsqueeze(0).tile((uncorrected_hc_log_probs.shape[0], 1))
+    ]
+    uncorrected_hc_log_probs += adjustments
+    aggregate_first = torch.softmax(uncorrected_hc_log_probs, dim=1)
+    assert torch.allclose(aggregate_first, aggregate_last)
 
 
 def test_build_mutation_matrix():

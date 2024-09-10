@@ -129,7 +129,7 @@ def hit_class_probs_tensor(parent_codon_idxs: Tensor, codon_probs: Tensor) -> Te
     Calculate probabilities of hit classes between parent codons and all other codons for all the sites of a sequence.
 
     Parameters:
-    parent_codon_idxs (torch.Tensor): The parent nucleotide sequence encoded as a tensor of length Cx3, containing the nt indices of each codon.
+    parent_codon_idxs (torch.Tensor): The parent nucleotide sequence encoded as a tensor of shape (C, 3), containing the nt indices of each codon.
     codon_probs (torch.Tensor): A Cx4x4x4 tensor containing the probabilities of various codons, for each codon in parent seq.
 
     Returns:
