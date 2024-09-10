@@ -1,20 +1,17 @@
 import torch
 from torch.utils.data import Dataset
-import torch.nn as nn
 from tqdm import tqdm
-import numpy as np
 import pandas as pd
+from typing import Sequence
 
 from netam.molevol import (
     reshape_for_codons,
-    build_mutation_matrices,
-    codon_probs_of_mutation_matrices,
     optimize_branch_length,
     codon_probs_of_parent_scaled_rates_and_sub_probs,
     hit_class_probs_tensor,
 )
 from netam import sequences
-from netam.common import BASES, stack_heterogeneous, clamp_probability
+from netam.common import stack_heterogeneous
 import netam.framework as framework
 from netam.framework import Burrito
 from netam.models import HitClassModel
@@ -27,7 +24,7 @@ def _observed_hit_classes(parents, children):
 
         assert len(parent_seq) == len(child_seq)
         codon_count = len(parent_seq) // 3
-        valid_length =  codon_count * 3
+        valid_length = codon_count * 3
 
         # Chunk into codons and count mutations
         num_mutations = []
@@ -53,24 +50,44 @@ def _observed_hit_classes(parents, children):
     return labels
 
 
-
-class CodonProbDataset(Dataset):
+class HitClassDataset(Dataset):
     def __init__(
         self,
-        nt_parents,
-        nt_children,
-        all_rates,
-        all_subs_probs,
-        branch_length_multiplier=1.0,
+        nt_parents: Sequence[str],
+        nt_children: Sequence[str],
+        all_rates: Sequence[list[float]],
+        all_subs_probs: Sequence[list[list[float]]],
+        branch_length_multiplier: float = 1.0,
     ):
-        #TODO figure out if we need a branch_length_multiplier, or if normalized mutation frequency is fine
-        #TODO mask or whatever to account for this replacement of N's with A's.
-        trimmed_parents = [parent[: len(parent) - len(parent) % 3] for parent in nt_parents]
-        trimmed_children = [child[: len(child) - len(child) % 3] for child in nt_children]
-        self.nt_parents = stack_heterogeneous(pd.Series(sequences.nt_idx_tensor_of_str(parent.replace("N", "A")) for parent in trimmed_parents))
-        self.nt_children = stack_heterogeneous(pd.Series(sequences.nt_idx_tensor_of_str(child.replace("N", "A")) for child in trimmed_children))
-        self.all_rates = stack_heterogeneous(pd.Series(rates[: len(rates) - len(rates) % 3] for rates in all_rates).reset_index(drop=True))
-        self.all_subs_probs = stack_heterogeneous(pd.Series(subs_probs[: len(subs_probs) - len(subs_probs) % 3] for subs_probs in all_subs_probs).reset_index(drop=True))
+        trimmed_parents = [
+            parent[: len(parent) - len(parent) % 3] for parent in nt_parents
+        ]
+        trimmed_children = [
+            child[: len(child) - len(child) % 3] for child in nt_children
+        ]
+        self.nt_parents = stack_heterogeneous(
+            pd.Series(
+                sequences.nt_idx_tensor_of_str(parent.replace("N", "A"))
+                for parent in trimmed_parents
+            )
+        )
+        self.nt_children = stack_heterogeneous(
+            pd.Series(
+                sequences.nt_idx_tensor_of_str(child.replace("N", "A"))
+                for child in trimmed_children
+            )
+        )
+        self.all_rates = stack_heterogeneous(
+            pd.Series(
+                rates[: len(rates) - len(rates) % 3] for rates in all_rates
+            ).reset_index(drop=True)
+        )
+        self.all_subs_probs = stack_heterogeneous(
+            pd.Series(
+                subs_probs[: len(subs_probs) - len(subs_probs) % 3]
+                for subs_probs in all_subs_probs
+            ).reset_index(drop=True)
+        )
 
         assert len(self.nt_parents) == len(self.nt_children)
 
@@ -81,7 +98,9 @@ class CodonProbDataset(Dataset):
                 )
             assert len(parent) == len(child)
 
-        self.observed_hcs = stack_heterogeneous(_observed_hit_classes(trimmed_parents, trimmed_children), pad_value=-100).long()
+        self.observed_hcs = stack_heterogeneous(
+            _observed_hit_classes(trimmed_parents, trimmed_children), pad_value=-100
+        ).long()
         # At some point, we may want a nt_parents mask for N's, but this ignores codons with N's, anyway.
         self.codon_mask = self.observed_hcs > -1
 
@@ -108,7 +127,7 @@ class CodonProbDataset(Dataset):
         assert (torch.isfinite(new_branch_lengths) & (new_branch_lengths > 0)).all()
         self._branch_lengths = new_branch_lengths
         self.update_hit_class_probs()
-    
+
     def update_hit_class_probs(self):
         """Compute hit class probabilities for all codons in each sequence based on current branch lengths"""
         new_codon_probs = []
@@ -127,11 +146,15 @@ class CodonProbDataset(Dataset):
             scaled_rates = branch_length * rates
 
             codon_probs = codon_probs_of_parent_scaled_rates_and_sub_probs(
-                encoded_parent, scaled_rates[:len(encoded_parent)], subs_probs[:len(encoded_parent)]
+                encoded_parent,
+                scaled_rates[: len(encoded_parent)],
+                subs_probs[: len(encoded_parent)],
             )
             new_codon_probs.append(codon_probs)
 
-            new_hc_probs.append(hit_class_probs_tensor(reshape_for_codons(encoded_parent), codon_probs))
+            new_hc_probs.append(
+                hit_class_probs_tensor(reshape_for_codons(encoded_parent), codon_probs)
+            )
         self.codon_probs = torch.stack(new_codon_probs)
         self.hit_class_probs = torch.stack(new_hc_probs)
 
@@ -142,7 +165,9 @@ class CodonProbDataset(Dataset):
         )
 
     def load_branch_lengths(self, in_csv_path):
-        self.branch_lengths = torch.tensor(pd.read_csv(in_csv_path)["branch_length"].values)
+        self.branch_lengths = torch.tensor(
+            pd.read_csv(in_csv_path)["branch_length"].values
+        )
 
     def __len__(self):
         return len(self.nt_parents)
@@ -169,35 +194,38 @@ class CodonProbDataset(Dataset):
         self.codon_mask = self.codon_mask.to(device)
         self.branch_lengths = self.branch_lengths.to(device)
 
-def flatten_and_mask_sequence_codons(input_tensor, codon_mask=None):
-        """Flatten first dimension, that is over sequences, to return tensor
-        whose first dimension contains all codons, instead of sequences.
 
-        input_tensor should have at least two dimensions, with the second dimension representing codons
-        codon_mask should have two dimensions
-        
-        If mask is provided, also mask the result"""
-        # If N is number pcps, and C is number codons per seq, then
-        # hit_class_probs is of dimension (N, C, 4)
-        # codon_mask is of dimension (N, C)
-        # observed_hcs is of dimension (N, C)
+def flatten_and_mask_sequence_codons(
+    input_tensor: torch.Tensor, codon_mask: torch.Tensor = None
+):
+    """Flatten first dimension, that is over sequences, to return tensor
+    whose first dimension contains all codons, instead of sequences.
 
-        # Since there's a different number of codons in each sequence, we need to flatten so we just
-        # have a big list of codons, before we do masking (otherwise we'll get everything flattened to a single dimension)
-        flat_input = input_tensor.flatten(start_dim=0, end_dim=1)
-        if codon_mask is not None:
-            flat_codon_mask = codon_mask.flatten()
-            flat_input = flat_input[flat_codon_mask]
+    input_tensor should have at least two dimensions, with the second dimension representing codons
+    codon_mask should have two dimensions
 
-        # Now this should be shape (N*C, 4) or (N*C,)
-        return flat_input
+    If mask is provided, also mask the result"""
+    # If N is number pcps, and C is number codons per seq, then
+    # hit_class_probs is of dimension (N, C, 4)
+    # codon_mask is of dimension (N, C)
+    # observed_hcs is of dimension (N, C)
+
+    # Since there's a different number of codons in each sequence, we need to flatten so we just
+    # have a big list of codons, before we do masking (otherwise we'll get everything flattened to a single dimension)
+    flat_input = input_tensor.flatten(start_dim=0, end_dim=1)
+    if codon_mask is not None:
+        flat_codon_mask = codon_mask.flatten()
+        flat_input = flat_input[flat_codon_mask]
+
+    # Now this should be shape (N*C, 4) or (N*C,)
+    return flat_input
 
 
-class CodonProbBurrito(Burrito):
+class MultihitBurrito(Burrito):
     def __init__(
         self,
-        train_dataset: CodonProbDataset,
-        val_dataset: CodonProbDataset,
+        train_dataset: HitClassDataset,
+        val_dataset: HitClassDataset,
         model: HitClassModel,
         *args,
         **kwargs,
@@ -209,7 +237,6 @@ class CodonProbBurrito(Burrito):
             *args,
             **kwargs,
         )
-
 
     def load_branch_lengths(self, in_csv_prefix):
         if self.train_loader is not None:
@@ -226,16 +253,26 @@ class CodonProbBurrito(Burrito):
         codon_probs = batch["codon_probs"]
         codon_mask = batch["codon_mask"]
 
-        flat_masked_codon_probs = flatten_and_mask_sequence_codons(codon_probs, codon_mask=codon_mask)
+        flat_masked_codon_probs = flatten_and_mask_sequence_codons(
+            codon_probs, codon_mask=codon_mask
+        )
         # remove first dimension of parent_idxs by concatenating all of its elements
         codon_mask_flat = codon_mask.flatten(start_dim=0, end_dim=1)
-        parent_codons_flat = reshape_for_codons(parent_idxs.flatten(start_dim=0, end_dim=1))[codon_mask_flat]
-        child_codons_flat = reshape_for_codons(child_idxs.flatten(start_dim=0, end_dim=1))[codon_mask_flat]
-        corrected_codon_log_probs = self.model(parent_codons_flat, flat_masked_codon_probs.log())
-        child_codon_log_probs = corrected_codon_log_probs[torch.arange(child_codons_flat.size(0)),
-                                                  child_codons_flat[:, 0],
-                                                  child_codons_flat[:, 1],
-                                                  child_codons_flat[:, 2]]
+        parent_codons_flat = reshape_for_codons(
+            parent_idxs.flatten(start_dim=0, end_dim=1)
+        )[codon_mask_flat]
+        child_codons_flat = reshape_for_codons(
+            child_idxs.flatten(start_dim=0, end_dim=1)
+        )[codon_mask_flat]
+        corrected_codon_log_probs = self.model(
+            parent_codons_flat, flat_masked_codon_probs.log()
+        )
+        child_codon_log_probs = corrected_codon_log_probs[
+            torch.arange(child_codons_flat.size(0)),
+            child_codons_flat[:, 0],
+            child_codons_flat[:, 1],
+            child_codons_flat[:, 2],
+        ]
         return -child_codon_log_probs.sum()
 
     def _find_optimal_branch_length(
@@ -265,12 +302,13 @@ class CodonProbBurrito(Burrito):
             child_codon_idxs = reshape_for_codons(child_idxs)[codon_mask]
             parent_codon_idxs = reshape_for_codons(parent_idxs)[codon_mask]
             corrected_codon_log_probs = self.model(parent_codon_idxs, codon_probs.log())
-            child_codon_log_probs = corrected_codon_log_probs[torch.arange(child_codon_idxs.size(0)),
-                                                      child_codon_idxs[:, 0],
-                                                      child_codon_idxs[:, 1],
-                                                      child_codon_idxs[:, 2]]
+            child_codon_log_probs = corrected_codon_log_probs[
+                torch.arange(child_codon_idxs.size(0)),
+                child_codon_idxs[:, 0],
+                child_codon_idxs[:, 1],
+                child_codon_idxs[:, 2],
+            ]
             return child_codon_log_probs.sum()
-
 
         return optimize_branch_length(
             log_pcp_probability,
@@ -281,7 +319,14 @@ class CodonProbBurrito(Burrito):
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         optimal_lengths = []
 
-        for parent_idxs, child_idxs, rates, subs_probs, codon_mask, starting_length in tqdm(
+        for (
+            parent_idxs,
+            child_idxs,
+            rates,
+            subs_probs,
+            codon_mask,
+            starting_length,
+        ) in tqdm(
             zip(
                 dataset.nt_parents,
                 dataset.nt_children,
@@ -317,13 +362,16 @@ class CodonProbBurrito(Burrito):
         encoder = framework.PlaceholderEncoder()
         return framework.Crepe(encoder, self.model, training_hyperparameters)
 
-def codon_prob_dataset_from_pcp_df(pcp_df, branch_length_multiplier=1.0):
+
+def hit_class_dataset_from_pcp_df(
+    pcp_df: pd.DataFrame, branch_length_multiplier: int = 1.0
+) -> HitClassDataset:
     nt_parents = pcp_df["parent"].reset_index(drop=True)
     nt_children = pcp_df["child"].reset_index(drop=True)
     rates = pcp_df["rates"].reset_index(drop=True)
     subs_probs = pcp_df["subs_probs"].reset_index(drop=True)
 
-    return CodonProbDataset(
+    return HitClassDataset(
         nt_parents,
         nt_children,
         rates,
@@ -331,7 +379,11 @@ def codon_prob_dataset_from_pcp_df(pcp_df, branch_length_multiplier=1.0):
         branch_length_multiplier=branch_length_multiplier,
     )
 
-def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multiplier=1.0):
+
+def train_test_datasets_of_pcp_df(
+    pcp_df: pd.DataFrame, train_frac: float = 0.8, branch_length_multiplier: float = 1.0
+) -> tuple[HitClassDataset, HitClassDataset]:
+    """Splits a pcp_df prepared by `prepare_pcp_df` into a training and testing HitClassDataset."""
     nt_parents = pcp_df["parent"].reset_index(drop=True)
     nt_children = pcp_df["child"].reset_index(drop=True)
     rates = pcp_df["rates"].reset_index(drop=True)
@@ -345,7 +397,7 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multipli
         subs_probs[:train_len],
         subs_probs[train_len:],
     )
-    val_dataset = CodonProbDataset(
+    val_dataset = HitClassDataset(
         val_parents,
         val_children,
         val_rates,
@@ -355,7 +407,7 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multipli
     if train_frac == 0.0:
         return None, val_dataset
     # else:
-    train_dataset = CodonProbDataset(
+    train_dataset = HitClassDataset(
         train_parents,
         train_children,
         train_rates,
@@ -363,3 +415,33 @@ def train_test_datasets_of_pcp_df(pcp_df, train_frac=0.8, branch_length_multipli
         branch_length_multiplier=branch_length_multiplier,
     )
     return val_dataset, train_dataset
+
+
+def _trim_seqs_to_codon_boundary_and_max_len(seqs: list, site_count: int) -> list:
+    """Assumes that all sequences have the same length, and trims to codon boundary."""
+    max_len = site_count - site_count % 3
+    return [seq[: min(len(seq) - len(seq) % 3, max_len)] for seq in seqs]
+
+
+def prepare_pcp_df(
+    pcp_df: pd.DataFrame, crepe: framework.Crepe, site_count: int
+) -> pd.DataFrame:
+    """
+    Trim parent and child sequences in pcp_df to codon boundaries
+    and add the rates and substitution probabilities.
+
+    Returns the modified dataframe, which is the input dataframe modified in-place.
+    """
+    pcp_df["parent"] = _trim_seqs_to_codon_boundary_and_max_len(
+        pcp_df["parent"], site_count
+    )
+    pcp_df["child"] = _trim_seqs_to_codon_boundary_and_max_len(
+        pcp_df["child"], site_count
+    )
+    pcp_df = pcp_df[pcp_df["parent"] != pcp_df["child"]].reset_index(drop=True)
+    ratess, cspss = framework.trimmed_shm_model_outputs_of_crepe(
+        crepe, pcp_df["parent"]
+    )
+    pcp_df["rates"] = ratess
+    pcp_df["subs_probs"] = cspss
+    return pcp_df

@@ -720,10 +720,14 @@ class HitClassModel(nn.Module):
     def hyperparameters(self):
         return {}
 
-    def forward(self, parent_codon_idxs: torch.Tensor, uncorrected_log_codon_probs: torch.Tensor):
+    def forward(
+        self, parent_codon_idxs: torch.Tensor, uncorrected_log_codon_probs: torch.Tensor
+    ):
         """Forward function takes a tensor of target codon distributions, for each observed parent codon,
         and adjusts the distributions according to the hit class adjustments."""
-        return apply_multihit_adjustment(parent_codon_idxs, uncorrected_log_codon_probs, self.values)
-    
+        return apply_multihit_adjustment(
+            parent_codon_idxs, uncorrected_log_codon_probs, self.values
+        )
+
     def reinitialize_weights(self):
         self.values = nn.Parameter(torch.tensor([0.0, 0.0, 0.0]))
