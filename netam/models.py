@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from netam.molevol import apply_multihit_adjustment
+from netam.hit_class import apply_multihit_correction
 from netam.common import (
     MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
@@ -724,8 +724,8 @@ class HitClassModel(nn.Module):
         self, parent_codon_idxs: torch.Tensor, uncorrected_log_codon_probs: torch.Tensor
     ):
         """Forward function takes a tensor of target codon distributions, for each observed parent codon,
-        and adjusts the distributions according to the hit class adjustments."""
-        return apply_multihit_adjustment(
+        and adjusts the distributions according to the hit class corrections."""
+        return apply_multihit_correction(
             parent_codon_idxs, uncorrected_log_codon_probs, self.values
         )
 

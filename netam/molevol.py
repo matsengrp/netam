@@ -17,143 +17,6 @@ from torch import Tensor, optim
 from netam.sequences import CODON_AA_INDICATOR_MATRIX
 
 import netam.sequences as sequences
-from netam.common import BASES
-
-
-def hit_class(codon1, codon2):
-    return sum(c1 != c2 for c1, c2 in zip(codon1, codon2))
-
-
-# Initialize the 4D tensor to store the hit class tensors
-# The shape is [4, 4, 4, 4, 4, 4], corresponding to three nucleotide indices and the hit class tensor (4x4x4)
-_num_bases = len(BASES)
-hit_class_tensor_full = torch.zeros(
-    _num_bases,
-    _num_bases,
-    _num_bases,
-    _num_bases,
-    _num_bases,
-    _num_bases,
-    dtype=torch.int,
-)
-
-# Populate the tensor
-for i in range(_num_bases):
-    for j in range(_num_bases):
-        for k in range(_num_bases):
-            codon1 = (i, j, k)
-            for i2 in range(_num_bases):
-                for j2 in range(_num_bases):
-                    for k2 in range(_num_bases):
-                        codon_2 = (i2, j2, k2)
-                        hit_class_tensor_full[i, j, k, i2, j2, k2] = hit_class(
-                            codon1, codon_2
-                        )
-
-# make a dict mapping from codon to triple integer index
-codon_to_idxs = {
-    base_1 + base_2 + base_3: (i, j, k)
-    for i, base_1 in enumerate(BASES)
-    for j, base_2 in enumerate(BASES)
-    for k, base_3 in enumerate(BASES)
-}
-
-
-def apply_multihit_adjustment(
-    parent_codon_idxs: Tensor, log_codon_probs: Tensor, hit_class_factors: Tensor
-) -> Tensor:
-    """Multiply codon probabilities by their hit class factors, and renormalize.
-
-    Suppose there are N codons, then the parameters are as follows:
-
-    Parameters:
-    parent_codon_idxs (torch.Tensor): A (N, 3) shaped tensor containing for each codon, the
-                                        indices of the parent codon's nucleotides.
-    log_codon_probs (torch.Tensor): A (N, 4, 4, 4) shaped tensor containing the log probabilities
-                                    of mutating to each possible target codon, for each of the N parent codons.
-    hit_class_factors (torch.Tensor): A tensor containing the log hit class factors for hit classes 1, 2, and 3. The
-                                    factor for hit class 0 is assumed to be 1 (that is, 0 in log-space).
-
-    Returns:
-    torch.Tensor: A (N, 4, 4, 4) shaped tensor containing the log probabilities of mutating to each possible
-                target codon, for each of the N parent codons, after applying the hit class factors.
-    """
-    hit_class_tensor_t = hit_class_tensor_full[
-        parent_codon_idxs[:, 0], parent_codon_idxs[:, 1], parent_codon_idxs[:, 2]
-    ].int()
-    corrections = torch.cat([torch.tensor([0.0]), hit_class_factors])
-    adjustments = corrections[hit_class_tensor_t]
-    unnormalized_corrected_probs = log_codon_probs + adjustments
-    normalizations = torch.logsumexp(
-        unnormalized_corrected_probs, dim=[1, 2, 3], keepdim=True
-    )
-    return unnormalized_corrected_probs - normalizations
-
-
-def codon_probs_of_parent_scaled_rates_and_sub_probs(
-    parent_idxs: Tensor, scaled_rates: Tensor, sub_probs: Tensor
-):
-    """
-    Compute the probabilities of mutating to various codons for a parent sequence.
-
-    This uses the same machinery as we use for fitting the DNSM, but we stay on
-    the codon level rather than moving to syn/nonsyn changes.
-
-    Args:
-    parent_idxs (torch.Tensor): The parent nucleotide sequence encoded as a
-        tensor of length Cx3, where C is the number of codons, containing the nt indices of each site.
-    scaled_rates (torch.Tensor): Poisson rates of mutation per site, scaled by branch length.
-    sub_probs (torch.Tensor): Substitution probabilities per site: a 2D tensor with shape (site_count, 4).
-
-    Returns:
-    torch.Tensor: A 4D tensor with shape (codon_count, 4, 4, 4) where the cijk-th entry is the probability
-        of the c'th codon mutating to the codon ijk.
-    """
-    # This is from `aaprobs_of_parent_scaled_rates_and_sub_probs`:
-    mut_probs = 1.0 - torch.exp(-scaled_rates)
-    parent_codon_idxs = reshape_for_codons(parent_idxs)
-    codon_mut_probs = reshape_for_codons(mut_probs)
-    codon_sub_probs = reshape_for_codons(sub_probs)
-
-    # This is from `aaprob_of_mut_and_sub`:
-    mut_matrices = build_mutation_matrices(
-        parent_codon_idxs, codon_mut_probs, codon_sub_probs
-    )
-    codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
-
-    return codon_probs
-
-
-def hit_class_probs_tensor(parent_codon_idxs: Tensor, codon_probs: Tensor) -> Tensor:
-    """
-    Calculate probabilities of hit classes between parent codons and all other codons for all the sites of a sequence.
-
-    Parameters:
-    parent_codon_idxs (torch.Tensor): The parent nucleotide sequence encoded as a tensor of shape (C, 3), containing the nt indices of each codon.
-    codon_probs (torch.Tensor): A Cx4x4x4 tensor containing the probabilities of various codons, for each codon in parent seq.
-
-    Returns:
-    probs (torch.Tensor): A tensor containing the probabilities of different
-                            counts of hit classes between parent codons and
-                            all other codons, with shape (C, 4).
-
-    Notes:
-
-    Uses hit_class_tensor_full (torch.Tensor): A 4x4x4x4x4x4 tensor which when indexed with a parent codon produces
-    the hit classes to all possible child codons.
-    """
-
-    # Get a Cx4x4x4 tensor describing for each parent codon the hit classes of all child codons
-    hit_class_tensor_t = hit_class_tensor_full[
-        parent_codon_idxs[:, 0], parent_codon_idxs[:, 1], parent_codon_idxs[:, 2]
-    ].int()
-    C = hit_class_tensor_t.size(0)
-    hc_prob_tensor = torch.zeros(C, 4)
-    for k in range(4):
-        mask = hit_class_tensor_t == k
-        hc_prob_tensor[:, k] = (codon_probs * mask).sum(dim=(1, 2, 3))
-
-    return hc_prob_tensor
 
 
 def normalize_sub_probs(parent_idxs: Tensor, sub_probs: Tensor) -> Tensor:
@@ -362,6 +225,40 @@ def reshape_for_codons(array: Tensor) -> Tensor:
     return array.reshape(codon_count, 3, *array.shape[1:])
 
 
+def codon_probs_of_parent_scaled_rates_and_sub_probs(
+    parent_idxs: torch.Tensor, scaled_rates: torch.Tensor, sub_probs: torch.Tensor
+):
+    """
+    Compute the probabilities of mutating to various codons for a parent sequence.
+
+    This uses the same machinery as we use for fitting the DNSM, but we stay on
+    the codon level rather than moving to syn/nonsyn changes.
+
+    Args:
+    parent_idxs (torch.Tensor): The parent nucleotide sequence encoded as a
+        tensor of length Cx3, where C is the number of codons, containing the nt indices of each site.
+    scaled_rates (torch.Tensor): Poisson rates of mutation per site, scaled by branch length.
+    sub_probs (torch.Tensor): Substitution probabilities per site: a 2D tensor with shape (site_count, 4).
+
+    Returns:
+    torch.Tensor: A 4D tensor with shape (codon_count, 4, 4, 4) where the cijk-th entry is the probability
+        of the c'th codon mutating to the codon ijk.
+    """
+    # The following four lines are duplicated from
+    # aaprobs_of_parent_scaled_rates_and_sub_probs
+    mut_probs = 1.0 - torch.exp(-scaled_rates)
+    parent_codon_idxs = reshape_for_codons(parent_idxs)
+    codon_mut_probs = reshape_for_codons(mut_probs)
+    codon_sub_probs = reshape_for_codons(sub_probs)
+
+    mut_matrices = build_mutation_matrices(
+        parent_codon_idxs, codon_mut_probs, codon_sub_probs
+    )
+    codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
+
+    return codon_probs
+
+
 def aaprobs_of_parent_scaled_rates_and_sub_probs(
     parent_idxs: Tensor, scaled_rates: Tensor, sub_probs: Tensor
 ) -> Tensor:
@@ -380,16 +277,11 @@ def aaprobs_of_parent_scaled_rates_and_sub_probs(
         torch.Tensor: A 2D tensor with rows corresponding to sites and columns
                       corresponding to amino acids.
     """
-    # Calculate the probability of at least one mutation at each site.
-    mut_probs = 1.0 - torch.exp(-scaled_rates)
-
-    # Reshape the inputs to include a codon dimension.
-    parent_codon_idxs = reshape_for_codons(parent_idxs)
-    codon_mut_probs = reshape_for_codons(mut_probs)
-    codon_sub_probs = reshape_for_codons(sub_probs)
-
-    # Vectorized calculation of amino acid probabilities.
-    return aaprob_of_mut_and_sub(parent_codon_idxs, codon_mut_probs, codon_sub_probs)
+    return aaprobs_of_codon_probs(
+        codon_probs_of_parent_scaled_rates_and_sub_probs(
+            parent_idxs, scaled_rates, sub_probs
+        )
+    )
 
 
 def build_codon_mutsel(

@@ -1,3 +1,11 @@
+"""Burrito and Dataset classes for training a model to predict simple hit class corrections to codon probabilities.
+
+Each codon mutation is hit class 0, 1, 2, or 3, corresponding to 0, 1, 2, or 3 mutations in the codon.
+
+The hit class corrections are three scalar values, one for each nonzero hit class.
+To apply the correction to existing codon probability predictions, we multiply the probability of each child codon by the correction factor for its hit class, then renormalize. The correction factor for hit class 0 is fixed at 1.
+"""
+
 import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -8,8 +16,8 @@ from netam.molevol import (
     reshape_for_codons,
     optimize_branch_length,
     codon_probs_of_parent_scaled_rates_and_sub_probs,
-    hit_class_probs_tensor,
 )
+from netam.hit_class import hit_class_probs_tensor
 from netam import sequences
 from netam.common import stack_heterogeneous
 import netam.framework as framework
@@ -17,7 +25,18 @@ from netam.framework import Burrito
 from netam.models import HitClassModel
 
 
-# From hit_classes_of_pcp_df
+def _trim_seqs_to_codon_boundary_and_max_len(
+    seqs: list, site_count: int = None
+) -> list:
+    """Assumes that all sequences have the same length, and trims to codon boundary.
+    If site_count is None, does not enforce a maximum length."""
+    if site_count is None:
+        return [seq[: len(seq) - len(seq) % 3] for seq in seqs]
+    else:
+        max_len = site_count - site_count % 3
+        return [seq[: min(len(seq) - len(seq) % 3, max_len)] for seq in seqs]
+
+
 def _observed_hit_classes(parents, children):
     labels = []
     for parent_seq, child_seq in zip(parents, children):
@@ -59,12 +78,8 @@ class HitClassDataset(Dataset):
         all_subs_probs: Sequence[list[list[float]]],
         branch_length_multiplier: float = 1.0,
     ):
-        trimmed_parents = [
-            parent[: len(parent) - len(parent) % 3] for parent in nt_parents
-        ]
-        trimmed_children = [
-            child[: len(child) - len(child) % 3] for child in nt_children
-        ]
+        trimmed_parents = _trim_seqs_to_codon_boundary_and_max_len(nt_parents)
+        trimmed_children = _trim_seqs_to_codon_boundary_and_max_len(nt_children)
         self.nt_parents = stack_heterogeneous(
             pd.Series(
                 sequences.nt_idx_tensor_of_str(parent.replace("N", "A"))
@@ -101,7 +116,9 @@ class HitClassDataset(Dataset):
         self.observed_hcs = stack_heterogeneous(
             _observed_hit_classes(trimmed_parents, trimmed_children), pad_value=-100
         ).long()
-        # At some point, we may want a nt_parents mask for N's, but this ignores codons with N's, anyway.
+
+        # This masks any codon that has an N in the parent or child. This may
+        # change with https://github.com/matsengrp/netam/issues/16
         self.codon_mask = self.observed_hcs > -1
 
         # Make initial branch lengths (will get optimized later).
@@ -198,27 +215,60 @@ class HitClassDataset(Dataset):
 def flatten_and_mask_sequence_codons(
     input_tensor: torch.Tensor, codon_mask: torch.Tensor = None
 ):
-    """Flatten first dimension, that is over sequences, to return tensor
-    whose first dimension contains all codons, instead of sequences.
+    """Flatten first dimension of input_tensor, applying codon_mask first if provided.
 
-    input_tensor should have at least two dimensions, with the second dimension representing codons
-    codon_mask should have two dimensions
-
-    If mask is provided, also mask the result"""
-    # If N is number pcps, and C is number codons per seq, then
-    # hit_class_probs is of dimension (N, C, 4)
-    # codon_mask is of dimension (N, C)
-    # observed_hcs is of dimension (N, C)
-
-    # Since there's a different number of codons in each sequence, we need to flatten so we just
-    # have a big list of codons, before we do masking (otherwise we'll get everything flattened to a single dimension)
+    This is useful for input_tensors whose first dimension represents sequences, and whose second dimension represents
+    codons. The resulting tensor will then aggregate the codons of all sequences into the first dimension.
+    """
     flat_input = input_tensor.flatten(start_dim=0, end_dim=1)
     if codon_mask is not None:
         flat_codon_mask = codon_mask.flatten()
         flat_input = flat_input[flat_codon_mask]
-
-    # Now this should be shape (N*C, 4) or (N*C,)
     return flat_input
+
+
+def child_codon_probs_from_per_parent_probs(per_parent_probs, child_codon_idxs):
+    """Calculate the probability of each child codon given the parent codon probabilities.
+
+    Parameters:
+    per_parent_probs (torch.Tensor): A (codon_count, 4, 4, 4) shaped tensor containing the probabilities
+        of each possible target codon, for each parent codon.
+    child_codon_idxs (torch.Tensor): A (codon_count, 3) shaped tensor containing the nucleotide indices for each child codon.
+
+    Returns:
+    torch.Tensor: A (codon_count,) shaped tensor containing the probabilities of each child codon.
+    """
+    return per_parent_probs[
+        torch.arange(child_codon_idxs.size(0)),
+        child_codon_idxs[:, 0],
+        child_codon_idxs[:, 1],
+        child_codon_idxs[:, 2],
+    ]
+
+
+def child_codon_logprobs_corrected(
+    uncorrected_per_parent_logprobs, parent_codon_idxs, child_codon_idxs, model
+):
+    """Calculate the probability of each child codon given the parent codon probabilities, corrected by hit class factors.
+
+    Parameters:
+
+    uncorrected_per_parent_logprobs (torch.Tensor): A (codon_count, 4, 4, 4) shaped tensor containing the log probabilities
+        of each possible target codon, for each parent codon.
+    parent_codon_idxs (torch.Tensor): A (codon_count, 3) shaped tensor containing the nucleotide indices for each parent codon
+    child_codon_idxs (torch.Tensor): A (codon_count, 3) shaped tensor containing the nucleotide indices for each child codon
+    model: A HitClassModel implementing the desired correction.
+
+    Returns:
+    torch.Tensor: A (codon_count,) shaped tensor containing the corrected log probabilities of each child codon.
+    """
+
+    corrected_per_parent_logprobs = model(
+        parent_codon_idxs, uncorrected_per_parent_logprobs
+    )
+    return child_codon_probs_from_per_parent_probs(
+        corrected_per_parent_logprobs, child_codon_idxs
+    )
 
 
 class MultihitBurrito(Burrito):
@@ -253,9 +303,6 @@ class MultihitBurrito(Burrito):
         codon_probs = batch["codon_probs"]
         codon_mask = batch["codon_mask"]
 
-        flat_masked_codon_probs = flatten_and_mask_sequence_codons(
-            codon_probs, codon_mask=codon_mask
-        )
         # remove first dimension of parent_idxs by concatenating all of its elements
         codon_mask_flat = codon_mask.flatten(start_dim=0, end_dim=1)
         parent_codons_flat = reshape_for_codons(
@@ -264,16 +311,18 @@ class MultihitBurrito(Burrito):
         child_codons_flat = reshape_for_codons(
             child_idxs.flatten(start_dim=0, end_dim=1)
         )[codon_mask_flat]
-        corrected_codon_log_probs = self.model(
-            parent_codons_flat, flat_masked_codon_probs.log()
+
+        flat_masked_codon_probs = flatten_and_mask_sequence_codons(
+            codon_probs, codon_mask=codon_mask
         )
-        child_codon_log_probs = corrected_codon_log_probs[
-            torch.arange(child_codons_flat.size(0)),
-            child_codons_flat[:, 0],
-            child_codons_flat[:, 1],
-            child_codons_flat[:, 2],
-        ]
-        return -child_codon_log_probs.sum()
+
+        child_codon_logprobs = child_codon_logprobs_corrected(
+            flat_masked_codon_probs.log(),
+            parent_codons_flat,
+            child_codons_flat,
+            self.model,
+        )
+        return -child_codon_logprobs.sum()
 
     def _find_optimal_branch_length(
         self,
@@ -301,14 +350,9 @@ class MultihitBurrito(Burrito):
 
             child_codon_idxs = reshape_for_codons(child_idxs)[codon_mask]
             parent_codon_idxs = reshape_for_codons(parent_idxs)[codon_mask]
-            corrected_codon_log_probs = self.model(parent_codon_idxs, codon_probs.log())
-            child_codon_log_probs = corrected_codon_log_probs[
-                torch.arange(child_codon_idxs.size(0)),
-                child_codon_idxs[:, 0],
-                child_codon_idxs[:, 1],
-                child_codon_idxs[:, 2],
-            ]
-            return child_codon_log_probs.sum()
+            return child_codon_logprobs_corrected(
+                codon_probs.log(), parent_codon_idxs, child_codon_idxs, self.model
+            ).sum()
 
         return optimize_branch_length(
             log_pcp_probability,
@@ -415,12 +459,6 @@ def train_test_datasets_of_pcp_df(
         branch_length_multiplier=branch_length_multiplier,
     )
     return val_dataset, train_dataset
-
-
-def _trim_seqs_to_codon_boundary_and_max_len(seqs: list, site_count: int) -> list:
-    """Assumes that all sequences have the same length, and trims to codon boundary."""
-    max_len = site_count - site_count % 3
-    return [seq[: min(len(seq) - len(seq) % 3, max_len)] for seq in seqs]
 
 
 def prepare_pcp_df(
