@@ -235,17 +235,15 @@ def codon_probs_of_parent_scaled_rates_and_sub_probs(
     the codon level rather than moving to syn/nonsyn changes.
 
     Args:
-    parent_idxs (torch.Tensor): The parent nucleotide sequence encoded as a
-        tensor of length Cx3, where C is the number of codons, containing the nt indices of each site.
-    scaled_rates (torch.Tensor): Poisson rates of mutation per site, scaled by branch length.
-    sub_probs (torch.Tensor): Substitution probabilities per site: a 2D tensor with shape (site_count, 4).
+        parent_idxs (torch.Tensor): The parent nucleotide sequence encoded as a
+            tensor of length Cx3, where C is the number of codons, containing the nt indices of each site.
+        scaled_rates (torch.Tensor): Poisson rates of mutation per site, scaled by branch length.
+        sub_probs (torch.Tensor): Substitution probabilities per site: a 2D tensor with shape (site_count, 4).
 
     Returns:
-    torch.Tensor: A 4D tensor with shape (codon_count, 4, 4, 4) where the cijk-th entry is the probability
-        of the c'th codon mutating to the codon ijk.
+        torch.Tensor: A 4D tensor with shape (codon_count, 4, 4, 4) where the cijk-th entry is the probability
+            of the c'th codon mutating to the codon ijk.
     """
-    # The following four lines are duplicated from
-    # aaprobs_of_parent_scaled_rates_and_sub_probs
     mut_probs = 1.0 - torch.exp(-scaled_rates)
     parent_codon_idxs = reshape_for_codons(parent_idxs)
     codon_mut_probs = reshape_for_codons(mut_probs)

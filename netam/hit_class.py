@@ -29,11 +29,11 @@ hit_class_tensor = torch.tensor(
 def parent_specific_hit_classes(parent_codon_idxs: torch.Tensor) -> torch.Tensor:
     """Produce a tensor containing the hit classes of all possible child codons, for each passed parent codon.
 
-    Parameters:
-    parent_codon_idxs (torch.Tensor): A (codon_count, 3) shaped tensor containing for each codon, the
-                                        indices of the parent codon's nucleotides.
+    Args:
+        parent_codon_idxs (torch.Tensor): A (codon_count, 3) shaped tensor containing for each codon, the
+            indices of the parent codon's nucleotides.
     Returns:
-    torch.Tensor: A (codon_count, 4, 4, 4) shaped tensor containing the hit classes of each possible child codon for each parent codon.
+        torch.Tensor: A (codon_count, 4, 4, 4) shaped tensor containing the hit classes of each possible child codon for each parent codon.
     """
     return hit_class_tensor[
         parent_codon_idxs[:, 0], parent_codon_idxs[:, 1], parent_codon_idxs[:, 2]
@@ -49,17 +49,17 @@ def apply_multihit_correction(
 
     Suppose there are N codons, then the parameters are as follows:
 
-    Parameters:
-    parent_codon_idxs (torch.Tensor): A (N, 3) shaped tensor containing for each codon, the
-                                        indices of the parent codon's nucleotides.
-    codon_logprobs (torch.Tensor): A (N, 4, 4, 4) shaped tensor containing the log probabilities
-                                    of mutating to each possible target codon, for each of the N parent codons.
-    hit_class_factors (torch.Tensor): A tensor containing the log hit class factors for hit classes 1, 2, and 3. The
-                                    factor for hit class 0 is assumed to be 1 (that is, 0 in log-space).
+    Args:
+        parent_codon_idxs (torch.Tensor): A (N, 3) shaped tensor containing for each codon, the
+            indices of the parent codon's nucleotides.
+        codon_logprobs (torch.Tensor): A (N, 4, 4, 4) shaped tensor containing the log probabilities
+            of mutating to each possible target codon, for each of the N parent codons.
+        hit_class_factors (torch.Tensor): A tensor containing the log hit class factors for hit classes 1, 2, and 3. The
+            factor for hit class 0 is assumed to be 1 (that is, 0 in log-space).
 
     Returns:
-    torch.Tensor: A (N, 4, 4, 4) shaped tensor containing the log probabilities of mutating to each possible
-                target codon, for each of the N parent codons, after applying the hit class factors.
+        torch.Tensor: A (N, 4, 4, 4) shaped tensor containing the log probabilities of mutating to each possible
+            target codon, for each of the N parent codons, after applying the hit class factors.
     """
     per_parent_hit_class = parent_specific_hit_classes(parent_codon_idxs)
     corrections = torch.cat([torch.tensor([0.0]), hit_class_factors])
@@ -77,17 +77,18 @@ def hit_class_probs_tensor(
     """
     Calculate probabilities of hit classes between parent codons and all other codons for all the sites of a sequence.
 
-    Parameters:
-    parent_codon_idxs (torch.Tensor): The parent nucleotide sequence encoded as a tensor of shape (codon_count, 3), containing the nt indices of each codon.
-    codon_probs (torch.Tensor): A (codon_count, 4, 4, 4) shaped tensor containing the probabilities of various codons, for each codon in parent seq.
+    Args:
+        parent_codon_idxs (torch.Tensor): The parent nucleotide sequence encoded as a tensor of shape (codon_count, 3),
+            containing the nt indices of each codon.
+        codon_probs (torch.Tensor): A (codon_count, 4, 4, 4) shaped tensor containing the probabilities of various
+            codons, for each codon in parent seq.
 
     Returns:
-    probs (torch.Tensor): A tensor containing the probabilities of different
-                            counts of hit classes between parent codons and
-                            all other codons, with shape (codon_count, 4).
+        probs (torch.Tensor): A tensor containing the probabilities of different
+            counts of hit classes between parent codons and
+            all other codons, with shape (codon_count, 4).
 
     Notes:
-
     Uses hit_class_tensor (torch.Tensor): A 4x4x4x4x4x4 tensor which when indexed with a parent codon produces
     the hit classes to all possible child codons.
     """
