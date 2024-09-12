@@ -27,7 +27,7 @@ from netam.common import (
     VRC01_NT_SEQ,
 )
 from netam import models
-from netam import molevol
+import netam.molevol as molevol
 
 
 def encode_mut_pos_and_base(parent, child, site_count=None):
@@ -563,7 +563,7 @@ class Burrito(ABC):
                 first_value_of_batch = (
                     list(batch.values())[0] if isinstance(batch, dict) else batch[0]
                 )
-                batch_size = first_value_of_batch.shape[0]
+                batch_size = len(first_value_of_batch)
                 # If we multiply the loss by the batch size, then the loss will be the sum of the
                 # losses for each example in the batch. Then, when we divide by the number of
                 # examples in the dataset below, we will get the average loss per example.

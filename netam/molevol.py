@@ -225,6 +225,38 @@ def reshape_for_codons(array: Tensor) -> Tensor:
     return array.reshape(codon_count, 3, *array.shape[1:])
 
 
+def codon_probs_of_parent_scaled_rates_and_sub_probs(
+    parent_idxs: torch.Tensor, scaled_rates: torch.Tensor, sub_probs: torch.Tensor
+):
+    """
+    Compute the probabilities of mutating to various codons for a parent sequence.
+
+    This uses the same machinery as we use for fitting the DNSM, but we stay on
+    the codon level rather than moving to syn/nonsyn changes.
+
+    Args:
+        parent_idxs (torch.Tensor): The parent nucleotide sequence encoded as a
+            tensor of length Cx3, where C is the number of codons, containing the nt indices of each site.
+        scaled_rates (torch.Tensor): Poisson rates of mutation per site, scaled by branch length.
+        sub_probs (torch.Tensor): Substitution probabilities per site: a 2D tensor with shape (site_count, 4).
+
+    Returns:
+        torch.Tensor: A 4D tensor with shape (codon_count, 4, 4, 4) where the cijk-th entry is the probability
+            of the c'th codon mutating to the codon ijk.
+    """
+    mut_probs = 1.0 - torch.exp(-scaled_rates)
+    parent_codon_idxs = reshape_for_codons(parent_idxs)
+    codon_mut_probs = reshape_for_codons(mut_probs)
+    codon_sub_probs = reshape_for_codons(sub_probs)
+
+    mut_matrices = build_mutation_matrices(
+        parent_codon_idxs, codon_mut_probs, codon_sub_probs
+    )
+    codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
+
+    return codon_probs
+
+
 def aaprobs_of_parent_scaled_rates_and_sub_probs(
     parent_idxs: Tensor, scaled_rates: Tensor, sub_probs: Tensor
 ) -> Tensor:
@@ -243,16 +275,11 @@ def aaprobs_of_parent_scaled_rates_and_sub_probs(
         torch.Tensor: A 2D tensor with rows corresponding to sites and columns
                       corresponding to amino acids.
     """
-    # Calculate the probability of at least one mutation at each site.
-    mut_probs = 1.0 - torch.exp(-scaled_rates)
-
-    # Reshape the inputs to include a codon dimension.
-    parent_codon_idxs = reshape_for_codons(parent_idxs)
-    codon_mut_probs = reshape_for_codons(mut_probs)
-    codon_sub_probs = reshape_for_codons(sub_probs)
-
-    # Vectorized calculation of amino acid probabilities.
-    return aaprob_of_mut_and_sub(parent_codon_idxs, codon_mut_probs, codon_sub_probs)
+    return aaprobs_of_codon_probs(
+        codon_probs_of_parent_scaled_rates_and_sub_probs(
+            parent_idxs, scaled_rates, sub_probs
+        )
+    )
 
 
 def build_codon_mutsel(

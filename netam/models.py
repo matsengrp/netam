@@ -13,6 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
+from netam.hit_class import apply_multihit_correction
 from netam.common import (
     MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
@@ -708,3 +709,25 @@ class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
         """Build a binary log selection matrix from a one-hot encoded parent sequence."""
         replicated_value = self.single_value.expand_as(amino_acid_indices)
         return replicated_value
+
+
+class HitClassModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.reinitialize_weights()
+
+    @property
+    def hyperparameters(self):
+        return {}
+
+    def forward(
+        self, parent_codon_idxs: torch.Tensor, uncorrected_log_codon_probs: torch.Tensor
+    ):
+        """Forward function takes a tensor of target codon distributions, for each observed parent codon,
+        and adjusts the distributions according to the hit class corrections."""
+        return apply_multihit_correction(
+            parent_codon_idxs, uncorrected_log_codon_probs, self.values
+        )
+
+    def reinitialize_weights(self):
+        self.values = nn.Parameter(torch.tensor([0.0, 0.0, 0.0]))

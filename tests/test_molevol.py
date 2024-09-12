@@ -16,9 +16,52 @@ ex_mut_probs = torch.tensor([0.01, 0.02, 0.03])
 ex_sub_probs = torch.tensor(
     [[0.0, 0.3, 0.5, 0.2], [0.4, 0.0, 0.1, 0.5], [0.2, 0.3, 0.0, 0.5]]
 )
+
 ex_parent_codon_idxs = nt_idx_tensor_of_str("ACG")
 parent_nt_seq = "CAGGTGCAGCTGGTGGAG"  # QVQLVE
-weights_path = "data/shmple_weights/my_shmoof"
+
+
+def test_aaprobs_of_parent_scaled_rates_and_sub_probs():
+
+    def old_aaprobs_of_parent_scaled_rates_and_sub_probs(
+        parent_idxs: torch.Tensor, scaled_rates: torch.Tensor, sub_probs: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Calculate per-site amino acid probabilities from per-site nucleotide rates
+        and substitution probabilities.
+
+        Args:
+            parent_idxs (torch.Tensor): Parent nucleotide indices. Shape should be (site_count,).
+            scaled_rates (torch.Tensor): Poisson rates of mutation per site, scaled by branch length.
+                                         Shape should be (site_count,).
+            sub_probs (torch.Tensor): Substitution probabilities per site: a 2D
+                                      tensor with shape (site_count, 4).
+
+        Returns:
+            torch.Tensor: A 2D tensor with rows corresponding to sites and columns
+                          corresponding to amino acids.
+        """
+        # Calculate the probability of at least one mutation at each site.
+        mut_probs = 1.0 - torch.exp(-scaled_rates)
+
+        # Reshape the inputs to include a codon dimension.
+        parent_codon_idxs = molevol.reshape_for_codons(parent_idxs)
+        codon_mut_probs = molevol.reshape_for_codons(mut_probs)
+        codon_sub_probs = molevol.reshape_for_codons(sub_probs)
+
+        # Vectorized calculation of amino acid probabilities.
+        return molevol.aaprob_of_mut_and_sub(
+            parent_codon_idxs, codon_mut_probs, codon_sub_probs
+        )
+
+    assert torch.allclose(
+        old_aaprobs_of_parent_scaled_rates_and_sub_probs(
+            ex_parent_codon_idxs, ex_mut_probs, ex_sub_probs
+        ),
+        molevol.aaprobs_of_parent_scaled_rates_and_sub_probs(
+            ex_parent_codon_idxs, ex_mut_probs, ex_sub_probs
+        ),
+    )
 
 
 def test_build_mutation_matrix():
