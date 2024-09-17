@@ -578,9 +578,45 @@ class Burrito(ABC):
                 self.write_loss("Validation loss", average_loss, self.global_epoch)
         return loss_reduction(average_loss)
 
+
+    def simple_train(self, epochs, out_prefix=None):
+        """
+        Train the model for the given number of epochs with nothing fancy.
+
+        If out_prefix is provided, then a crepe will be saved to that location.
+        """
+        assert self.train_dataset is not None, "No training data provided."
+        train_loader = self.build_train_loader()
+        val_loader = self.build_val_loader()
+
+        train_losses = []
+        val_losses = []
+
+        def record_losses(train_loss, val_loss):
+            train_losses.append(train_loss)
+            val_losses.append(val_loss)
+
+        with tqdm(range(1, epochs + 1), desc="Epoch") as pbar:
+            for epoch in pbar:
+                train_loss = self.process_data_loader(
+                    train_loader, train_mode=True
+                ).item()
+                val_loss = self.process_data_loader(val_loader, train_mode=False).item()
+                record_losses(train_loss, val_loss)
+                self.global_epoch += 1
+
+                self.write_cuda_memory_info()
+                self.writer.flush()
+
+        if out_prefix is not None:
+            self.save_crepe(out_prefix)
+
+        return pd.DataFrame({"train_loss": train_losses, "val_loss": val_losses})
+
+
     def train(self, epochs, out_prefix=None):
         """
-        Train the model for the given number of epochs.
+        Train the model for the given number of epochs, with all the bells and whistles.
 
         If out_prefix is provided, then a crepe will be saved to that location.
         """
