@@ -28,14 +28,14 @@ def normalize_sub_probs(parent_idxs: Tensor, sub_probs: Tensor) -> Tensor:
     in the parent sequence to zero and then normalizes each row to form a valid
     probability distribution.
 
-    Parameters:
-    parent_idxs (torch.Tensor): The parent sequence indices.
-    sub_probs (torch.Tensor): A 2D PyTorch tensor representing substitution
-                              probabilities. Rows correspond to sites, and columns
-                              correspond to "ACGT" bases.
+    Args:
+        parent_idxs (torch.Tensor): The parent sequence indices.
+        sub_probs (torch.Tensor): A 2D PyTorch tensor representing substitution
+            probabilities. Rows correspond to sites, and columns correspond
+            to "ACGT" bases.
 
     Returns:
-    torch.Tensor: A 2D PyTorch tensor with normalized substitution probabilities.
+        torch.Tensor: A 2D PyTorch tensor with normalized substitution probabilities.
     """
 
     # Assert that sub_probs are within the range [0, 1] modulo rounding error
@@ -63,25 +63,25 @@ def build_mutation_matrices(
     """
     Generate a sequence of 3x4 mutation matrices for parent codons along a sequence.
 
-    Given indices for parent codons, mutation probabilities, and substitution probabilities for
-    each parent codon along the sequence, this function constructs a sequence of 3x4 matrices. Each
-    matrix in the sequence represents the mutation probabilities for each nucleotide position in a parent
-    codon. The ijkth entry of the resulting tensor corresponds to the probability of the jth nucleotide
+    Given indices for parent codons, mutation probabilities, and substitution
+    probabilities for each parent codon along the sequence, this function
+    constructs a sequence of 3x4 matrices. Each matrix in the sequence
+    represents the mutation probabilities for each nucleotide position in a
+    parent codon. The ijkth entry of the resulting tensor corresponds to the probability of the jth nucleotide
     in the ith parent codon mutating to the kth nucleotide (in indices).
 
-    Parameters:
-    parent_codon_idxs (torch.Tensor): 2D tensor with each row containing indices representing
-                                      the parent codon's nucleotides at each site along the sequence.
-                                      Shape should be (codon_count, 3).
-    mut_probs (torch.Tensor): 2D tensor representing the mutation probabilities for each site in the codon,
-                              for each codon along the sequence. Shape should be (codon_count, 3).
-    sub_probs (torch.Tensor): 3D tensor representing substitution probabilities for each codon along the
-                              sequence for each site.
-                              Shape should be (codon_count, 3, 4).
+    Args:
+        parent_codon_idxs (torch.Tensor): 2D tensor with each row containing indices representing
+            the parent codon's nucleotides at each site along the sequence.
+            Shape should be (codon_count, 3).
+        mut_probs (torch.Tensor): 2D tensor representing the mutation probabilities for each site in the codon,
+            for each codon along the sequence. Shape should be (codon_count, 3).
+        sub_probs (torch.Tensor): 3D tensor representing substitution probabilities for each codon along the
+            sequence for each site. Shape should be (codon_count, 3, 4).
 
     Returns:
-    torch.Tensor: A 4D tensor with shape (codon_count, 3, 4) where the ijkth entry is the mutation probability
-                of the jth position in the ith parent codon mutating to the kth nucleotide.
+        torch.Tensor: A 4D tensor with shape (codon_count, 3, 4) where the ijkth entry is the mutation probability
+            of the jth position in the ith parent codon mutating to the kth nucleotide.
     """
 
     codon_count = parent_codon_idxs.shape[0]
@@ -127,7 +127,7 @@ def codon_probs_of_mutation_matrices(mut_matrix: Tensor) -> Tensor:
     """
     Compute the probability tensor for mutating to the codon ijk along the entire sequence.
 
-    Parameters:
+    Args:
     mut_matrix (torch.Tensor): A 3D tensor representing the mutation matrix for the entire sequence.
                                The shape should be (n_sites, 3, 4), where n_sites is the number of sites,
                                3 is the number of positions in a codon, and 4 is the number of nucleotides.
@@ -158,7 +158,7 @@ def aaprobs_of_codon_probs(codon_probs: Tensor) -> Tensor:
     """
     Compute the probability of each amino acid from the probability of each codon, for each parent codon along the sequence.
 
-    Parameters:
+    Args:
     codon_probs (torch.Tensor): A 4D tensor representing the probability of mutating
                                 to each codon for each parent codon along the sequence.
                                 Shape should be (codon_count, 4, 4, 4).
@@ -190,7 +190,7 @@ def aaprob_of_mut_and_sub(
     For a sequence of parent codons and given nucleotide mutability and substitution probabilities,
     compute the amino acid substitution probabilities for each codon along the sequence.
 
-    Parameters:
+    Args:
     parent_codon_idxs (torch.Tensor): A 2D tensor where each row contains indices representing
                                       the parent codon's nucleotides at each site along the sequence.
                                       Shape should be (codon_count, 3).
@@ -213,7 +213,7 @@ def reshape_for_codons(array: Tensor) -> Tensor:
     """
     Reshape a tensor to add a codon dimension by taking groups of 3 sites.
 
-    Parameters:
+    Args:
     array (torch.Tensor): Original tensor.
 
     Returns:

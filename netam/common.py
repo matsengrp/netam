@@ -105,12 +105,12 @@ def stack_heterogeneous(tensors, pad_value=0.0):
     """
     Stack an iterable of 1D or 2D torch.Tensor objects of different lengths along the first dimension into a single tensor.
 
-    Parameters:
-    tensors (iterable): An iterable of 1D or 2D torch.Tensor objects with variable lengths in the first dimension.
-    pad_value (number): The value used for padding shorter tensors. Default is 0.
+    Args:
+        tensors (iterable): An iterable of 1D or 2D torch.Tensor objects with variable lengths in the first dimension.
+        pad_value (number): The value used for padding shorter tensors. Default is 0.
 
     Returns:
-    torch.Tensor: A stacked tensor with all input tensors padded to the length of the longest tensor in the first dimension.
+        torch.Tensor: A stacked tensor with all input tensors padded to the length of the longest tensor in the first dimension.
     """
     if tensors is None or len(tensors) == 0:
         return torch.Tensor()  # Return an empty tensor if no tensors are provided
@@ -218,7 +218,7 @@ def print_tensor_devices(scope="local"):
     Print the devices of all PyTorch tensors in the given scope.
 
     Args:
-    scope (str): 'local' for local scope, 'global' for global scope.
+        scope (str): 'local' for local scope, 'global' for global scope.
     """
     if scope == "local":
         frame = inspect.currentframe()

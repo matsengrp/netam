@@ -9,9 +9,11 @@ test:
 
 format:
 	black netam tests
+	docformatter --in-place --black --recursive netam tests
 
 checkformat:
 	black --check netam tests
+	docformatter --check --black --recursive netam tests
 
 lint:
 	# stop the build if there are Python syntax errors or undefined names

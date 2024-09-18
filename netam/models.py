@@ -555,7 +555,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
     def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
         """Do the forward method without gradients from an amino acid string.
 
-        Parameters:
+        Args:
             aa_str: A string of amino acids.
 
         Returns:
@@ -626,7 +626,7 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
         Because we're predicting log of the selection factor, we don't use an
         activation function after the transformer.
 
-        Parameters:
+        Args:
             amino_acid_indices: A tensor of shape (B, L) containing the indices of parent AA sequences.
             mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.
 
