@@ -29,6 +29,7 @@ jobs:
             python=${{ matrix.python-version }}
             black
             flake8
+            docformatter
           init-shell: bash
           cache-environment: false
           post-cleanup: 'none'
