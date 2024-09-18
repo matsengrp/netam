@@ -108,6 +108,7 @@ def stack_heterogeneous(tensors, pad_value=0.0):
     """Stack an iterable of 1D or 2D torch.Tensor objects of different lengths along the
     first dimension into a single tensor.
 
+        black --check netam tests
     Args:
         tensors (iterable): An iterable of 1D or 2D torch.Tensor objects with variable lengths in the first dimension.
         pad_value (number): The value used for padding shorter tensors. Default is 0.
@@ -281,9 +282,9 @@ def linear_bump_lr(epoch, warmup_epochs, total_epochs, max_lr, min_lr):
 
     See https://github.com/matsengrp/netam/pull/41 for more details.
 
-    pd.Series([
-    linear_bump_lr(epoch, warmup_epochs=20, total_epochs=200, max_lr=0.01, min_lr=1e-5)
-    for epoch in range(200)]).plot()
+    Example:
+    .. code-block:: python
+        pd.Series([linear_bump_lr(epoch, warmup_epochs=20, total_epochs=200, max_lr=0.01, min_lr=1e-5) for epoch in range(200)]).plot()
     """
     if epoch < warmup_epochs:
         lr = min_lr + ((max_lr - min_lr) / warmup_epochs) * epoch
