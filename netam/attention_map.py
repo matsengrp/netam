@@ -25,8 +25,8 @@ from netam.common import aa_idx_tensor_of_str_ambig, aa_mask_tensor_of
 
 
 def reshape_tensor(tensor, head_count):
-    """
-    Reshape the tensor to include the head dimension.
+    """Reshape the tensor to include the head dimension.
+
     Assumes batch size is 1 and squeezes it out.
     """
     assert tensor.size(0) == 1, "Batch size should be 1"
@@ -60,10 +60,8 @@ def patch_attention(m):
 
 
 def attention_mapss_of(model, sequences):
-    """
-    Get a list of attention maps (across sequences) as described in the module
-    docstring.
-    """
+    """Get a list of attention maps (across sequences) as described in the module
+    docstring."""
     model = copy.deepcopy(model)
     model.eval()
     layer_count = len(model.encoder.layers)

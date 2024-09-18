@@ -8,9 +8,11 @@ test:
 	pytest tests
 
 format:
+	docformatter --in-place --black --recursive netam tests
 	black netam tests
 
 checkformat:
+	docformatter --check --black --recursive netam tests
 	black --check netam tests
 
 lint:

@@ -1,6 +1,4 @@
-"""
-HyperBurrito class for optimizing hyperparameters.
-"""
+"""HyperBurrito class for optimizing hyperparameters."""
 
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -13,9 +11,7 @@ from netam.framework import SHMBurrito
 
 
 def filter_kwargs(func, kwargs):
-    """
-    Filter kwargs to only those that the function accepts.
-    """
+    """Filter kwargs to only those that the function accepts."""
     # Get the parameters of the function
     sig = inspect.signature(func)
     func_params = sig.parameters
@@ -29,9 +25,7 @@ def timestamp_str():
 
 
 class HyperBurrito(ABC):
-    """
-    A class to optimize hyperparameters.
-    """
+    """A class to optimize hyperparameters."""
 
     def __init__(
         self,

@@ -8,8 +8,7 @@ def concatenate_csvs(
     is_tsv: bool = False,
     record_path: bool = False,
 ):
-    """
-    This function concatenates multiple CSV or TSV files into one CSV file.
+    """This function concatenates multiple CSV or TSV files into one CSV file.
 
     Args:
         input_csvs: A string of paths to the input CSV or TSV files separated by commas.

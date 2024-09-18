@@ -46,7 +46,8 @@ def kmer_to_index_of(all_kmers):
 
 
 def aa_idx_tensor_of_str_ambig(aa_str):
-    """Return the indices of the amino acids in a string, allowing the ambiguous character."""
+    """Return the indices of the amino acids in a string, allowing the ambiguous
+    character."""
     try:
         return torch.tensor(
             [AA_STR_SORTED_AMBIG.index(aa) for aa in aa_str], dtype=torch.int
@@ -57,8 +58,10 @@ def aa_idx_tensor_of_str_ambig(aa_str):
 
 
 def generic_mask_tensor_of(ambig_symb, seq_str, length=None):
-    """Return a mask tensor indicating non-empty and non-ambiguous sites. Sites
-    beyond the length of the sequence are masked."""
+    """Return a mask tensor indicating non-empty and non-ambiguous sites.
+
+    Sites beyond the length of the sequence are masked.
+    """
     if length is None:
         length = len(seq_str)
     mask = torch.zeros(length, dtype=torch.bool)
@@ -102,15 +105,16 @@ def parameter_count_of_model(model):
 
 
 def stack_heterogeneous(tensors, pad_value=0.0):
-    """
-    Stack an iterable of 1D or 2D torch.Tensor objects of different lengths along the first dimension into a single tensor.
+    """Stack an iterable of 1D or 2D torch.Tensor objects of different lengths along the
+    first dimension into a single tensor.
 
-    Parameters:
-    tensors (iterable): An iterable of 1D or 2D torch.Tensor objects with variable lengths in the first dimension.
-    pad_value (number): The value used for padding shorter tensors. Default is 0.
+        black --check netam tests
+    Args:
+        tensors (iterable): An iterable of 1D or 2D torch.Tensor objects with variable lengths in the first dimension.
+        pad_value (number): The value used for padding shorter tensors. Default is 0.
 
     Returns:
-    torch.Tensor: A stacked tensor with all input tensors padded to the length of the longest tensor in the first dimension.
+        torch.Tensor: A stacked tensor with all input tensors padded to the length of the longest tensor in the first dimension.
     """
     if tensors is None or len(tensors) == 0:
         return torch.Tensor()  # Return an empty tensor if no tensors are provided
@@ -144,8 +148,7 @@ def stack_heterogeneous(tensors, pad_value=0.0):
 
 
 def optimizer_of_name(optimizer_name, model_parameters, **kwargs):
-    """
-    Build a torch.optim optimizer from a string name and model parameters.
+    """Build a torch.optim optimizer from a string name and model parameters.
 
     Use a SGD optimizer with momentum if the optimizer_name is "SGDMomentum".
     """
@@ -162,8 +165,8 @@ def optimizer_of_name(optimizer_name, model_parameters, **kwargs):
 
 
 def find_least_used_cuda_gpu():
-    """
-    Find the least used CUDA GPU on the system using nvidia-smi.
+    """Find the least used CUDA GPU on the system using nvidia-smi.
+
     If they are all idle, return None.
     """
     result = subprocess.run(
@@ -182,10 +185,10 @@ def find_least_used_cuda_gpu():
 
 
 def pick_device(gpu_index=None):
-    """
-    Pick a device for PyTorch to use. If CUDA is available, use the least used
-    GPU, and if all are idle use the gpu_index modulo the number of GPUs. If
-    gpu_index is None, then use a random GPU.
+    """Pick a device for PyTorch to use.
+
+    If CUDA is available, use the least used GPU, and if all are idle use the gpu_index
+    modulo the number of GPUs. If gpu_index is None, then use a random GPU.
     """
 
     # check that CUDA is usable
@@ -214,11 +217,10 @@ def pick_device(gpu_index=None):
 
 
 def print_tensor_devices(scope="local"):
-    """
-    Print the devices of all PyTorch tensors in the given scope.
+    """Print the devices of all PyTorch tensors in the given scope.
 
     Args:
-    scope (str): 'local' for local scope, 'global' for global scope.
+        scope (str): 'local' for local scope, 'global' for global scope.
     """
     if scope == "local":
         frame = inspect.currentframe()
@@ -275,15 +277,14 @@ class PositionalEncoding(nn.Module):
 
 
 def linear_bump_lr(epoch, warmup_epochs, total_epochs, max_lr, min_lr):
-    """
-    Linearly increase the learning rate from min_lr to max_lr over warmup_epochs,
+    """Linearly increase the learning rate from min_lr to max_lr over warmup_epochs,
     then linearly decrease the learning rate from max_lr to min_lr.
 
     See https://github.com/matsengrp/netam/pull/41 for more details.
 
-    pd.Series([
-        linear_bump_lr(epoch, warmup_epochs=20, total_epochs=200, max_lr=0.01, min_lr=1e-5)
-        for epoch in range(200)]).plot()
+    Example:
+    .. code-block:: python
+        pd.Series([linear_bump_lr(epoch, warmup_epochs=20, total_epochs=200, max_lr=0.01, min_lr=1e-5) for epoch in range(200)]).plot()
     """
     if epoch < warmup_epochs:
         lr = min_lr + ((max_lr - min_lr) / warmup_epochs) * epoch
