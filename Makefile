@@ -8,12 +8,12 @@ test:
 	pytest tests
 
 format:
-	black netam tests
 	docformatter --in-place --black --recursive netam tests
+	black netam tests
 
 checkformat:
-	black --check netam tests
 	docformatter --check --black --recursive netam tests
+	black --check netam tests
 
 lint:
 	# stop the build if there are Python syntax errors or undefined names
