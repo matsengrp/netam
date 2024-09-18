@@ -1,11 +1,10 @@
-"""
-Here we define a mutation-selection model that is just about mutation vs no mutation, and is trainable.
+"""Here we define a mutation-selection model that is just about mutation vs no mutation,
+and is trainable.
 
 We'll use these conventions:
 
 * B is the batch size
 * L is the max sequence length
-
 """
 
 import copy
@@ -101,9 +100,8 @@ class DNSMDataset(Dataset):
         all_subs_probs_series: pd.Series,
         branch_length_multiplier=5.0,
     ):
-        """
-        Alternative constructor that takes the raw data and calculates the
-        initial branch lengths.
+        """Alternative constructor that takes the raw data and calculates the initial
+        branch lengths.
 
         The `_series` arguments are series of Tensors which get stacked to
         create the full object.
@@ -125,10 +123,8 @@ class DNSMDataset(Dataset):
 
     @classmethod
     def of_pcp_df(cls, pcp_df, branch_length_multiplier=5.0):
-        """
-        Alternative constructor that takes in a pcp_df and calculates the
-        initial branch lengths.
-        """
+        """Alternative constructor that takes in a pcp_df and calculates the initial
+        branch lengths."""
         assert "rates" in pcp_df.columns, "pcp_df must have a neutral rates column"
         return cls.of_seriess(
             pcp_df["parent"],
@@ -150,8 +146,7 @@ class DNSMDataset(Dataset):
         return new_dataset
 
     def subset_via_indices(self, indices):
-        """
-        Create a new dataset with a subset of the data, as per `indices`.
+        """Create a new dataset with a subset of the data, as per `indices`.
 
         Whether the new dataset is a deep copy or a shallow copy using slices
         depends on `indices`: if `indices` is an iterable of integers, then we
@@ -167,9 +162,7 @@ class DNSMDataset(Dataset):
         return new_dataset
 
     def split(self, into_count: int):
-        """
-        Split self into a list of into_count subsets.
-        """
+        """Split self into a list of into_count subsets."""
         dataset_size = len(self)
         indices = list(range(dataset_size))
         split_indices = np.array_split(indices, into_count)
@@ -280,8 +273,7 @@ class DNSMDataset(Dataset):
 
 
 def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
-    """
-    Perform a train-val split based on a "in_train" column.
+    """Perform a train-val split based on a "in_train" column.
 
     Stays here so it can be used in tests.
     """
@@ -311,9 +303,8 @@ class DNSMBurrito(framework.Burrito):
         self.val_dataset.load_branch_lengths(in_csv_prefix + ".val_branch_lengths.csv")
 
     def prediction_pair_of_batch(self, batch):
-        """
-        Get log neutral mutation probabilities and log selection factors for a batch of data.
-        """
+        """Get log neutral mutation probabilities and log selection factors for a batch
+        of data."""
         aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
         mask = batch["mask"].to(self.device)
         log_neutral_aa_mut_probs = batch["log_neutral_aa_mut_probs"].to(self.device)
@@ -332,8 +323,7 @@ class DNSMBurrito(framework.Burrito):
         return predictions
 
     def predictions_of_batch(self, batch):
-        """
-        Make predictions for a batch of data.
+        """Make predictions for a batch of data.
 
         Note that we use the mask for prediction as part of the input for the
         transformer, though we don't mask the predictions themselves.
@@ -447,9 +437,7 @@ class DNSMBurrito(framework.Burrito):
 
 
 def worker_optimize_branch_length(model, dataset, optimization_kwargs):
-    """
-    The worker used for parallel branch length optimization.
-    """
+    """The worker used for parallel branch length optimization."""
     burrito = DNSMBurrito(None, dataset, copy.deepcopy(model))
     return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
 

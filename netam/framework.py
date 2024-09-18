@@ -76,12 +76,11 @@ def encode_mut_pos_and_base(parent, child, site_count=None):
 
 
 def wt_base_modifier_of(parent, site_count):
-    """
-    The wt_base_modifier tensor is all 0s except for the wt base at each site,
-    which is -BIG.
+    """The wt_base_modifier tensor is all 0s except for the wt base at each site, which
+    is -BIG.
 
-    We will add wt_base_modifier to the CSP logits. This will zero out the
-    prediction of WT at each site after softmax.
+    We will add wt_base_modifier to the CSP logits. This will zero out the prediction of
+    WT at each site after softmax.
     """
     wt_base_modifier = torch.zeros((site_count, 4))
     for i, base in enumerate(parent[:site_count]):
@@ -230,8 +229,9 @@ class SHMoofDataset(Dataset):
 
 
 class Crepe:
-    """
-    A lightweight wrapper around a model that can be used for prediction but not training.
+    """A lightweight wrapper around a model that can be used for prediction but not
+    training.
+
     It handles serialization.
     """
 
@@ -337,9 +337,7 @@ def crepe_exists(prefix):
 
 
 def trimmed_shm_model_outputs_of_crepe(crepe, parents):
-    """
-    Model outputs trimmed to the length of the parent sequences.
-    """
+    """Model outputs trimmed to the length of the parent sequences."""
     rates, csp_logits = crepe(parents)
     rates = rates.cpu().detach()
     csps = torch.softmax(csp_logits, dim=-1).cpu().detach()
@@ -349,8 +347,7 @@ def trimmed_shm_model_outputs_of_crepe(crepe, parents):
 
 
 def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
-    """
-    Load a PCP dataframe from a gzipped CSV file.
+    """Load a PCP dataframe from a gzipped CSV file.
 
     `orig_pcp_idx` is the index column from the original file, even if we subset by
     sampling or by choosing V families.
@@ -391,10 +388,8 @@ class Burrito(ABC):
         weight_decay=1e-6,
         name="",
     ):
-        """
-        Note that we allow train_dataset to be None, to support use cases where
-        we just want to do evaluation.
-        """
+        """Note that we allow train_dataset to be None, to support use cases where we
+        just want to do evaluation."""
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
         if train_dataset is not None:
@@ -456,15 +451,14 @@ class Burrito(ABC):
         )
 
     def execution_time(self):
-        """
-        Return time since the Burrito was created.
-        """
+        """Return time since the Burrito was created."""
         return time() - self.start_time
 
     def multi_train(self, epochs, max_tries=3):
-        """
-        Train the model. If lr isn't below min_lr, reset the optimizer and
-        scheduler, and reset the model and resume training.
+        """Train the model.
+
+        If lr isn't below min_lr, reset the optimizer and scheduler, and reset the model
+        and resume training.
         """
         for i in range(max_tries):
             train_history = self.train(epochs)
@@ -497,9 +491,8 @@ class Burrito(ABC):
             )
 
     def process_data_loader(self, data_loader, train_mode=False, loss_reduction=None):
-        """
-        Process data through the model using the given data loader.
-        If train_mode is True, performs optimization steps.
+        """Process data through the model using the given data loader. If train_mode is
+        True, performs optimization steps.
 
         Args:
             data_loader (DataLoader): DataLoader to use.
@@ -579,8 +572,7 @@ class Burrito(ABC):
         return loss_reduction(average_loss)
 
     def train(self, epochs, out_prefix=None):
-        """
-        Train the model for the given number of epochs.
+        """Train the model for the given number of epochs.
 
         If out_prefix is provided, then a crepe will be saved to that location.
         """
@@ -644,9 +636,7 @@ class Burrito(ABC):
         return pd.DataFrame({"train_loss": train_losses, "val_loss": val_losses})
 
     def evaluate(self):
-        """
-        Evaluate the model on the validation set.
-        """
+        """Evaluate the model on the validation set."""
         val_loader = self.build_val_loader()
         return self.process_data_loader(val_loader, train_mode=False).item()
 
@@ -654,9 +644,11 @@ class Burrito(ABC):
         self.to_crepe().save(prefix)
 
     def standardize_model_rates(self):
-        """This is an opportunity to standardize the model rates. Only the
-        SHMBurrito class implements this, which makes sense because it
-        needs to get normalized but the DNSM does not."""
+        """This is an opportunity to standardize the model rates.
+
+        Only the SHMBurrito class implements this, which makes sense because it needs to
+        get normalized but the DNSM does not.
+        """
         pass
 
     def standardize_and_optimize_branch_lengths(self, **optimization_kwargs):
@@ -680,11 +672,11 @@ class Burrito(ABC):
         self.model.to(device)
 
     def standardize_and_use_yun_approx_branch_lengths(self):
-        """
-        Yun Song's approximation to the branch lengths.
+        """Yun Song's approximation to the branch lengths.
 
-        This approximation is the mutation count divided by the total mutation rate for the sequence.
-        See https://github.com/matsengrp/netam/assets/112708/034abb74-5635-48dc-bf28-4321b9110222
+        This approximation is the mutation count divided by the total mutation rate for
+        the sequence. See
+        https://github.com/matsengrp/netam/assets/112708/034abb74-5635-48dc-bf28-4321b9110222
         """
         self.standardize_model_rates()
         for dataset in [self.train_dataset, self.val_dataset]:
@@ -728,21 +720,21 @@ class Burrito(ABC):
         out_prefix=None,
         optimize_bl_first_cycle=True,
     ):
-        """
-        Do joint optimization of model and branch lengths.
+        """Do joint optimization of model and branch lengths.
 
-        If training_method is "full", then we optimize the branch lengths using full ML optimization.
-        If training_method is "yun", then we use Yun's approximation to the branch lengths.
-        If training_method is "fixed", then we fix the branch lengths and only optimize the model.
+        If training_method is "full", then we optimize the branch lengths using full ML
+        optimization. If training_method is "yun", then we use Yun's approximation to
+        the branch lengths. If training_method is "fixed", then we fix the branch
+        lengths and only optimize the model.
 
-        We give an option to optimize the branch lengths in the first cycle (by
-        default we do). But, this can be useful to turn off e.g. if we've loaded
-        in some preoptimized branch lengths.
+        We give an option to optimize the branch lengths in the first cycle (by default
+        we do). But, this can be useful to turn off e.g. if we've loaded in some
+        preoptimized branch lengths.
 
-        We reset the optimization after each cycle, and we use a learning rate
-        schedule that uses a weighted geometric mean of the current learning
-        rate and the initial learning rate that progressively moves towards
-        keeping the current learning rate as the cycles progress.
+        We reset the optimization after each cycle, and we use a learning rate schedule
+        that uses a weighted geometric mean of the current learning rate and the initial
+        learning rate that progressively moves towards keeping the current learning rate
+        as the cycles progress.
         """
         if training_method == "full":
             optimize_branch_lengths = self.standardize_and_optimize_branch_lengths
@@ -826,9 +818,7 @@ class SHMBurrito(Burrito):
         return loss
 
     def vrc01_site_14_model_rate(self):
-        """
-        Calculate rate on site 14 (zero-indexed) of VRC01_NT_SEQ.
-        """
+        """Calculate rate on site 14 (zero-indexed) of VRC01_NT_SEQ."""
         encoder = self.val_dataset.encoder
         assert (
             encoder.site_count >= 15
@@ -847,10 +837,8 @@ class SHMBurrito(Burrito):
         return vrc01_rate_14
 
     def standardize_model_rates(self):
-        """
-        Normalize the rates output by the model so that it predicts rate 1 on site 14
-        (zero-indexed) of VRC01_NT_SEQ.
-        """
+        """Normalize the rates output by the model so that it predicts rate 1 on site 14
+        (zero-indexed) of VRC01_NT_SEQ."""
         vrc01_rate_14 = self.vrc01_site_14_model_rate()
         self.model.adjust_rate_bias_by(-np.log(vrc01_rate_14))
 

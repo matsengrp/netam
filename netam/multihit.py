@@ -1,14 +1,13 @@
 """Burrito and Dataset classes for training a model to predict simple hit class
 corrections to codon probabilities.
 
-Each codon mutation is hit class 0, 1, 2, or 3, corresponding to 0, 1,
-2, or 3 mutations in the codon.
+Each codon mutation is hit class 0, 1, 2, or 3, corresponding to 0, 1, 2, or 3 mutations
+in the codon.
 
-The hit class corrections are three scalar values, one for each nonzero
-hit class. To apply the correction to existing codon probability
-predictions, we multiply the probability of each child codon by the
-correction factor for its hit class, then renormalize. The correction
-factor for hit class 0 is fixed at 1.
+The hit class corrections are three scalar values, one for each nonzero hit class. To
+apply the correction to existing codon probability predictions, we multiply the
+probability of each child codon by the correction factor for its hit class, then
+renormalize. The correction factor for hit class 0 is fixed at 1.
 """
 
 import torch
@@ -168,8 +167,8 @@ class HitClassDataset(Dataset):
         self.update_hit_class_probs()
 
     def update_hit_class_probs(self):
-        """Compute hit class probabilities for all codons in each sequence
-        based on current branch lengths."""
+        """Compute hit class probabilities for all codons in each sequence based on
+        current branch lengths."""
         new_codon_probs = []
         new_hc_probs = []
         for (
@@ -238,13 +237,11 @@ class HitClassDataset(Dataset):
 def flatten_and_mask_sequence_codons(
     input_tensor: torch.Tensor, codon_mask: torch.Tensor = None
 ):
-    """Flatten first dimension of input_tensor, applying codon_mask first if
-    provided.
+    """Flatten first dimension of input_tensor, applying codon_mask first if provided.
 
-    This is useful for input_tensors whose first dimension represents
-    sequences, and whose second dimension represents codons. The
-    resulting tensor will then aggregate the codons of all sequences
-    into the first dimension.
+    This is useful for input_tensors whose first dimension represents sequences, and
+    whose second dimension represents codons. The resulting tensor will then aggregate
+    the codons of all sequences into the first dimension.
     """
     flat_input = input_tensor.flatten(start_dim=0, end_dim=1)
     if codon_mask is not None:
@@ -492,11 +489,10 @@ def train_test_datasets_of_pcp_df(
 def prepare_pcp_df(
     pcp_df: pd.DataFrame, crepe: framework.Crepe, site_count: int
 ) -> pd.DataFrame:
-    """Trim parent and child sequences in pcp_df to codon boundaries and add
-    the rates and substitution probabilities.
+    """Trim parent and child sequences in pcp_df to codon boundaries and add the rates
+    and substitution probabilities.
 
-    Returns the modified dataframe, which is the input dataframe
-    modified in-place.
+    Returns the modified dataframe, which is the input dataframe modified in-place.
     """
     pcp_df["parent"] = _trim_to_codon_boundary_and_max_len(pcp_df["parent"], site_count)
     pcp_df["child"] = _trim_to_codon_boundary_and_max_len(pcp_df["child"], site_count)

@@ -50,16 +50,12 @@ class ModelBase(nn.Module):
                 raise ValueError(f"Unrecognized layer type: {type(layer)}")
 
     def freeze(self):
-        """
-        Freeze all parameters in the model, disabling gradient computations.
-        """
+        """Freeze all parameters in the model, disabling gradient computations."""
         for param in self.parameters():
             param.requires_grad = False
 
     def unfreeze(self):
-        """
-        Unfreeze all parameters in the model, enabling gradient computations.
-        """
+        """Unfreeze all parameters in the model, enabling gradient computations."""
         for param in self.parameters():
             param.requires_grad = True
 
@@ -231,9 +227,7 @@ class RSSHMoofModel(KmerModel):
 
 
 class CNNModel(KmerModel):
-    """
-    This is a CNN model that uses k-mers as input and trains an embedding layer.
-    """
+    """This is a CNN model that uses k-mers as input and trains an embedding layer."""
 
     def __init__(
         self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
@@ -296,10 +290,8 @@ class CNNPEModel(CNNModel):
 
 
 class CNN1merModel(CNNModel):
-    """
-    This is a CNN model that uses individual bases as input and does not train an
-    embedding layer.
-    """
+    """This is a CNN model that uses individual bases as input and does not train an
+    embedding layer."""
 
     def __init__(self, filter_count, kernel_size, dropout_prob=0.1):
         # Fixed embedding_dim because there are only 4 bases.
@@ -315,14 +307,14 @@ class CNN1merModel(CNNModel):
 
 
 class RSCNNModel(CNNModel, ABC):
-    """
-    The base class for all RSCNN models. These are CNN models that predict both
-    rates and CSP logits.
+    """The base class for all RSCNN models. These are CNN models that predict both rates
+    and CSP logits.
 
-    They differ in how much they share the weights between the r_ components
-    that predict rates, and the s_ components that predict CSP logits.
+    They differ in how much they share the weights between the r_ components that
+    predict rates, and the s_ components that predict CSP logits.
 
-    See https://github.com/matsengrp/netam/pull/9#issuecomment-1939097576
+    See
+    https://github.com/matsengrp/netam/pull/9#issuecomment-1939097576
     for diagrams about the various models.
     """
 
@@ -336,9 +328,7 @@ class RSCNNModel(CNNModel, ABC):
 
 
 class JoinedRSCNNModel(RSCNNModel):
-    """
-    This model shares everything except the final linear layers.
-    """
+    """This model shares everything except the final linear layers."""
 
     def __init__(
         self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
@@ -375,9 +365,7 @@ class JoinedRSCNNModel(RSCNNModel):
 
 
 class HybridRSCNNModel(RSCNNModel):
-    """
-    This model shares the kmer_embedding only.
-    """
+    """This model shares the kmer_embedding only."""
 
     def __init__(
         self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
@@ -427,9 +415,7 @@ class HybridRSCNNModel(RSCNNModel):
 
 
 class IndepRSCNNModel(RSCNNModel):
-    """
-    This model does not share any weights between the r_ and s_ components.
-    """
+    """This model does not share any weights between the r_ and s_ components."""
 
     def __init__(
         self, kmer_length, embedding_dim, filter_count, kernel_size, dropout_prob=0.1
@@ -505,9 +491,7 @@ class WrapperHyperparameters:
 
 
 class PersiteWrapper(ModelBase):
-    """
-    This wraps another model, but adds a per-site rate component.
-    """
+    """This wraps another model, but adds a per-site rate component."""
 
     def __init__(self, base_model, site_count):
         super().__init__()
@@ -651,9 +635,8 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
 
 
 def wiggle(x, beta):
-    """
-    A function that when we exp it gives us a function that slopes to 0 at -inf
-    and grows sub-linearly as x increases.
+    """A function that when we exp it gives us a function that slopes to 0 at -inf and
+    grows sub-linearly as x increases.
 
     See https://github.com/matsengrp/netam/pull/5#issuecomment-1906665475 for a
     plot.
@@ -662,9 +645,7 @@ def wiggle(x, beta):
 
 
 class TransformerBinarySelectionModelWiggleAct(TransformerBinarySelectionModelLinAct):
-    """
-    Here the beta parameter is fixed at 0.3.
-    """
+    """Here the beta parameter is fixed at 0.3."""
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         return wiggle(super().forward(amino_acid_indices, mask), 0.3)
@@ -673,10 +654,10 @@ class TransformerBinarySelectionModelWiggleAct(TransformerBinarySelectionModelLi
 class TransformerBinarySelectionModelTrainableWiggleAct(
     TransformerBinarySelectionModelLinAct
 ):
-    """
-    This version of the model has a trainable parameter that controls the
-    beta in the wiggle function. It didn't work any better so I'm not using it
-    for now.
+    """This version of the model has a trainable parameter that controls the beta in the
+    wiggle function.
+
+    It didn't work any better so I'm not using it for now.
     """
 
     def __init__(self, *args, **kwargs):
@@ -706,7 +687,8 @@ class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
         return {}
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        """Build a binary log selection matrix from a one-hot encoded parent sequence."""
+        """Build a binary log selection matrix from a one-hot encoded parent
+        sequence."""
         replicated_value = self.single_value.expand_as(amino_acid_indices)
         return replicated_value
 
@@ -723,8 +705,9 @@ class HitClassModel(nn.Module):
     def forward(
         self, parent_codon_idxs: torch.Tensor, uncorrected_log_codon_probs: torch.Tensor
     ):
-        """Forward function takes a tensor of target codon distributions, for each observed parent codon,
-        and adjusts the distributions according to the hit class corrections."""
+        """Forward function takes a tensor of target codon distributions, for each
+        observed parent codon, and adjusts the distributions according to the hit class
+        corrections."""
         return apply_multihit_correction(
             parent_codon_idxs, uncorrected_log_codon_probs, self.values
         )

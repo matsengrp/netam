@@ -27,7 +27,8 @@ hit_class_tensor = torch.tensor(
 
 
 def parent_specific_hit_classes(parent_codon_idxs: torch.Tensor) -> torch.Tensor:
-    """Produce a tensor containing the hit classes of all possible child codons, for each passed parent codon.
+    """Produce a tensor containing the hit classes of all possible child codons, for
+    each passed parent codon.
 
     Args:
         parent_codon_idxs (torch.Tensor): A (codon_count, 3) shaped tensor containing for each codon, the
@@ -74,8 +75,8 @@ def apply_multihit_correction(
 def hit_class_probs_tensor(
     parent_codon_idxs: torch.Tensor, codon_probs: torch.Tensor
 ) -> torch.Tensor:
-    """
-    Calculate probabilities of hit classes between parent codons and all other codons for all the sites of a sequence.
+    """Calculate probabilities of hit classes between parent codons and all other codons
+    for all the sites of a sequence.
 
     Args:
         parent_codon_idxs (torch.Tensor): The parent nucleotide sequence encoded as a tensor of shape (codon_count, 3),

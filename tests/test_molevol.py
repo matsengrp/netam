@@ -26,8 +26,7 @@ def test_aaprobs_of_parent_scaled_rates_and_sub_probs():
     def old_aaprobs_of_parent_scaled_rates_and_sub_probs(
         parent_idxs: torch.Tensor, scaled_rates: torch.Tensor, sub_probs: torch.Tensor
     ) -> torch.Tensor:
-        """
-        Calculate per-site amino acid probabilities from per-site nucleotide rates
+        """Calculate per-site amino acid probabilities from per-site nucleotide rates
         and substitution probabilities.
 
         Args:
@@ -116,9 +115,7 @@ def test_normalize_sub_probs():
 
 
 def iterative_aaprob_of_mut_and_sub(parent_codon, mut_probs, sub_probs):
-    """
-    Original version of codon_to_aa_probabilities, used for testing.
-    """
+    """Original version of codon_to_aa_probabilities, used for testing."""
     aa_probs = {}
     for aa in AA_STR_SORTED:
         aa_probs[aa] = 0.0

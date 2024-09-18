@@ -1,12 +1,12 @@
 """Free functions for molecular evolution computation.
 
-We will follow terminology from Yaari et al 2013, where "mutability" refers to
-the probability of a nucleotide mutating at a given site, while "substitution"
-refers to the probability of a nucleotide mutating to another nucleotide at a
-given site conditional on having a mutation.
+We will follow terminology from Yaari et al 2013, where "mutability" refers to the
+probability of a nucleotide mutating at a given site, while "substitution" refers to the
+probability of a nucleotide mutating to another nucleotide at a given site conditional
+on having a mutation.
 
-We assume that the mutation and substitution probabilities already take branch
-length into account.  
+We assume that the mutation and substitution probabilities already take branch length
+into account.
 """
 
 import numpy as np
@@ -20,8 +20,7 @@ import netam.sequences as sequences
 
 
 def normalize_sub_probs(parent_idxs: Tensor, sub_probs: Tensor) -> Tensor:
-    """
-    Normalize substitution probabilities.
+    """Normalize substitution probabilities.
 
     Given a parent DNA sequence and a 2D PyTorch tensor representing substitution
     probabilities, this function sets the probability of the actual nucleotide
@@ -60,8 +59,7 @@ def normalize_sub_probs(parent_idxs: Tensor, sub_probs: Tensor) -> Tensor:
 def build_mutation_matrices(
     parent_codon_idxs: Tensor, mut_probs: Tensor, sub_probs: Tensor
 ) -> Tensor:
-    """
-    Generate a sequence of 3x4 mutation matrices for parent codons along a sequence.
+    """Generate a sequence of 3x4 mutation matrices for parent codons along a sequence.
 
     Given indices for parent codons, mutation probabilities, and substitution
     probabilities for each parent codon along the sequence, this function
@@ -124,8 +122,8 @@ def build_mutation_matrices(
 
 
 def codon_probs_of_mutation_matrices(mut_matrix: Tensor) -> Tensor:
-    """
-    Compute the probability tensor for mutating to the codon ijk along the entire sequence.
+    """Compute the probability tensor for mutating to the codon ijk along the entire
+    sequence.
 
     Args:
     mut_matrix (torch.Tensor): A 3D tensor representing the mutation matrix for the entire sequence.
@@ -155,8 +153,8 @@ def codon_probs_of_mutation_matrices(mut_matrix: Tensor) -> Tensor:
 
 
 def aaprobs_of_codon_probs(codon_probs: Tensor) -> Tensor:
-    """
-    Compute the probability of each amino acid from the probability of each codon, for each parent codon along the sequence.
+    """Compute the probability of each amino acid from the probability of each codon,
+    for each parent codon along the sequence.
 
     Args:
     codon_probs (torch.Tensor): A 4D tensor representing the probability of mutating
@@ -186,9 +184,9 @@ def aaprobs_of_codon_probs(codon_probs: Tensor) -> Tensor:
 def aaprob_of_mut_and_sub(
     parent_codon_idxs: Tensor, mut_probs: Tensor, sub_probs: Tensor
 ) -> Tensor:
-    """
-    For a sequence of parent codons and given nucleotide mutability and substitution probabilities,
-    compute the amino acid substitution probabilities for each codon along the sequence.
+    """For a sequence of parent codons and given nucleotide mutability and substitution
+    probabilities, compute the amino acid substitution probabilities for each codon
+    along the sequence.
 
     Args:
     parent_codon_idxs (torch.Tensor): A 2D tensor where each row contains indices representing
@@ -210,8 +208,7 @@ def aaprob_of_mut_and_sub(
 
 
 def reshape_for_codons(array: Tensor) -> Tensor:
-    """
-    Reshape a tensor to add a codon dimension by taking groups of 3 sites.
+    """Reshape a tensor to add a codon dimension by taking groups of 3 sites.
 
     Args:
     array (torch.Tensor): Original tensor.
@@ -228,8 +225,7 @@ def reshape_for_codons(array: Tensor) -> Tensor:
 def codon_probs_of_parent_scaled_rates_and_sub_probs(
     parent_idxs: torch.Tensor, scaled_rates: torch.Tensor, sub_probs: torch.Tensor
 ):
-    """
-    Compute the probabilities of mutating to various codons for a parent sequence.
+    """Compute the probabilities of mutating to various codons for a parent sequence.
 
     This uses the same machinery as we use for fitting the DNSM, but we stay on
     the codon level rather than moving to syn/nonsyn changes.
@@ -260,9 +256,8 @@ def codon_probs_of_parent_scaled_rates_and_sub_probs(
 def aaprobs_of_parent_scaled_rates_and_sub_probs(
     parent_idxs: Tensor, scaled_rates: Tensor, sub_probs: Tensor
 ) -> Tensor:
-    """
-    Calculate per-site amino acid probabilities from per-site nucleotide rates
-    and substitution probabilities.
+    """Calculate per-site amino acid probabilities from per-site nucleotide rates and
+    substitution probabilities.
 
     Args:
         parent_idxs (torch.Tensor): Parent nucleotide indices. Shape should be (site_count,).
@@ -288,8 +283,8 @@ def build_codon_mutsel(
     codon_sub_probs: Tensor,
     aa_sel_matrices: Tensor,
 ) -> Tensor:
-    """
-    Build a sequence of codon mutation-selection matrices for codons along a sequence.
+    """Build a sequence of codon mutation-selection matrices for codons along a
+    sequence.
 
     Args:
         parent_codon_idxs (torch.Tensor): The parent codons for each sequence. Shape: (codon_count, 3)
@@ -344,8 +339,7 @@ def neutral_aa_mut_probs(
     codon_mut_probs: Tensor,
     codon_sub_probs: Tensor,
 ) -> Tensor:
-    """
-    For every site, what is the probability that the amino acid will have a
+    """For every site, what is the probability that the amino acid will have a
     substution or mutate to a stop under neutral evolution?
 
     This code computes all the probabilities and then indexes into that tensor
@@ -388,12 +382,11 @@ def neutral_aa_mut_probs(
 
 
 def mutsel_log_pcp_probability_of(sel_matrix, parent, child, rates, sub_probs):
-    """
-    Constructs the log_pcp_probability function specific to given rates and sub_probs.
+    """Constructs the log_pcp_probability function specific to given rates and
+    sub_probs.
 
-    This function takes log_branch_length as input and returns the log
-    probability of the child sequence. It uses log of branch length to
-    ensure non-negativity.
+    This function takes log_branch_length as input and returns the log probability of
+    the child sequence. It uses log of branch length to ensure non-negativity.
     """
 
     assert len(parent) % 3 == 0

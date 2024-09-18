@@ -61,9 +61,8 @@ def aa_onehot_tensor_of_str(aa_str):
 
 
 def generic_subs_indicator_tensor_of(ambig_symb, parent, child):
-    """Return a tensor indicating which positions in the parent sequence
-    are substituted in the child sequence.
-    """
+    """Return a tensor indicating which positions in the parent sequence are substituted
+    in the child sequence."""
     return torch.tensor(
         [
             0 if (p == ambig_symb or c == ambig_symb) else p != c
@@ -74,15 +73,14 @@ def generic_subs_indicator_tensor_of(ambig_symb, parent, child):
 
 
 def nt_subs_indicator_tensor_of(parent, child):
-    """Return a tensor indicating which positions in the parent sequence
-    are substituted in the child sequence.
-    """
+    """Return a tensor indicating which positions in the parent sequence are substituted
+    in the child sequence."""
     return generic_subs_indicator_tensor_of("N", parent, child)
 
 
 def aa_subs_indicator_tensor_of(parent, child):
-    """Return a tensor indicating which positions in the parent sequence
-    are substituted in the child sequence."""
+    """Return a tensor indicating which positions in the parent sequence are substituted
+    in the child sequence."""
     return generic_subs_indicator_tensor_of("X", parent, child)
 
 
@@ -115,7 +113,8 @@ def aa_index_of_codon(codon):
 
 
 def generic_mutation_frequency(ambig_symb, parent, child):
-    """Return the fraction of sites that differ between the parent and child sequences."""
+    """Return the fraction of sites that differ between the parent and child
+    sequences."""
     return sum(
         1
         for p, c in zip(parent, child)
@@ -124,19 +123,20 @@ def generic_mutation_frequency(ambig_symb, parent, child):
 
 
 def nt_mutation_frequency(parent, child):
-    """Return the fraction of nucleotide sites that differ between the parent and child sequences."""
+    """Return the fraction of nucleotide sites that differ between the parent and child
+    sequences."""
     return generic_mutation_frequency("N", parent, child)
 
 
 def aa_mutation_frequency(parent, child):
-    """Return the fraction of amino acid sites that differ between the parent and child sequences."""
+    """Return the fraction of amino acid sites that differ between the parent and child
+    sequences."""
     return generic_mutation_frequency("X", parent, child)
 
 
 def assert_pcp_lengths(parent, child):
-    """Assert that the lengths of the parent and child sequences are
-    the same and that they are multiples of 3.
-    """
+    """Assert that the lengths of the parent and child sequences are the same and that
+    they are multiples of 3."""
     if len(parent) != len(child):
         raise ValueError(
             f"The parent and child sequences are not the same length: "
@@ -178,7 +178,8 @@ CODON_AA_INDICATOR_MATRIX = torch.tensor(
 
 
 def assert_full_sequences(parent, child):
-    """Assert that the parent and child sequences full length, containing no ambiguous bases (N)."""
+    """Assert that the parent and child sequences full length, containing no ambiguous
+    bases (N)."""
 
     if "N" in parent or "N" in child:
         raise ValueError("Found ambiguous bases in the parent or child sequence.")
