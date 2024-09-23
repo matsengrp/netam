@@ -10,6 +10,7 @@ into account.
 """
 
 import numpy as np
+import warnings
 
 import torch
 from torch import Tensor, optim
@@ -17,6 +18,7 @@ from torch import Tensor, optim
 from netam.sequences import CODON_AA_INDICATOR_MATRIX
 
 import netam.sequences as sequences
+# torch.autograd.set_detect_anomaly(True)
 
 
 def normalize_sub_probs(parent_idxs: Tensor, sub_probs: Tensor) -> Tensor:
@@ -304,6 +306,8 @@ def build_codon_mutsel(
 
     if multihit_model is not None:
         codon_probs = multihit_model(parent_codon_idxs, codon_probs)
+    else:
+        warnings.warn("No multihit model provided. Using uncorrected probabilities.")
 
     # Calculate the codon selection matrix for each sequence via Einstein
     # summation, in which we sum over the repeated indices.
@@ -343,6 +347,7 @@ def neutral_aa_probs(
     parent_codon_idxs: Tensor,
     codon_mut_probs: Tensor,
     codon_sub_probs: Tensor,
+    multihit_model=None,
 ) -> Tensor:
     """For every site, what is the probability that the amino acid will mutate to every
     amino acid?
@@ -360,10 +365,15 @@ def neutral_aa_probs(
     mut_matrices = build_mutation_matrices(
         parent_codon_idxs, codon_mut_probs, codon_sub_probs
     )
-    codon_probs = codon_probs_of_mutation_matrices(mut_matrices).view(-1, 64)
+    codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
+
+    if multihit_model is not None:
+        codon_probs = multihit_model(parent_codon_idxs, codon_probs)
+    else:
+        warnings.warn("No multihit model provided. Using uncorrected probabilities.")
 
     # Get the probability of mutating to each amino acid.
-    aa_probs = codon_probs @ CODON_AA_INDICATOR_MATRIX
+    aa_probs = codon_probs.view(-1, 64) @ CODON_AA_INDICATOR_MATRIX
 
     return aa_probs
 
@@ -400,6 +410,7 @@ def neutral_aa_mut_probs(
     parent_codon_idxs: Tensor,
     codon_mut_probs: Tensor,
     codon_sub_probs: Tensor,
+    multihit_model=None,
 ) -> Tensor:
     """For every site, what is the probability that the amino acid will have a
     substution or mutate to a stop under neutral evolution?
@@ -418,12 +429,19 @@ def neutral_aa_mut_probs(
                       Shape: (codon_count,)
     """
 
-    aa_probs = neutral_aa_probs(parent_codon_idxs, codon_mut_probs, codon_sub_probs)
+    aa_probs = neutral_aa_probs(
+        parent_codon_idxs,
+        codon_mut_probs,
+        codon_sub_probs,
+        multihit_model=multihit_model,
+    )
     mut_probs = mut_probs_of_aa_probs(parent_codon_idxs, aa_probs)
     return mut_probs
 
 
-def mutsel_log_pcp_probability_of(sel_matrix, parent, child, rates, sub_probs, multihit_model=None):
+def mutsel_log_pcp_probability_of(
+    sel_matrix, parent, child, rates, sub_probs, multihit_model=None
+):
     """Constructs the log_pcp_probability function specific to given rates and
     sub_probs.
 
@@ -487,6 +505,7 @@ def optimize_branch_length(
 
     step_idx = 0
 
+    nan_issue = False
     for step_idx in range(max_optimization_steps):
         # For some PCPs, the optimizer works very hard optimizing very tiny branch lengths.
         if log_branch_length < log_branch_length_lower_threshold:
@@ -501,7 +520,14 @@ def optimize_branch_length(
         loss.backward()
         torch.nn.utils.clip_grad_norm_([log_branch_length], max_norm=5.0)
         optimizer.step()
-        assert not torch.isnan(log_branch_length)
+        if torch.isnan(log_branch_length):
+            print("branch length optimization resulted in NAN, previous log branch length:", prev_log_branch_length)
+            if np.isclose(prev_log_branch_length.detach().numpy(), 0):
+                log_branch_length = prev_log_branch_length
+                nan_issue = True
+                break
+            else:
+                assert False
 
         change_in_log_branch_length = torch.abs(
             log_branch_length - prev_log_branch_length
@@ -511,7 +537,7 @@ def optimize_branch_length(
 
         prev_log_branch_length = log_branch_length.clone()
 
-    if step_idx == max_optimization_steps - 1:
+    if step_idx == max_optimization_steps - 1 or nan_issue:
         print(
             f"Warning: optimization did not converge after {max_optimization_steps} steps; log branch length is {log_branch_length.detach().item()}"
         )

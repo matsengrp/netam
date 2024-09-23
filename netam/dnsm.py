@@ -43,11 +43,17 @@ class DNSMDataset(Dataset):
         all_rates: torch.Tensor,
         all_subs_probs: torch.Tensor,
         branch_lengths: torch.Tensor,
+        multihit_model=None,
     ):
         self.nt_parents = nt_parents
         self.nt_children = nt_children
         self.all_rates = all_rates
         self.all_subs_probs = all_subs_probs
+        self.multihit_model = copy.deepcopy(multihit_model)
+        if multihit_model is not None:
+            # We want these parameters to act like fixed data. This is essential
+            # for multithreaded branch length optimization to work.
+            self.multihit_model.values.requires_grad_(False)
 
         assert len(self.nt_parents) == len(self.nt_children)
         pcp_count = len(self.nt_parents)
@@ -95,6 +101,7 @@ class DNSMDataset(Dataset):
         all_rates_series: pd.Series,
         all_subs_probs_series: pd.Series,
         branch_length_multiplier=5.0,
+        multihit_model=None,
     ):
         """Alternative constructor that takes the raw data and calculates the initial
         branch lengths.
@@ -115,10 +122,11 @@ class DNSMDataset(Dataset):
             stack_heterogeneous(all_rates_series.reset_index(drop=True)),
             stack_heterogeneous(all_subs_probs_series.reset_index(drop=True)),
             initial_branch_lengths,
+            multihit_model=multihit_model,
         )
 
     @classmethod
-    def of_pcp_df(cls, pcp_df, branch_length_multiplier=5.0):
+    def of_pcp_df(cls, pcp_df, branch_length_multiplier=5.0, multihit_model=None):
         """Alternative constructor that takes in a pcp_df and calculates the initial
         branch lengths."""
         assert "rates" in pcp_df.columns, "pcp_df must have a neutral rates column"
@@ -128,10 +136,11 @@ class DNSMDataset(Dataset):
             pcp_df["rates"],
             pcp_df["subs_probs"],
             branch_length_multiplier=branch_length_multiplier,
+            multihit_model=multihit_model,
         )
 
     @classmethod
-    def train_val_datasets_of_pcp_df(cls, pcp_df, branch_length_multiplier=5.0):
+    def train_val_datasets_of_pcp_df(cls, pcp_df, branch_length_multiplier=5.0, multihit_model=None):
         """Perform a train-val split based on the 'in_train' column.
 
         This is a class method so it works for subclasses.
@@ -140,14 +149,18 @@ class DNSMDataset(Dataset):
         val_df = pcp_df[~pcp_df["in_train"]].reset_index(drop=True)
 
         val_dataset = cls.of_pcp_df(
-            val_df, branch_length_multiplier=branch_length_multiplier
+            val_df,
+            branch_length_multiplier=branch_length_multiplier,
+            multihit_model=multihit_model,
         )
 
         if len(train_df) == 0:
             return None, val_dataset
         # else:
         train_dataset = cls.of_pcp_df(
-            train_df, branch_length_multiplier=branch_length_multiplier
+            train_df,
+            branch_length_multiplier=branch_length_multiplier,
+            multihit_model=multihit_model,
         )
 
         return train_dataset, val_dataset
@@ -160,6 +173,7 @@ class DNSMDataset(Dataset):
             self.all_rates.copy(),
             self.all_subs_probs.copy(),
             self._branch_lengths.copy(),
+            multihit_model=copy.deepcopy(self.multihit_model),
         )
         return new_dataset
 
@@ -176,6 +190,7 @@ class DNSMDataset(Dataset):
             self.all_rates[indices],
             self.all_subs_probs[indices],
             self._branch_lengths[indices],
+            multihit_model=copy.deepcopy(self.multihit_model),
         )
         return new_dataset
 
@@ -231,6 +246,10 @@ class DNSMDataset(Dataset):
             mask = mask.to("cpu")
             rates = rates.to("cpu")
             subs_probs = subs_probs.to("cpu")
+            if self.multihit_model is not None:
+                multihit_model = self.multihit_model.to("cpu")
+            else:
+                multihit_model = None
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
             parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
@@ -245,6 +264,7 @@ class DNSMDataset(Dataset):
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
                 normed_subs_probs.reshape(-1, 3, 4),
+                multihit_model=multihit_model,
             )
 
             if not torch.isfinite(neutral_aa_mut_prob).all():
@@ -295,6 +315,8 @@ class DNSMDataset(Dataset):
         self.log_neutral_aa_mut_probs = self.log_neutral_aa_mut_probs.to(device)
         self.all_rates = self.all_rates.to(device)
         self.all_subs_probs = self.all_subs_probs.to(device)
+        if self.multihit_model is not None:
+            self.multihit_model = self.multihit_model.to(device)
 
 
 class DNSMBurrito(framework.Burrito):
@@ -366,13 +388,14 @@ class DNSMBurrito(framework.Burrito):
         rates,
         subs_probs,
         starting_branch_length,
+        multihit_model,
         **optimization_kwargs,
     ):
         if parent == child:
             return 0.0
         sel_matrix = self.build_selection_matrix_from_parent(parent)
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
-            sel_matrix, parent, child, rates, subs_probs
+            sel_matrix, parent, child, rates, subs_probs, multihit_model
         )
         if type(starting_branch_length) == torch.Tensor:
             starting_branch_length = starting_branch_length.detach().item()
@@ -401,6 +424,7 @@ class DNSMBurrito(framework.Burrito):
                 rates[: len(parent)],
                 subs_probs[: len(parent), :],
                 starting_length,
+                dataset.multihit_model,
                 **optimization_kwargs,
             )
 
@@ -416,7 +440,7 @@ class DNSMBurrito(framework.Burrito):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         worker_count = min(mp.cpu_count() // 2, 10)
-        # The following can be used when one wants a better traceback.
+        # # The following can be used when one wants a better traceback.
         # burrito = DNSMBurrito(None, dataset, copy.deepcopy(self.model))
         # return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
         our_optimize_branch_length = partial(
