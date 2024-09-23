@@ -49,11 +49,13 @@ class DNSMDataset(Dataset):
         all_rates: torch.Tensor,
         all_subs_probs: torch.Tensor,
         branch_lengths: torch.Tensor,
+        multihit_model=None,
     ):
         self.nt_parents = nt_parents
         self.nt_children = nt_children
         self.all_rates = all_rates
         self.all_subs_probs = all_subs_probs
+        self.multihit_model = multihit_model
 
         assert len(self.nt_parents) == len(self.nt_children)
         pcp_count = len(self.nt_parents)
@@ -220,6 +222,7 @@ class DNSMDataset(Dataset):
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
                 normed_subs_probs.reshape(-1, 3, 4),
+                multihit_model=self.multihit_model,
             )
 
             if not torch.isfinite(neutral_aa_mut_prob).all():
@@ -360,13 +363,14 @@ class DNSMBurrito(framework.Burrito):
         rates,
         subs_probs,
         starting_branch_length,
+        multihit_model,
         **optimization_kwargs,
     ):
         if parent == child:
             return 0.0
         sel_matrix = self.build_selection_matrix_from_parent(parent)
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
-            sel_matrix, parent, child, rates, subs_probs
+            sel_matrix, parent, child, rates, subs_probs, multihit_model
         )
         if type(starting_branch_length) == torch.Tensor:
             starting_branch_length = starting_branch_length.detach().item()
@@ -395,6 +399,7 @@ class DNSMBurrito(framework.Burrito):
                 rates[: len(parent)],
                 subs_probs[: len(parent), :],
                 starting_length,
+                dataset.multihit_model,
                 **optimization_kwargs,
             )
 

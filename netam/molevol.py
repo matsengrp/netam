@@ -303,7 +303,7 @@ def build_codon_mutsel(
     codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
 
     if multihit_model is not None:
-        codon_probs = multihit_model(parent_codon_idxs, codon_probs)
+        codon_probs = multihit_model(parent_codon_idxs, codon_probs.log()).exp()
 
     # Calculate the codon selection matrix for each sequence via Einstein
     # summation, in which we sum over the repeated indices.
@@ -362,6 +362,9 @@ def neutral_aa_probs(
     )
     codon_probs = codon_probs_of_mutation_matrices(mut_matrices).view(-1, 64)
 
+    if multihit_model is not None:
+        codon_probs = multihit_model(parent_codon_idxs, codon_probs.log()).exp()
+
     # Get the probability of mutating to each amino acid.
     aa_probs = codon_probs @ CODON_AA_INDICATOR_MATRIX
 
@@ -400,6 +403,7 @@ def neutral_aa_mut_probs(
     parent_codon_idxs: Tensor,
     codon_mut_probs: Tensor,
     codon_sub_probs: Tensor,
+    multihit_model=None,
 ) -> Tensor:
     """For every site, what is the probability that the amino acid will have a
     substution or mutate to a stop under neutral evolution?
