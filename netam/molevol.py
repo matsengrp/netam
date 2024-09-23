@@ -283,6 +283,7 @@ def build_codon_mutsel(
     codon_mut_probs: Tensor,
     codon_sub_probs: Tensor,
     aa_sel_matrices: Tensor,
+    multihit_model=None,
 ) -> Tensor:
     """Build a sequence of codon mutation-selection matrices for codons along a
     sequence.
@@ -300,6 +301,9 @@ def build_codon_mutsel(
         parent_codon_idxs, codon_mut_probs, codon_sub_probs
     )
     codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
+
+    if multihit_model is not None:
+        codon_probs = multihit_model(parent_codon_idxs, codon_probs)
 
     # Calculate the codon selection matrix for each sequence via Einstein
     # summation, in which we sum over the repeated indices.
@@ -419,7 +423,7 @@ def neutral_aa_mut_probs(
     return mut_probs
 
 
-def mutsel_log_pcp_probability_of(sel_matrix, parent, child, rates, sub_probs):
+def mutsel_log_pcp_probability_of(sel_matrix, parent, child, rates, sub_probs, multihit_model=None):
     """Constructs the log_pcp_probability function specific to given rates and
     sub_probs.
 
@@ -442,6 +446,7 @@ def mutsel_log_pcp_probability_of(sel_matrix, parent, child, rates, sub_probs):
             mut_probs.reshape(-1, 3),
             sub_probs.reshape(-1, 3, 4),
             sel_matrix,
+            multihit_model=multihit_model,
         )
 
         # This is a diagnostic generating data for netam issue #7.
