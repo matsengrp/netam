@@ -101,6 +101,7 @@ class DNSMDataset(Dataset):
         all_rates_series: pd.Series,
         all_subs_probs_series: pd.Series,
         branch_length_multiplier=5.0,
+        multihit_model=None,
     ):
         """Alternative constructor that takes the raw data and calculates the initial
         branch lengths.
@@ -121,10 +122,11 @@ class DNSMDataset(Dataset):
             stack_heterogeneous(all_rates_series.reset_index(drop=True)),
             stack_heterogeneous(all_subs_probs_series.reset_index(drop=True)),
             initial_branch_lengths,
+            multihit_model=multihit_model,
         )
 
     @classmethod
-    def of_pcp_df(cls, pcp_df, branch_length_multiplier=5.0):
+    def of_pcp_df(cls, pcp_df, branch_length_multiplier=5.0, multihit_model=None):
         """Alternative constructor that takes in a pcp_df and calculates the initial
         branch lengths."""
         assert "rates" in pcp_df.columns, "pcp_df must have a neutral rates column"
@@ -134,6 +136,7 @@ class DNSMDataset(Dataset):
             pcp_df["rates"],
             pcp_df["subs_probs"],
             branch_length_multiplier=branch_length_multiplier,
+            multihit_model=multihit_model,
         )
 
     def clone(self):
@@ -144,6 +147,7 @@ class DNSMDataset(Dataset):
             self.all_rates.copy(),
             self.all_subs_probs.copy(),
             self._branch_lengths.copy(),
+            multihit_model=self.multihit_model,
         )
         return new_dataset
 
@@ -160,6 +164,7 @@ class DNSMDataset(Dataset):
             self.all_rates[indices],
             self.all_subs_probs[indices],
             self._branch_lengths[indices],
+            multihit_model=self.multihit_model,
         )
         return new_dataset
 
@@ -275,7 +280,7 @@ class DNSMDataset(Dataset):
         self.all_subs_probs = self.all_subs_probs.to(device)
 
 
-def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
+def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0, multihit_model=None):
     """Perform a train-val split based on a "in_train" column.
 
     Stays here so it can be used in tests.
@@ -283,13 +288,13 @@ def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
     train_df = pcp_df[pcp_df["in_train"]].reset_index(drop=True)
     val_df = pcp_df[~pcp_df["in_train"]].reset_index(drop=True)
     val_dataset = DNSMDataset.of_pcp_df(
-        val_df, branch_length_multiplier=branch_length_multiplier
+        val_df, branch_length_multiplier=branch_length_multiplier, multihit_model=multihit_model,
     )
     if len(train_df) == 0:
         return None, val_dataset
     # else:
     train_dataset = DNSMDataset.of_pcp_df(
-        train_df, branch_length_multiplier=branch_length_multiplier
+        train_df, branch_length_multiplier=branch_length_multiplier, multihit_model=multihit_model,
     )
     return train_dataset, val_dataset
 
