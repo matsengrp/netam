@@ -427,7 +427,9 @@ def neutral_aa_mut_probs(
     return mut_probs
 
 
-def mutsel_log_pcp_probability_of(sel_matrix, parent, child, rates, sub_probs, multihit_model=None):
+def mutsel_log_pcp_probability_of(
+    sel_matrix, parent, child, rates, sub_probs, multihit_model=None
+):
     """Constructs the log_pcp_probability function specific to given rates and
     sub_probs.
 
