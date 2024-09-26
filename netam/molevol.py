@@ -65,8 +65,9 @@ def build_mutation_matrices(
     probabilities for each parent codon along the sequence, this function
     constructs a sequence of 3x4 matrices. Each matrix in the sequence
     represents the mutation probabilities for each nucleotide position in a
-    parent codon. The ijkth entry of the resulting tensor corresponds to the probability of the jth nucleotide
-    in the ith parent codon mutating to the kth nucleotide (in indices).
+    parent codon. The ijkth entry of the resulting tensor corresponds to the 
+    probability of the jth nucleotide in the ith parent codon mutating to the
+    kth nucleotide (in indices).
 
     Args:
         parent_codon_idxs (torch.Tensor): 2D tensor with each row containing indices representing
@@ -334,7 +335,7 @@ def build_codon_mutsel(
     return codon_mutsel, sums_too_big
 
 
-def neutral_aa_mut_probs(
+def neutral_aa_mut_probs_and_aa_probs(
     parent_codon_idxs: Tensor,
     codon_mut_probs: Tensor,
     codon_sub_probs: Tensor,
@@ -354,6 +355,7 @@ def neutral_aa_mut_probs(
     Returns:
         torch.Tensor: The probability that each site will change amino acid.
                       Shape: (codon_count,)
+        torch.Tensor: The probability that each site will change to each amino acid, where the probability of staying the same is zeroed out.
     """
 
     mut_matrices = build_mutation_matrices(
@@ -378,7 +380,10 @@ def neutral_aa_mut_probs(
     ]
     p_staying_same = aa_probs[(torch.arange(len(parent_aa_idxs)), parent_aa_idxs)]
 
-    return 1.0 - p_staying_same
+    # Zero out the probability of staying the same.
+    aa_probs[(torch.arange(len(parent_aa_idxs)), parent_aa_idxs)] = 0.0
+
+    return 1.0 - p_staying_same, aa_probs
 
 
 def mutsel_log_pcp_probability_of(sel_matrix, parent, child, rates, sub_probs):

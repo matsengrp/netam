@@ -90,13 +90,18 @@ def test_neutral_aa_mut_probs():
     # correct_tensor just above.
     correct_tensor = torch.tensor([1 - 0.99 * 0.98])
 
-    computed_tensor = molevol.neutral_aa_mut_probs(
+    computed_tensor, aa_probs = molevol.neutral_aa_mut_probs(
         ex_parent_codon_idxs.unsqueeze(0),
         ex_mut_probs.unsqueeze(0),
         ex_sub_probs.unsqueeze(0),
-    ).squeeze()
+    )
+    computed_tensor = computed_tensor.squeeze()
+
+    print(aa_probs)
 
     assert torch.allclose(correct_tensor, computed_tensor)
+
+    
 
 
 def test_normalize_sub_probs():
