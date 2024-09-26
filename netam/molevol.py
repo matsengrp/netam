@@ -335,11 +335,40 @@ def build_codon_mutsel(
     return codon_mutsel, sums_too_big
 
 
-def neutral_aa_mut_probs_and_aa_probs(
+def neutral_aa_probs(
     parent_codon_idxs: Tensor,
     codon_mut_probs: Tensor,
     codon_sub_probs: Tensor,
 ) -> Tensor:
+    """For every site, what is the probability that the amino acid will mutate
+    to every amino acid?
+
+    Args:
+        parent_codon_idxs (torch.Tensor): The parent codons for each sequence. Shape: (codon_count, 3)
+        codon_mut_probs (torch.Tensor): The mutation probabilities for each site in each codon. Shape: (codon_count, 3)
+        codon_sub_probs (torch.Tensor): The substitution probabilities for each site in each codon. Shape: (codon_count, 3, 4)
+
+    Returns:
+        torch.Tensor: The probability that each site will change to each amino acid.
+                      Shape: (codon_count, 20)
+    """
+
+    mut_matrices = build_mutation_matrices(
+        parent_codon_idxs, codon_mut_probs, codon_sub_probs
+    )
+    codon_probs = codon_probs_of_mutation_matrices(mut_matrices).view(-1, 64)
+
+    # Get the probability of mutating to each amino acid.
+    aa_probs = codon_probs @ CODON_AA_INDICATOR_MATRIX
+
+    return aa_probs
+
+
+def neutral_aa_mut_probs(
+    parent_codon_idxs: Tensor,
+    codon_mut_probs: Tensor,
+    codon_sub_probs: Tensor,
+    ) -> Tensor:
     """For every site, what is the probability that the amino acid will have a
     substution or mutate to a stop under neutral evolution?
 
@@ -353,19 +382,12 @@ def neutral_aa_mut_probs_and_aa_probs(
         codon_sub_probs (torch.Tensor): The substitution probabilities for each site in each codon. Shape: (codon_count, 3, 4)
 
     Returns:
-        torch.Tensor: The probability that each site will change amino acid.
+        torch.Tensor: The probability that each site will change to some other amino acid.
                       Shape: (codon_count,)
-        torch.Tensor: The probability that each site will change to each amino acid, where the probability of staying the same is zeroed out.
     """
-
-    mut_matrices = build_mutation_matrices(
-        parent_codon_idxs, codon_mut_probs, codon_sub_probs
-    )
-    codon_probs = codon_probs_of_mutation_matrices(mut_matrices).view(-1, 64)
-
-    # Get the probability of mutating to each amino acid.
-    aa_probs = codon_probs @ CODON_AA_INDICATOR_MATRIX
-
+   
+    aa_probs = neutral_aa_probs(parent_codon_idxs, codon_mut_probs, codon_sub_probs)
+   
     # Next we build a table that will allow us to look up the amino acid index
     # from the codon indices. Argmax gets the aa index.
     aa_idx_from_codon = CODON_AA_INDICATOR_MATRIX.argmax(dim=1).view(4, 4, 4)
@@ -378,12 +400,10 @@ def neutral_aa_mut_probs_and_aa_probs(
             parent_codon_idxs[:, 2],
         )
     ]
+
     p_staying_same = aa_probs[(torch.arange(len(parent_aa_idxs)), parent_aa_idxs)]
 
-    # Zero out the probability of staying the same.
-    aa_probs[(torch.arange(len(parent_aa_idxs)), parent_aa_idxs)] = 0.0
-
-    return 1.0 - p_staying_same, aa_probs
+    return 1.0 - p_staying_same
 
 
 def mutsel_log_pcp_probability_of(sel_matrix, parent, child, rates, sub_probs):
