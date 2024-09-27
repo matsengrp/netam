@@ -598,6 +598,7 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
             "dim_feedforward": self.dim_feedforward,
             "layer_count": self.encoder.num_layers,
             "dropout_prob": self.pos_encoder.dropout.p,
+            "output_dim": self.linear.out_features,
         }
 
     def init_weights(self) -> None:
