@@ -1,3 +1,5 @@
+import os
+
 import netam.multihit as multihit
 import netam.framework as framework
 import netam.hit_class as hit_class
@@ -81,8 +83,9 @@ def test_train(hitclass_burrito):
 
 
 def test_serialize(hitclass_burrito):
-    hitclass_burrito.save_crepe("test_multihit_crepe")
-    new_crepe = framework.load_crepe("test_multihit_crepe")
+    os.makedirs("_ignore", exist_ok=True)
+    hitclass_burrito.save_crepe("_ignore/test_multihit_crepe")
+    new_crepe = framework.load_crepe("_ignore/test_multihit_crepe")
     assert torch.allclose(new_crepe.model.values, hitclass_burrito.model.values)
 
 
