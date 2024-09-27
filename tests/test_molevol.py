@@ -149,11 +149,11 @@ def test_aaprob_of_mut_and_sub():
     crepe_path = "data/cnn_joi_sml-shmoof_small"
     crepe = framework.load_crepe(crepe_path)
     [rates], [subs] = crepe([parent_nt_seq])
-    mut_probs = 1.0 - torch.exp(-torch.tensor(rates.squeeze()))
+    mut_probs = 1.0 - torch.exp(-rates.squeeze().clone().detach())
     parent_codon = parent_nt_seq[0:3]
     parent_codon_idxs = nt_idx_tensor_of_str(parent_codon)
     codon_mut_probs = mut_probs[0:3]
-    codon_subs = torch.tensor(subs[0:3])
+    codon_subs = subs.clone().detach()[0:3]
 
     iterative_result = iterative_aaprob_of_mut_and_sub(
         parent_codon, codon_mut_probs, codon_subs
