@@ -360,13 +360,13 @@ def neutral_aa_probs(
     mut_matrices = build_mutation_matrices(
         parent_codon_idxs, codon_mut_probs, codon_sub_probs
     )
-    codon_probs = codon_probs_of_mutation_matrices(mut_matrices).view(-1, 64)
+    codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
 
     if multihit_model is not None:
         codon_probs = multihit_model(parent_codon_idxs, codon_probs.log()).exp()
 
     # Get the probability of mutating to each amino acid.
-    aa_probs = codon_probs @ CODON_AA_INDICATOR_MATRIX
+    aa_probs = codon_probs.view(-1, 64) @ CODON_AA_INDICATOR_MATRIX
 
     return aa_probs
 
