@@ -400,7 +400,6 @@ def neutral_aa_mut_probs(
             parent_codon_idxs[:, 2],
         )
     ]
-
     p_staying_same = aa_probs[(torch.arange(len(parent_aa_idxs)), parent_aa_idxs)]
 
     return 1.0 - p_staying_same
