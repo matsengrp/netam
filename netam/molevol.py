@@ -340,8 +340,8 @@ def neutral_aa_probs(
     codon_mut_probs: Tensor,
     codon_sub_probs: Tensor,
 ) -> Tensor:
-    """For every site, what is the probability that the amino acid will mutate
-    to every amino acid?
+    """For every site, what is the probability that the amino acid will mutate to every
+    amino acid?
 
     Args:
         parent_codon_idxs (torch.Tensor): The parent codons for each sequence. Shape: (codon_count, 3)
