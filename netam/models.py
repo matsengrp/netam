@@ -569,7 +569,6 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
         dim_feedforward: int,
         layer_count: int,
         dropout_prob: float = 0.5,
-        output_dim: int = 1,
     ):
         super().__init__()
         # Note that d_model has to be divisible by nhead, so we make that
@@ -587,7 +586,7 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
             batch_first=True,
         )
         self.encoder = nn.TransformerEncoder(self.encoder_layer, layer_count)
-        self.linear = nn.Linear(self.d_model, output_dim)
+        self.linear = nn.Linear(self.d_model, 1)
         self.init_weights()
 
     @property
@@ -598,7 +597,6 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
             "dim_feedforward": self.dim_feedforward,
             "layer_count": self.encoder.num_layers,
             "dropout_prob": self.pos_encoder.dropout.p,
-            "output_dim": self.linear.out_features,
         }
 
     def init_weights(self) -> None:
