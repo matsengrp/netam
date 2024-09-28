@@ -343,6 +343,7 @@ def neutral_aa_probs(
     parent_codon_idxs: Tensor,
     codon_mut_probs: Tensor,
     codon_sub_probs: Tensor,
+    multihit_model=None,
 ) -> Tensor:
     """For every site, what is the probability that the amino acid will mutate to every
     amino acid?
@@ -422,7 +423,12 @@ def neutral_aa_mut_probs(
                       Shape: (codon_count,)
     """
 
-    aa_probs = neutral_aa_probs(parent_codon_idxs, codon_mut_probs, codon_sub_probs)
+    aa_probs = neutral_aa_probs(
+        parent_codon_idxs,
+        codon_mut_probs,
+        codon_sub_probs,
+        multihit_model=multihit_model,
+    )
     mut_probs = mut_probs_of_aa_probs(parent_codon_idxs, aa_probs)
     return mut_probs
 
