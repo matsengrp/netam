@@ -1,3 +1,4 @@
+import multiprocessing as mp
 import os
 
 import torch
@@ -12,6 +13,15 @@ from netam.framework import (
 from netam.common import aa_idx_tensor_of_str_ambig, MAX_AMBIG_AA_IDX
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dnsm import DNSMBurrito, train_val_datasets_of_pcp_df
+
+
+def force_spawn():
+    """
+    Force the spawn start method for multiprocessing.
+
+    This is necessary to avoid conflicts with the internal OpenMP-based thread pool in PyTorch.
+    """
+    mp.set_start_method("spawn", force=True)
 
 
 def test_aa_idx_tensor_of_str_ambig():
@@ -36,6 +46,7 @@ def pcp_df():
 @pytest.fixture
 def dnsm_burrito(pcp_df):
     """Fixture that returns the DNSM Burrito object."""
+    force_spawn()
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
     train_dataset, val_dataset = train_val_datasets_of_pcp_df(pcp_df)
@@ -57,6 +68,7 @@ def dnsm_burrito(pcp_df):
 
 
 def test_parallel_branch_length_optimization(dnsm_burrito):
+    force_spawn()
     dataset = dnsm_burrito.val_dataset
     parallel_branch_lengths = dnsm_burrito.find_optimal_branch_lengths(dataset)
     branch_lengths = dnsm_burrito.serial_find_optimal_branch_lengths(dataset)
