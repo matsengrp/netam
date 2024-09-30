@@ -1,0 +1,73 @@
+import os
+
+import torch
+import pytest
+
+from netam.framework import (
+    crepe_exists,
+    load_crepe,
+    load_pcp_df,
+    add_shm_model_outputs_to_pcp_df,
+)
+from netam.common import aa_idx_tensor_of_str_ambig, MAX_AMBIG_AA_IDX
+from netam.models import TransformerBinarySelectionModelWiggleAct
+from netam.dasm import DASMBurrito,train_val_datasets_of_pcp_df
+
+
+#TODO code dup
+@pytest.fixture
+def pcp_df():
+    df = load_pcp_df(
+        "data/wyatt-10x-1p5m_pcp_2023-11-30_NI.first100.csv.gz",
+    )
+    df = add_shm_model_outputs_to_pcp_df(
+        df,
+        "data/cnn_joi_sml-shmoof_small",
+    )
+    return df
+
+
+@pytest.fixture
+def dasm_burrito(pcp_df):
+    """Fixture that returns the DNSM Burrito object."""
+    pcp_df["in_train"] = True
+    pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
+    train_dataset, val_dataset = train_val_datasets_of_pcp_df(pcp_df)
+
+    model = TransformerBinarySelectionModelWiggleAct(
+        nhead=2, d_model_per_head=4, dim_feedforward=256, layer_count=2, output_dim=20,
+    )
+
+    burrito = DASMBurrito(
+        train_dataset,
+        val_dataset,
+        model,
+        batch_size=32,
+        learning_rate=0.001,
+        min_learning_rate=0.0001,
+    )
+    burrito.joint_train(epochs=1, cycle_count=2, training_method="full", optimize_bl_first_cycle=False)
+    return burrito
+
+
+def test_parallel_branch_length_optimization(dasm_burrito):
+    dataset = dasm_burrito.val_dataset
+    parallel_branch_lengths = dasm_burrito.find_optimal_branch_lengths(dataset)
+    branch_lengths = dasm_burrito.serial_find_optimal_branch_lengths(dataset)
+    assert torch.allclose(branch_lengths, parallel_branch_lengths)
+
+
+def test_crepe_roundtrip(dasm_burrito):
+    os.makedirs("_ignore", exist_ok=True)
+    crepe_path = "_ignore/dasm"
+    dasm_burrito.save_crepe(crepe_path)
+    assert crepe_exists(crepe_path)
+    crepe = load_crepe(crepe_path)
+    model = crepe.model
+    assert isinstance(model, TransformerBinarySelectionModelWiggleAct)
+    assert dasm_burrito.model.hyperparameters == model.hyperparameters
+    model.to(dasm_burrito.device)
+    for t1, t2 in zip(
+        dasm_burrito.model.state_dict().values(), model.state_dict().values()
+    ):
+        assert torch.equal(t1, t2)
