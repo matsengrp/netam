@@ -33,6 +33,7 @@ from netam.sequences import (
     translate_sequences,
 )
 
+
 class DASMDataset(dnsm.DNSMDataset):
 
     # TODO should we rename this?
@@ -74,9 +75,7 @@ class DASMDataset(dnsm.DNSMDataset):
                 print(f"rates: {rates}")
                 print(f"subs_probs: {subs_probs}")
                 print(f"branch_length: {branch_length}")
-                raise ValueError(
-                    f"neutral_aa_probs is not finite: {neutral_aa_probs}"
-                )
+                raise ValueError(f"neutral_aa_probs is not finite: {neutral_aa_probs}")
 
             # Ensure that all values are positive before taking the log later
             neutral_aa_probs = clamp_probability(neutral_aa_probs)
@@ -134,13 +133,11 @@ def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
     return train_dataset, val_dataset
 
 
-
-
 class DASMBurrito(dnsm.DNSMBurrito):
 
     def prediction_pair_of_batch(self, batch):
-        """Get log neutral AA probabilities and log selection factors for a batch
-        of data."""
+        """Get log neutral AA probabilities and log selection factors for a batch of
+        data."""
         aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
         mask = batch["mask"].to(self.device)
         log_neutral_aa_probs = batch["log_neutral_aa_probs"].to(self.device)
@@ -182,15 +179,17 @@ class DASMBurrito(dnsm.DNSMBurrito):
             [predictions, torch.zeros_like(predictions[:, :, :1])], dim=-1
         )
         # Now we make predictions of mutation by taking everything off the diagonal.
-        #predictions[torch.arange(len(aa_parents_idxs)), aa_parents_idxs] = 0.0
+        # predictions[torch.arange(len(aa_parents_idxs)), aa_parents_idxs] = 0.0
 
         # Get batch size and sequence length
         batch_size, L, _ = predictions.shape
         # Create indices for each batch
         batch_indices = torch.arange(batch_size, device=self.device)
         # Zero out the diagonal by setting predictions[batch_idx, site_idx, aa_idx] to 0
-        predictions[batch_indices[:, None], torch.arange(L, device=self.device), aa_parents_idxs] = 0.0        
-                
+        predictions[
+            batch_indices[:, None], torch.arange(L, device=self.device), aa_parents_idxs
+        ] = 0.0
+
         predictions_of_mut = torch.sum(predictions, dim=-1)
         predictions_of_mut = predictions_of_mut.masked_select(mask)
         return self.bce_loss(predictions_of_mut, aa_subs_indicator)

@@ -11,10 +11,10 @@ from netam.framework import (
 )
 from netam.common import aa_idx_tensor_of_str_ambig, MAX_AMBIG_AA_IDX
 from netam.models import TransformerBinarySelectionModelWiggleAct
-from netam.dasm import DASMBurrito,train_val_datasets_of_pcp_df
+from netam.dasm import DASMBurrito, train_val_datasets_of_pcp_df
 
 
-#TODO code dup
+# TODO code dup
 @pytest.fixture
 def pcp_df():
     df = load_pcp_df(
@@ -35,7 +35,11 @@ def dasm_burrito(pcp_df):
     train_dataset, val_dataset = train_val_datasets_of_pcp_df(pcp_df)
 
     model = TransformerBinarySelectionModelWiggleAct(
-        nhead=2, d_model_per_head=4, dim_feedforward=256, layer_count=2, output_dim=20,
+        nhead=2,
+        d_model_per_head=4,
+        dim_feedforward=256,
+        layer_count=2,
+        output_dim=20,
     )
 
     burrito = DASMBurrito(
@@ -46,7 +50,9 @@ def dasm_burrito(pcp_df):
         learning_rate=0.001,
         min_learning_rate=0.0001,
     )
-    burrito.joint_train(epochs=1, cycle_count=2, training_method="full", optimize_bl_first_cycle=False)
+    burrito.joint_train(
+        epochs=1, cycle_count=2, training_method="full", optimize_bl_first_cycle=False
+    )
     return burrito
 
 
