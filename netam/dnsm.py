@@ -272,6 +272,7 @@ class DNSMDataset(Dataset):
         self.all_subs_probs = self.all_subs_probs.to(device)
 
 
+# TODO second step. package this inside of DNSMDataset as a class method.
 def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
     """Perform a train-val split based on a "in_train" column.
 
