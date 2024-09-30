@@ -16,10 +16,10 @@ from netam.dnsm import DNSMBurrito, train_val_datasets_of_pcp_df
 
 
 def force_spawn():
-    """
-    Force the spawn start method for multiprocessing.
+    """Force the spawn start method for multiprocessing.
 
-    This is necessary to avoid conflicts with the internal OpenMP-based thread pool in PyTorch.
+    This is necessary to avoid conflicts with the internal OpenMP-based thread pool in
+    PyTorch.
     """
     mp.set_start_method("spawn", force=True)
 
