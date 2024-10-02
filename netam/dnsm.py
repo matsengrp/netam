@@ -55,7 +55,10 @@ class DNSMDataset(Dataset):
         self.nt_children = nt_children
         self.all_rates = all_rates
         self.all_subs_probs = all_subs_probs
-        self.multihit_model = multihit_model
+        self.multihit_model = copy.deepcopy(multihit_model)
+        if multihit_model is not None:
+            # We want these parameters to act like fixed data
+            self.multihit_model.values.requires_grad_(False)
 
         assert len(self.nt_parents) == len(self.nt_children)
         pcp_count = len(self.nt_parents)
@@ -147,7 +150,7 @@ class DNSMDataset(Dataset):
             self.all_rates.copy(),
             self.all_subs_probs.copy(),
             self._branch_lengths.copy(),
-            multihit_model=self.multihit_model,
+            multihit_model=copy.deepcopy(self.multihit_model),
         )
         return new_dataset
 
@@ -164,7 +167,7 @@ class DNSMDataset(Dataset):
             self.all_rates[indices],
             self.all_subs_probs[indices],
             self._branch_lengths[indices],
-            multihit_model=self.multihit_model,
+            multihit_model=copy.deepcopy(self.multihit_model),
         )
         return new_dataset
 
@@ -426,16 +429,16 @@ class DNSMBurrito(framework.Burrito):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         worker_count = min(mp.cpu_count() // 2, 10)
-        # The following can be used when one wants a better traceback.
-        burrito = DNSMBurrito(None, dataset, copy.deepcopy(self.model))
-        return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
-        # with mp.Pool(worker_count) as pool:
-        #     splits = dataset.split(worker_count)
-        #     results = pool.starmap(
-        #         worker_optimize_branch_length,
-        #         [(self.model, split, optimization_kwargs) for split in splits],
-        #     )
-        # return torch.cat(results)
+        # # The following can be used when one wants a better traceback.
+        # burrito = DNSMBurrito(None, dataset, copy.deepcopy(self.model))
+        # return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
+        with mp.Pool(worker_count) as pool:
+            splits = dataset.split(worker_count)
+            results = pool.starmap(
+                worker_optimize_branch_length,
+                [(self.model, split, optimization_kwargs) for split in splits],
+            )
+        return torch.cat(results)
 
     def to_crepe(self):
         training_hyperparameters = {
