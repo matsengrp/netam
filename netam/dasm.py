@@ -149,7 +149,7 @@ class DASMBurrito(dnsm.DNSMBurrito):
     def predictions_of_pair(self, log_neutral_aa_probs, log_selection_factors):
         # Take the product of the neutral mutation probabilities and the selection factors.
         # NOTE each of these now have last dimension of 20
-        # this is p_{j, a} * f_{j, a} 
+        # this is p_{j, a} * f_{j, a}
         predictions = torch.exp(log_neutral_aa_probs + log_selection_factors)
         assert torch.isfinite(predictions).all()
         predictions = clamp_probability(predictions)

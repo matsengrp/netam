@@ -417,7 +417,8 @@ class DNSMBurrito(framework.Burrito):
         # return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
         our_optimize_branch_length = partial(
             worker_optimize_branch_length,
-            self.__class__,)
+            self.__class__,
+        )
         with mp.Pool(worker_count) as pool:
             splits = dataset.split(worker_count)
             results = pool.starmap(
