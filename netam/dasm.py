@@ -207,23 +207,3 @@ class DASMBurrito(dnsm.DNSMBurrito):
         selection_factors[torch.arange(len(parent_idxs)), parent_idxs] = 1.0
 
         return selection_factors
-
-    # We need to repeat this so that we use this worker_optimize_branch_length below.
-    def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
-        worker_count = min(mp.cpu_count() // 2, 10)
-        # The following can be used when one wants a better traceback.
-        # burrito = DNSMBurrito(None, dataset, copy.deepcopy(self.model))
-        # return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
-        with mp.Pool(worker_count) as pool:
-            splits = dataset.split(worker_count)
-            results = pool.starmap(
-                worker_optimize_branch_length,
-                [(self.model, split, optimization_kwargs) for split in splits],
-            )
-        return torch.cat(results)
-
-
-def worker_optimize_branch_length(model, dataset, optimization_kwargs):
-    """The worker used for parallel branch length optimization."""
-    burrito = DASMBurrito(None, dataset, copy.deepcopy(model))
-    return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)

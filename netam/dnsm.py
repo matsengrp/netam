@@ -9,6 +9,7 @@ We'll use these conventions:
 
 import copy
 import multiprocessing as mp
+from functools import partial
 
 import torch
 from torch.utils.data import Dataset
@@ -414,10 +415,13 @@ class DNSMBurrito(framework.Burrito):
         # The following can be used when one wants a better traceback.
         # burrito = DNSMBurrito(None, dataset, copy.deepcopy(self.model))
         # return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
+        our_optimize_branch_length = partial(
+            worker_optimize_branch_length,
+            self.__class__,)
         with mp.Pool(worker_count) as pool:
             splits = dataset.split(worker_count)
             results = pool.starmap(
-                worker_optimize_branch_length,
+                our_optimize_branch_length,
                 [(self.model, split, optimization_kwargs) for split in splits],
             )
         return torch.cat(results)
@@ -437,9 +441,9 @@ class DNSMBurrito(framework.Burrito):
         return framework.Crepe(encoder, self.model, training_hyperparameters)
 
 
-def worker_optimize_branch_length(model, dataset, optimization_kwargs):
+def worker_optimize_branch_length(burrito_class, model, dataset, optimization_kwargs):
     """The worker used for parallel branch length optimization."""
-    burrito = DNSMBurrito(None, dataset, copy.deepcopy(model))
+    burrito = burrito_class(None, dataset, copy.deepcopy(model))
     return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
 
 
