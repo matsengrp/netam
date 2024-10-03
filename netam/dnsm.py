@@ -57,7 +57,8 @@ class DNSMDataset(Dataset):
         self.all_subs_probs = all_subs_probs
         self.multihit_model = copy.deepcopy(multihit_model)
         if multihit_model is not None:
-            # We want these parameters to act like fixed data
+            # We want these parameters to act like fixed data. This is essential
+            # for multithreaded branch length optimization to work.
             self.multihit_model.values.requires_grad_(False)
 
         assert len(self.nt_parents) == len(self.nt_children)
