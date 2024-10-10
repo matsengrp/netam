@@ -62,14 +62,36 @@ def apply_multihit_correction(
         torch.Tensor: A (N, 4, 4, 4) shaped tensor containing the log probabilities of mutating to each possible
             target codon, for each of the N parent codons, after applying the hit class factors.
     """
-    per_parent_hit_class = parent_specific_hit_classes(parent_codon_idxs)
-    corrections = torch.cat([torch.tensor([0.0]), hit_class_factors])
-    reshaped_corrections = corrections[per_parent_hit_class]
-    unnormalized_corrected_logprobs = codon_logprobs + reshaped_corrections
-    normalizations = torch.logsumexp(
-        unnormalized_corrected_logprobs, dim=[1, 2, 3], keepdim=True
-    )
-    return unnormalized_corrected_logprobs - normalizations
+    # TODO: This is for testing
+    return codon_logprobs
+    # per_parent_hit_class = parent_specific_hit_classes(parent_codon_idxs)
+    # # corrections = torch.cat([torch.tensor([0.0]), hit_class_factors])
+    # corrections = torch.tensor([0.0, 0.0, 0.0, 0.0])
+    # reshaped_corrections = corrections[per_parent_hit_class]
+    # unnormalized_corrected_logprobs = codon_logprobs + reshaped_corrections
+    # normalizations = torch.logsumexp(
+    #     unnormalized_corrected_logprobs, dim=[1, 2, 3], keepdim=True
+    # )
+    # result = unnormalized_corrected_logprobs - normalizations
+    # if torch.any(torch.isnan(result)):
+    #     print("NAN found in multihit correction application")
+    #     assert False
+    # return result
+
+
+class MultihitApplier:
+    def __init__(self, hit_class_factors, device=None):
+        # self.corrections = hit_class_factors.to(device)
+        # TODO This is for testing
+        self.corrections = torch.tensor([0.0, 0.0, 0.0]).to(device)
+
+    def to(self, device):
+        self.corrections = self.corrections.to(device)
+        return self
+
+    def __call__(self, parent_codon_idxs, codon_logprobs):
+        return codon_logprobs
+        # return apply_multihit_correction(parent_codon_idxs, codon_logprobs, self.corrections)
 
 
 def hit_class_probs_tensor(

@@ -17,6 +17,7 @@ from torch import Tensor, optim
 from netam.sequences import CODON_AA_INDICATOR_MATRIX
 
 import netam.sequences as sequences
+torch.autograd.set_detect_anomaly(True)
 
 
 def normalize_sub_probs(parent_idxs: Tensor, sub_probs: Tensor) -> Tensor:
@@ -499,6 +500,7 @@ def optimize_branch_length(
 
     step_idx = 0
 
+    nan_issue = False
     for step_idx in range(max_optimization_steps):
         # For some PCPs, the optimizer works very hard optimizing very tiny branch lengths.
         if log_branch_length < log_branch_length_lower_threshold:
@@ -513,7 +515,14 @@ def optimize_branch_length(
         loss.backward()
         torch.nn.utils.clip_grad_norm_([log_branch_length], max_norm=5.0)
         optimizer.step()
-        assert not torch.isnan(log_branch_length)
+        if not torch.isnan(log_branch_length):
+            print("branch length optimization resulted in NAN, previous log branch length:", prev_log_branch_length)
+            if np.isclose(prev_log_branch_length.detach().numpy(), 0):
+                log_branch_length = prev_log_branch_length
+                nan_issue = True
+                break
+            else:
+                assert False
 
         change_in_log_branch_length = torch.abs(
             log_branch_length - prev_log_branch_length
@@ -523,7 +532,7 @@ def optimize_branch_length(
 
         prev_log_branch_length = log_branch_length.clone()
 
-    if step_idx == max_optimization_steps - 1:
+    if step_idx == max_optimization_steps - 1 or nan_issue:
         print(
             f"Warning: optimization did not converge after {max_optimization_steps} steps; log branch length is {log_branch_length.detach().item()}"
         )

@@ -56,9 +56,9 @@ class DNSMDataset(Dataset):
         self.all_rates = all_rates
         self.all_subs_probs = all_subs_probs
         self.multihit_model = copy.deepcopy(multihit_model)
-        if multihit_model is not None:
-            # We want these parameters to act like fixed data
-            self.multihit_model.values.requires_grad_(False)
+        # if multihit_model is not None:
+            # # We want these parameters to act like fixed data
+            # self.multihit_model.values.requires_grad_(False)
 
         assert len(self.nt_parents) == len(self.nt_children)
         pcp_count = len(self.nt_parents)
@@ -281,6 +281,8 @@ class DNSMDataset(Dataset):
         self.log_neutral_aa_mut_probs = self.log_neutral_aa_mut_probs.to(device)
         self.all_rates = self.all_rates.to(device)
         self.all_subs_probs = self.all_subs_probs.to(device)
+        if self.multihit_model is not None:
+            self.multihit_model = self.multihit_model.to(device)
 
 
 def train_val_datasets_of_pcp_df(
@@ -429,16 +431,17 @@ class DNSMBurrito(framework.Burrito):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         worker_count = min(mp.cpu_count() // 2, 10)
-        # # The following can be used when one wants a better traceback.
-        # burrito = DNSMBurrito(None, dataset, copy.deepcopy(self.model))
-        # return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
-        with mp.Pool(worker_count) as pool:
-            splits = dataset.split(worker_count)
-            results = pool.starmap(
-                worker_optimize_branch_length,
-                [(self.model, split, optimization_kwargs) for split in splits],
-            )
-        return torch.cat(results)
+        # The following can be used when one wants a better traceback.
+        burrito = DNSMBurrito(None, dataset, copy.deepcopy(self.model))
+        return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
+        # TODO reenable
+        # with mp.Pool(worker_count) as pool:
+        #     splits = dataset.split(worker_count)
+        #     results = pool.starmap(
+        #         worker_optimize_branch_length,
+        #         [(self.model, split, optimization_kwargs) for split in splits],
+        #     )
+        # return torch.cat(results)
 
     def to_crepe(self):
         training_hyperparameters = {
