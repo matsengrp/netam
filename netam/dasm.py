@@ -134,8 +134,9 @@ def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
 def zero_predictions_along_diagonal(predictions, aa_parents_idxs):
     """Zero out the diagonal of a batch of predictions.
 
-    We do this so that we can sum then have the same type of predictions as for
-    the DNSM."""
+    We do this so that we can sum then have the same type of predictions as for the
+    DNSM.
+    """
     # We would like to do
     # predictions[torch.arange(len(aa_parents_idxs)), aa_parents_idxs] = 0.0
     # but we have a batch dimension. Thus the following.
@@ -199,7 +200,7 @@ class DASMBurrito(dnsm.DNSMBurrito):
         predictions = torch.cat(
             [predictions, torch.zeros_like(predictions[:, :, :1])], dim=-1
         )
-        
+
         predictions = zero_predictions_along_diagonal(predictions, aa_parents_idxs)
 
         predictions_of_mut = torch.sum(predictions, dim=-1)

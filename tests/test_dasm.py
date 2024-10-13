@@ -10,7 +10,11 @@ from netam.framework import (
     add_shm_model_outputs_to_pcp_df,
 )
 from netam.models import TransformerBinarySelectionModelWiggleAct
-from netam.dasm import DASMBurrito, train_val_datasets_of_pcp_df, zero_predictions_along_diagonal
+from netam.dasm import (
+    DASMBurrito,
+    train_val_datasets_of_pcp_df,
+    zero_predictions_along_diagonal,
+)
 
 
 # TODO code dup
@@ -87,7 +91,9 @@ def test_zero_diagonal(dasm_burrito):
     )
     aa_parents_idxs = batch["aa_parents_idxs"].to(dasm_burrito.device)
     zeroed_predictions = predictions.clone()
-    zeroed_predictions = zero_predictions_along_diagonal(zeroed_predictions, aa_parents_idxs)
+    zeroed_predictions = zero_predictions_along_diagonal(
+        zeroed_predictions, aa_parents_idxs
+    )
     L = predictions.shape[1]
     for batch_idx in range(2):
         for i in range(L):
@@ -95,4 +101,7 @@ def test_zero_diagonal(dasm_burrito):
                 if j == aa_parents_idxs[batch_idx, i]:
                     assert zeroed_predictions[batch_idx, i, j] == 0.0
                 else:
-                    assert zeroed_predictions[batch_idx, i, j] == predictions[batch_idx, i, j]
+                    assert (
+                        zeroed_predictions[batch_idx, i, j]
+                        == predictions[batch_idx, i, j]
+                    )
