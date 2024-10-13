@@ -131,6 +131,25 @@ def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
     return train_dataset, val_dataset
 
 
+def zero_predictions_along_diagonal(predictions, aa_parents_idxs):
+    """Zero out the diagonal of a batch of predictions.
+
+    We need to do this to avoid predicting the same amino acid as the parent."""
+    # We would like to do
+    # predictions[torch.arange(len(aa_parents_idxs)), aa_parents_idxs] = 0.0
+    # but we have a batch dimension. Thus the following.
+
+    batch_size, L, _ = predictions.shape
+    batch_indices = torch.arange(batch_size, device=predictions.device)
+    predictions[
+        batch_indices[:, None],
+        torch.arange(L, device=predictions.device),
+        aa_parents_idxs,
+    ] = 0.0
+
+    return predictions
+
+
 class DASMBurrito(dnsm.DNSMBurrito):
 
     def prediction_pair_of_batch(self, batch):
@@ -179,20 +198,8 @@ class DASMBurrito(dnsm.DNSMBurrito):
         predictions = torch.cat(
             [predictions, torch.zeros_like(predictions[:, :, :1])], dim=-1
         )
-        # Now we make predictions of mutation by taking everything off the diagonal.
-        # We would like to do
-        # predictions[torch.arange(len(aa_parents_idxs)), aa_parents_idxs] = 0.0
-        # but we have a batch dimension. Thus the following.
-
-        # Get batch size and sequence length
-        batch_size, L, _ = predictions.shape
-        # Create indices for each batch
-        batch_indices = torch.arange(batch_size, device=self.device)
-        # Zero out the diagonal by setting predictions[batch_idx, site_idx, aa_idx] to 0
-        # TODO play around with this in the notebook? Or just print things?
-        predictions[
-            batch_indices[:, None], torch.arange(L, device=self.device), aa_parents_idxs
-        ] = 0.0
+        
+        predictions = zero_predictions_along_diagonal(predictions, aa_parents_idxs)
 
         predictions_of_mut = torch.sum(predictions, dim=-1)
         predictions_of_mut = predictions_of_mut.masked_select(mask)

@@ -9,13 +9,12 @@ from netam.framework import (
     load_pcp_df,
     add_shm_model_outputs_to_pcp_df,
 )
-from netam.common import aa_idx_tensor_of_str_ambig, MAX_AMBIG_AA_IDX
 from netam.models import TransformerBinarySelectionModelWiggleAct
-from netam.dasm import DASMBurrito, train_val_datasets_of_pcp_df
+from netam.dasm import DASMBurrito, train_val_datasets_of_pcp_df, zero_predictions_along_diagonal
 
 
 # TODO code dup
-@pytest.fixture
+@pytest.fixture(scope="module")
 def pcp_df():
     df = load_pcp_df(
         "data/wyatt-10x-1p5m_pcp_2023-11-30_NI.first100.csv.gz",
@@ -27,7 +26,7 @@ def pcp_df():
     return df
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def dasm_burrito(pcp_df):
     """Fixture that returns the DNSM Burrito object."""
     pcp_df["in_train"] = True
@@ -77,3 +76,23 @@ def test_crepe_roundtrip(dasm_burrito):
         dasm_burrito.model.state_dict().values(), model.state_dict().values()
     ):
         assert torch.equal(t1, t2)
+
+
+def test_zero_diagonal(dasm_burrito):
+    batch = dasm_burrito.val_dataset[0:2]
+    predictions = dasm_burrito.predictions_of_batch(batch)
+    # TODO if we change this elsewhere, fix here
+    predictions = torch.cat(
+        [predictions, torch.zeros_like(predictions[:, :, :1])], dim=-1
+    )
+    aa_parents_idxs = batch["aa_parents_idxs"].to(dasm_burrito.device)
+    zeroed_predictions = predictions.clone()
+    zeroed_predictions = zero_predictions_along_diagonal(zeroed_predictions, aa_parents_idxs)
+    L = predictions.shape[1]
+    for batch_idx in range(2):
+        for i in range(L):
+            for j in range(20):
+                if j == aa_parents_idxs[batch_idx, i]:
+                    assert zeroed_predictions[batch_idx, i, j] == 0.0
+                else:
+                    assert zeroed_predictions[batch_idx, i, j] == predictions[batch_idx, i, j]

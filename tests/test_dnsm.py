@@ -21,7 +21,7 @@ def test_aa_idx_tensor_of_str_ambig():
     assert torch.equal(output, expected_output)
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def pcp_df():
     df = load_pcp_df(
         "data/wyatt-10x-1p5m_pcp_2023-11-30_NI.first100.csv.gz",
@@ -33,7 +33,7 @@ def pcp_df():
     return df
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def dnsm_burrito(pcp_df):
     """Fixture that returns the DNSM Burrito object."""
     pcp_df["in_train"] = True
