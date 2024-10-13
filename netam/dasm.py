@@ -134,7 +134,8 @@ def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
 def zero_predictions_along_diagonal(predictions, aa_parents_idxs):
     """Zero out the diagonal of a batch of predictions.
 
-    We need to do this to avoid predicting the same amino acid as the parent."""
+    We do this so that we can sum then have the same type of predictions as for
+    the DNSM."""
     # We would like to do
     # predictions[torch.arange(len(aa_parents_idxs)), aa_parents_idxs] = 0.0
     # but we have a batch dimension. Thus the following.
