@@ -196,6 +196,7 @@ class DASMBurrito(dnsm.DNSMBurrito):
 
         predictions_of_mut = torch.sum(predictions, dim=-1)
         predictions_of_mut = predictions_of_mut.masked_select(mask)
+        predictions_of_mut = clamp_probability(predictions_of_mut)
         return self.bce_loss(predictions_of_mut, aa_subs_indicator)
 
     def build_selection_matrix_from_parent(self, parent: str):
