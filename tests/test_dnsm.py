@@ -6,8 +6,6 @@ import pytest
 from netam.framework import (
     crepe_exists,
     load_crepe,
-    load_pcp_df,
-    add_shm_model_outputs_to_pcp_df,
 )
 from netam.common import aa_idx_tensor_of_str_ambig, MAX_AMBIG_AA_IDX
 from netam.models import TransformerBinarySelectionModelWiggleAct
@@ -19,18 +17,6 @@ def test_aa_idx_tensor_of_str_ambig():
     expected_output = torch.tensor([0, 1, MAX_AMBIG_AA_IDX], dtype=torch.int)
     output = aa_idx_tensor_of_str_ambig(input_seq)
     assert torch.equal(output, expected_output)
-
-
-@pytest.fixture(scope="module")
-def pcp_df():
-    df = load_pcp_df(
-        "data/wyatt-10x-1p5m_pcp_2023-11-30_NI.first100.csv.gz",
-    )
-    df = add_shm_model_outputs_to_pcp_df(
-        df,
-        "data/cnn_joi_sml-shmoof_small",
-    )
-    return df
 
 
 @pytest.fixture(scope="module")
