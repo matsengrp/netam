@@ -70,7 +70,6 @@ def test_crepe_roundtrip(dasm_burrito):
 def test_zero_diagonal(dasm_burrito):
     batch = dasm_burrito.val_dataset[0:2]
     predictions = dasm_burrito.predictions_of_batch(batch)
-    # TODO if we change this elsewhere, fix here
     predictions = torch.cat(
         [predictions, torch.zeros_like(predictions[:, :, :1])], dim=-1
     )

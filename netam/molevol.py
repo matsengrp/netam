@@ -335,7 +335,6 @@ def build_codon_mutsel(
     return codon_mutsel, sums_too_big
 
 
-# TODO consider a nice name
 def neutral_aa_probs(
     parent_codon_idxs: Tensor,
     codon_mut_probs: Tensor,

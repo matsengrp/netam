@@ -159,10 +159,13 @@ class DASMBurrito(dnsm.DNSMBurrito):
         aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
         aa_subs_indicator = aa_subs_indicator.masked_select(mask)
         predictions = self.predictions_of_batch(batch)
-        # add one entry, zero, to the last dimension of the predictions tensor
-        # to handle the ambiguous amino acids
-        # TODO perhaps we can do better: perhaps we can be confident in our masking that is going to take care of this if we re assign all the 20s to 0s.
-        # OR should we just always output a 21st dimension?
+        # Add one entry, zero, to the last dimension of the predictions tensor
+        # to handle the ambiguous amino acids. This is the conservative choice.
+        # It might be faster to reassign all the 20s to 0s if we are confident
+        # in our masking. Perhaps we should always output a 21st dimension
+        # for the ambiguous amino acids (see issue #16).
+        # If we change something here we should also change the test code
+        # in test_dasm.py::test_zero_diagonal.
         predictions = torch.cat(
             [predictions, torch.zeros_like(predictions[:, :, :1])], dim=-1
         )
