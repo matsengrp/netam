@@ -9,7 +9,7 @@ from netam.framework import (
 )
 from netam.common import aa_idx_tensor_of_str_ambig, MAX_AMBIG_AA_IDX
 from netam.models import TransformerBinarySelectionModelWiggleAct
-from netam.dnsm import DNSMBurrito, train_val_datasets_of_pcp_df
+from netam.dnsm import DNSMBurrito, DNSMDataset
 
 
 def test_aa_idx_tensor_of_str_ambig():
@@ -24,7 +24,7 @@ def dnsm_burrito(pcp_df):
     """Fixture that returns the DNSM Burrito object."""
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
-    train_dataset, val_dataset = train_val_datasets_of_pcp_df(pcp_df)
+    train_dataset, val_dataset = DNSMDataset.train_val_datasets_of_pcp_df(pcp_df)
 
     model = TransformerBinarySelectionModelWiggleAct(
         nhead=2, d_model_per_head=4, dim_feedforward=256, layer_count=2

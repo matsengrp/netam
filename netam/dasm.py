@@ -111,26 +111,6 @@ class DASMDataset(dnsm.DNSMDataset):
         self.all_subs_probs = self.all_subs_probs.to(device)
 
 
-# TODO second step. code dup: class method as in dnsm.py
-def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
-    """Perform a train-val split based on a "in_train" column.
-
-    Stays here so it can be used in tests.
-    """
-    train_df = pcp_df[pcp_df["in_train"]].reset_index(drop=True)
-    val_df = pcp_df[~pcp_df["in_train"]].reset_index(drop=True)
-    val_dataset = DASMDataset.of_pcp_df(
-        val_df, branch_length_multiplier=branch_length_multiplier
-    )
-    if len(train_df) == 0:
-        return None, val_dataset
-    # else:
-    train_dataset = DASMDataset.of_pcp_df(
-        train_df, branch_length_multiplier=branch_length_multiplier
-    )
-    return train_dataset, val_dataset
-
-
 def zero_predictions_along_diagonal(predictions, aa_parents_idxs):
     """Zero out the diagonal of a batch of predictions.
 

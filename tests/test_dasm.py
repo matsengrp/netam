@@ -10,7 +10,7 @@ from netam.framework import (
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dasm import (
     DASMBurrito,
-    train_val_datasets_of_pcp_df,
+    DASMDataset,
     zero_predictions_along_diagonal,
 )
 
@@ -20,7 +20,7 @@ def dasm_burrito(pcp_df):
     """Fixture that returns the DNSM Burrito object."""
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
-    train_dataset, val_dataset = train_val_datasets_of_pcp_df(pcp_df)
+    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(pcp_df)
 
     model = TransformerBinarySelectionModelWiggleAct(
         nhead=2,

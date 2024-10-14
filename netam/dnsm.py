@@ -135,6 +135,28 @@ class DNSMDataset(Dataset):
             branch_length_multiplier=branch_length_multiplier,
         )
 
+    @classmethod
+    def train_val_datasets_of_pcp_df(cls, pcp_df, branch_length_multiplier=5.0):
+        """Perform a train-val split based on the 'in_train' column.
+
+        This is a class method so it works for subclasses.
+        """
+        train_df = pcp_df[pcp_df["in_train"]].reset_index(drop=True)
+        val_df = pcp_df[~pcp_df["in_train"]].reset_index(drop=True)
+
+        val_dataset = cls.of_pcp_df(
+            val_df, branch_length_multiplier=branch_length_multiplier
+        )
+
+        if len(train_df) == 0:
+            return None, val_dataset
+        # else:
+        train_dataset = cls.of_pcp_df(
+            train_df, branch_length_multiplier=branch_length_multiplier
+        )
+
+        return train_dataset, val_dataset
+
     def clone(self):
         """Make a deep copy of the dataset."""
         new_dataset = self.__class__(
@@ -272,25 +294,6 @@ class DNSMDataset(Dataset):
         self.all_rates = self.all_rates.to(device)
         self.all_subs_probs = self.all_subs_probs.to(device)
 
-
-# TODO second step. package this inside of DNSMDataset as a class method.
-def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
-    """Perform a train-val split based on a "in_train" column.
-
-    Stays here so it can be used in tests.
-    """
-    train_df = pcp_df[pcp_df["in_train"]].reset_index(drop=True)
-    val_df = pcp_df[~pcp_df["in_train"]].reset_index(drop=True)
-    val_dataset = DNSMDataset.of_pcp_df(
-        val_df, branch_length_multiplier=branch_length_multiplier
-    )
-    if len(train_df) == 0:
-        return None, val_dataset
-    # else:
-    train_dataset = DNSMDataset.of_pcp_df(
-        train_df, branch_length_multiplier=branch_length_multiplier
-    )
-    return train_dataset, val_dataset
 
 
 class DNSMBurrito(framework.Burrito):
