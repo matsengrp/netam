@@ -1,8 +1,5 @@
 """Here we define a mutation-selection model that is per-amino-acid."""
 
-import copy
-import multiprocessing as mp
-
 import torch
 import torch.nn.functional as F
 
@@ -13,31 +10,20 @@ torch.set_num_threads(1)
 import numpy as np
 import pandas as pd
 
-from tqdm import tqdm
-
 from netam.common import (
-    MAX_AMBIG_AA_IDX,
-    aa_idx_tensor_of_str_ambig,
     clamp_probability,
-    aa_mask_tensor_of,
-    stack_heterogeneous,
 )
 import netam.dnsm as dnsm
-import netam.framework as framework
-from netam.hyper_burrito import HyperBurrito
 import netam.molevol as molevol
 import netam.sequences as sequences
 from netam.sequences import (
-    aa_subs_indicator_tensor_of,
     translate_sequence,
-    translate_sequences,
 )
 
 
 class DASMDataset(dnsm.DNSMDataset):
 
-    # TODO should we rename this?
-    def update_neutral_aa_mut_probs(self):
+    def update_neutral_probs(self):
         neutral_aa_probs_l = []
 
         for nt_parent, mask, rates, branch_length, subs_probs in zip(

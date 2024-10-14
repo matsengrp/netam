@@ -90,7 +90,7 @@ class DNSMDataset(Dataset):
         assert torch.max(self.aa_parents_idxs) <= MAX_AMBIG_AA_IDX
 
         self._branch_lengths = branch_lengths
-        self.update_neutral_aa_mut_probs()
+        self.update_neutral_probs()
 
     @classmethod
     def of_seriess(
@@ -204,7 +204,7 @@ class DNSMDataset(Dataset):
         )
         assert torch.all(torch.isfinite(new_branch_lengths) & (new_branch_lengths > 0))
         self._branch_lengths = new_branch_lengths
-        self.update_neutral_aa_mut_probs()
+        self.update_neutral_probs()
 
     def export_branch_lengths(self, out_csv_path):
         pd.DataFrame({"branch_length": self.branch_lengths}).to_csv(
@@ -216,7 +216,14 @@ class DNSMDataset(Dataset):
             pd.read_csv(in_csv_path)["branch_length"].values
         )
 
-    def update_neutral_aa_mut_probs(self):
+    def update_neutral_probs(self):
+        """Update the neutral mutation probabilities for the dataset.
+        
+        This is a somewhat vague name, but that's because it includes both the
+        cases of the DNSM (in which case it's neutral probabilities of any
+        nonsynonymous mutation) and the DASM (in which case it's the neutral
+        probabilities of mutation to the various amino acids).
+        """
         neutral_aa_mut_prob_l = []
 
         for nt_parent, mask, rates, branch_length, subs_probs in zip(
