@@ -134,9 +134,9 @@ class DASMBurrito(dnsm.DNSMBurrito):
         return log_neutral_aa_probs, log_selection_factors
 
     def predictions_of_pair(self, log_neutral_aa_probs, log_selection_factors):
-        # Take the product of the neutral mutation probabilities and the selection factors.
-        # NOTE each of these now have last dimension of 20
-        # this is p_{j, a} * f_{j, a}
+        # Take the product of the neutral mutation probabilities and the
+        # selection factors, namely p_{j, a} * f_{j, a}.
+        # In contrast to a DNSM, each of these now have last dimension of 20.
         predictions = torch.exp(log_neutral_aa_probs + log_selection_factors)
         assert torch.isfinite(predictions).all()
         predictions = clamp_probability(predictions)
@@ -172,6 +172,9 @@ class DASMBurrito(dnsm.DNSMBurrito):
 
         predictions = zero_predictions_along_diagonal(predictions, aa_parents_idxs)
 
+        # After zeroing out the diagonal, we are effectively summing over the
+        # off-diagonal elements to get the probability of a nonsynonymous
+        # mutation.
         predictions_of_mut = torch.sum(predictions, dim=-1)
         predictions_of_mut = predictions_of_mut.masked_select(mask)
         predictions_of_mut = clamp_probability(predictions_of_mut)
