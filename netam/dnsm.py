@@ -9,6 +9,7 @@ We'll use these conventions:
 
 import copy
 import multiprocessing as mp
+from functools import partial
 
 import torch
 from torch.utils.data import Dataset
@@ -89,7 +90,7 @@ class DNSMDataset(Dataset):
         assert torch.max(self.aa_parents_idxs) <= MAX_AMBIG_AA_IDX
 
         self._branch_lengths = branch_lengths
-        self.update_neutral_aa_mut_probs()
+        self.update_neutral_probs()
 
     @classmethod
     def of_seriess(
@@ -134,9 +135,31 @@ class DNSMDataset(Dataset):
             branch_length_multiplier=branch_length_multiplier,
         )
 
+    @classmethod
+    def train_val_datasets_of_pcp_df(cls, pcp_df, branch_length_multiplier=5.0):
+        """Perform a train-val split based on the 'in_train' column.
+
+        This is a class method so it works for subclasses.
+        """
+        train_df = pcp_df[pcp_df["in_train"]].reset_index(drop=True)
+        val_df = pcp_df[~pcp_df["in_train"]].reset_index(drop=True)
+
+        val_dataset = cls.of_pcp_df(
+            val_df, branch_length_multiplier=branch_length_multiplier
+        )
+
+        if len(train_df) == 0:
+            return None, val_dataset
+        # else:
+        train_dataset = cls.of_pcp_df(
+            train_df, branch_length_multiplier=branch_length_multiplier
+        )
+
+        return train_dataset, val_dataset
+
     def clone(self):
         """Make a deep copy of the dataset."""
-        new_dataset = DNSMDataset(
+        new_dataset = self.__class__(
             self.nt_parents,
             self.nt_children,
             self.all_rates.copy(),
@@ -152,7 +175,7 @@ class DNSMDataset(Dataset):
         depends on `indices`: if `indices` is an iterable of integers, then we
         make a deep copy, otherwise we use slices to make a shallow copy.
         """
-        new_dataset = DNSMDataset(
+        new_dataset = self.__class__(
             self.nt_parents[indices].reset_index(drop=True),
             self.nt_children[indices].reset_index(drop=True),
             self.all_rates[indices],
@@ -181,7 +204,7 @@ class DNSMDataset(Dataset):
         )
         assert torch.all(torch.isfinite(new_branch_lengths) & (new_branch_lengths > 0))
         self._branch_lengths = new_branch_lengths
-        self.update_neutral_aa_mut_probs()
+        self.update_neutral_probs()
 
     def export_branch_lengths(self, out_csv_path):
         pd.DataFrame({"branch_length": self.branch_lengths}).to_csv(
@@ -193,7 +216,14 @@ class DNSMDataset(Dataset):
             pd.read_csv(in_csv_path)["branch_length"].values
         )
 
-    def update_neutral_aa_mut_probs(self):
+    def update_neutral_probs(self):
+        """Update the neutral mutation probabilities for the dataset.
+
+        This is a somewhat vague name, but that's because it includes both the cases of
+        the DNSM (in which case it's neutral probabilities of any nonsynonymous
+        mutation) and the DASM (in which case it's the neutral probabilities of mutation
+        to the various amino acids).
+        """
         neutral_aa_mut_prob_l = []
 
         for nt_parent, mask, rates, branch_length, subs_probs in zip(
@@ -270,25 +300,6 @@ class DNSMDataset(Dataset):
         self.log_neutral_aa_mut_probs = self.log_neutral_aa_mut_probs.to(device)
         self.all_rates = self.all_rates.to(device)
         self.all_subs_probs = self.all_subs_probs.to(device)
-
-
-def train_val_datasets_of_pcp_df(pcp_df, branch_length_multiplier=5.0):
-    """Perform a train-val split based on a "in_train" column.
-
-    Stays here so it can be used in tests.
-    """
-    train_df = pcp_df[pcp_df["in_train"]].reset_index(drop=True)
-    val_df = pcp_df[~pcp_df["in_train"]].reset_index(drop=True)
-    val_dataset = DNSMDataset.of_pcp_df(
-        val_df, branch_length_multiplier=branch_length_multiplier
-    )
-    if len(train_df) == 0:
-        return None, val_dataset
-    # else:
-    train_dataset = DNSMDataset.of_pcp_df(
-        train_df, branch_length_multiplier=branch_length_multiplier
-    )
-    return train_dataset, val_dataset
 
 
 class DNSMBurrito(framework.Burrito):
@@ -413,10 +424,14 @@ class DNSMBurrito(framework.Burrito):
         # The following can be used when one wants a better traceback.
         # burrito = DNSMBurrito(None, dataset, copy.deepcopy(self.model))
         # return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
+        our_optimize_branch_length = partial(
+            worker_optimize_branch_length,
+            self.__class__,
+        )
         with mp.Pool(worker_count) as pool:
             splits = dataset.split(worker_count)
             results = pool.starmap(
-                worker_optimize_branch_length,
+                our_optimize_branch_length,
                 [(self.model, split, optimization_kwargs) for split in splits],
             )
         return torch.cat(results)
@@ -436,9 +451,9 @@ class DNSMBurrito(framework.Burrito):
         return framework.Crepe(encoder, self.model, training_hyperparameters)
 
 
-def worker_optimize_branch_length(model, dataset, optimization_kwargs):
+def worker_optimize_branch_length(burrito_class, model, dataset, optimization_kwargs):
     """The worker used for parallel branch length optimization."""
-    burrito = DNSMBurrito(None, dataset, copy.deepcopy(model))
+    burrito = burrito_class(None, dataset, copy.deepcopy(model))
     return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
 
 
