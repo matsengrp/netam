@@ -295,7 +295,6 @@ class DNSMDataset(Dataset):
         self.all_subs_probs = self.all_subs_probs.to(device)
 
 
-
 class DNSMBurrito(framework.Burrito):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
