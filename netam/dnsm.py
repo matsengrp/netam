@@ -218,11 +218,11 @@ class DNSMDataset(Dataset):
 
     def update_neutral_probs(self):
         """Update the neutral mutation probabilities for the dataset.
-        
-        This is a somewhat vague name, but that's because it includes both the
-        cases of the DNSM (in which case it's neutral probabilities of any
-        nonsynonymous mutation) and the DASM (in which case it's the neutral
-        probabilities of mutation to the various amino acids).
+
+        This is a somewhat vague name, but that's because it includes both the cases of
+        the DNSM (in which case it's neutral probabilities of any nonsynonymous
+        mutation) and the DASM (in which case it's the neutral probabilities of mutation
+        to the various amino acids).
         """
         neutral_aa_mut_prob_l = []
 
