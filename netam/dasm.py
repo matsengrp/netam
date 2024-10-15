@@ -210,7 +210,7 @@ class DASMBurrito(dnsm.DNSMBurrito):
         # aa_subs_indicator is 0.
         subs_mask = aa_subs_indicator.bool()
         # Mask csp_predictions over columns.
-        csp_predictions = predictions[subs_mask].view(-1, 21)
+        csp_predictions = predictions[subs_mask]
         csp_targets = aa_children_idxs.masked_select(subs_mask)
         csp_loss = self.cce_loss(csp_predictions, csp_targets)
 
