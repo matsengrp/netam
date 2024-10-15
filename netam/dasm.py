@@ -81,6 +81,7 @@ class DASMDataset(dnsm.DNSMDataset):
     def __getitem__(self, idx):
         return {
             "aa_parents_idxs": self.aa_parents_idxs[idx],
+            "aa_children_idxs": self.aa_children_idxs[idx],
             "subs_indicator": self.aa_subs_indicator_tensor[idx],
             "mask": self.mask[idx],
             "log_neutral_aa_probs": self.log_neutral_aa_probs[idx],
@@ -90,6 +91,7 @@ class DASMDataset(dnsm.DNSMDataset):
 
     def to(self, device):
         self.aa_parents_idxs = self.aa_parents_idxs.to(device)
+        self.aa_children_idxs = self.aa_children_idxs.to(device)
         self.aa_subs_indicator_tensor = self.aa_subs_indicator_tensor.to(device)
         self.mask = self.mask.to(device)
         self.log_neutral_aa_probs = self.log_neutral_aa_probs.to(device)
