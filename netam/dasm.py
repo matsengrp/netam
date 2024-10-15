@@ -201,7 +201,7 @@ class DASMBurrito(dnsm.DNSMBurrito):
         predictions_of_mut = torch.sum(torch.exp(predictions), dim=-1)
         predictions_of_mut = predictions_of_mut.masked_select(mask)
         predictions_of_mut = clamp_probability(predictions_of_mut)
-        mut_occurence_loss = self.bce_loss(predictions_of_mut, masked_aa_subs_indicator)
+        mut_pos_loss = self.bce_loss(predictions_of_mut, masked_aa_subs_indicator)
 
         # We now need to handle the conditional substitution probability (CSP) loss.
         # We have already zapped out the diagonal, and we're in logit space, so
@@ -210,13 +210,12 @@ class DASMBurrito(dnsm.DNSMBurrito):
         # aa_subs_indicator is 0.
         subs_mask = aa_subs_indicator.bool()
         # Mask csp_predictions over columns.
-        subs_mask_expanded = subs_mask.unsqueeze(-1).expand(-1, -1, 21)
-        csp_predictions = predictions.masked_select(subs_mask_expanded).view(-1, 21)
+        csp_predictions = predictions[subs_mask].view(-1, 21)
         csp_targets = aa_children_idxs.masked_select(subs_mask)
         csp_loss = self.cce_loss(csp_predictions, csp_targets)
 
         # TODO return a list of the two losses
-        return mut_occurence_loss + csp_loss
+        return mut_pos_loss + csp_loss
 
 
 
