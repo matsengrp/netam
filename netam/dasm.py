@@ -122,20 +122,18 @@ def zap_predictions_along_diagonal(predictions, aa_parents_idxs):
     return predictions
 
 
-
-# def aa_inner_loss(
-#     burrito, mask, predictions, aa_parents_idxs, aa_children_idxs, aa_subs_indicator
-# ):
-#     """Loss function for amino acid predictions.
-#     """
-#     return burrito.cce_loss(predictions, aa_subs_indicator)
-
-
-
 class DASMBurrito(dnsm.DNSMBurrito):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.cce_loss = torch.nn.CrossEntropyLoss()
+        self.xent_loss = torch.nn.CrossEntropyLoss()
+        self.loss_weights = torch.tensor([1.0, 0.01]).to(self.device)
+
+    # TODO code dup
+    def process_data_loader(self, data_loader, train_mode=False, loss_reduction=None):
+        if loss_reduction is None:
+            loss_reduction = lambda x: torch.sum(x * self.loss_weights)
+
+        return super().process_data_loader(data_loader, train_mode, loss_reduction)
 
     def prediction_pair_of_batch(self, batch):
         """Get log neutral AA probabilities and log selection factors for a batch of
@@ -211,11 +209,9 @@ class DASMBurrito(dnsm.DNSMBurrito):
         subs_mask = aa_subs_indicator.bool()
         csp_pred = predictions[subs_mask]
         csp_targets = aa_children_idxs.masked_select(subs_mask)
-        csp_loss = self.cce_loss(csp_pred, csp_targets)
+        csp_loss = self.xent_loss(csp_pred, csp_targets)
 
-        # TODO return a list of the two losses
-        return mut_pos_loss + csp_loss
-
+        return torch.stack([mut_pos_loss, csp_loss])
 
 
     def build_selection_matrix_from_parent(self, parent: str):
@@ -227,3 +223,14 @@ class DASMBurrito(dnsm.DNSMBurrito):
         selection_factors[torch.arange(len(parent_idxs)), parent_idxs] = 1.0
 
         return selection_factors
+
+    # TODO code dup
+    def write_loss(self, loss_name, loss, step):
+        rate_loss, csp_loss = loss.unbind()
+        self.writer.add_scalar(
+            "Mut pos " + loss_name, rate_loss.item(), step, walltime=self.execution_time()
+        )
+        self.writer.add_scalar(
+            "CSP " + loss_name, csp_loss.item(), step, walltime=self.execution_time()
+        )
+

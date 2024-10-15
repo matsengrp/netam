@@ -890,6 +890,7 @@ class RSSHMBurrito(SHMBurrito):
         mut_prob = 1 - torch.exp(-rates * branch_lengths.unsqueeze(-1))
         mut_prob_masked = mut_prob[masks]
         mutation_indicator_masked = mutation_indicators[masks].float()
+        # TODO call this mut_pos_loss?
         rate_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
 
         # Conditional substitution probability (CSP) loss calculation
@@ -986,6 +987,7 @@ class RSSHMBurrito(SHMBurrito):
     def write_loss(self, loss_name, loss, step):
         rate_loss, csp_loss = loss.unbind()
         self.writer.add_scalar(
+            # TODO rename?
             "Rate " + loss_name, rate_loss.item(), step, walltime=self.execution_time()
         )
         self.writer.add_scalar(
