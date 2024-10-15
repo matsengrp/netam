@@ -122,23 +122,6 @@ def zap_predictions_along_diagonal(predictions, aa_parents_idxs):
     return predictions
 
 
-def nonsyn_inner_loss(
-    burrito, mask, predictions, aa_parents_idxs, aa_children_idxs, aa_subs_indicator
-):
-    """Loss function for nonsynonymous mutations.
-
-    Note that this is destructive of the predictions tensor.
-    """
-    predictions = zap_predictions_along_diagonal(predictions, aa_parents_idxs)
-
-    # After zeroing out the diagonal, we are effectively summing over the
-    # off-diagonal elements to get the probability of a nonsynonymous
-    # mutation.
-    predictions_of_mut = torch.sum(torch.exp(predictions), dim=-1)
-    predictions_of_mut = predictions_of_mut.masked_select(mask)
-    predictions_of_mut = clamp_probability(predictions_of_mut)
-    return burrito.bce_loss(predictions_of_mut, aa_subs_indicator)
-
 
 # def aa_inner_loss(
 #     burrito, mask, predictions, aa_parents_idxs, aa_children_idxs, aa_subs_indicator
@@ -151,20 +134,8 @@ def nonsyn_inner_loss(
 
 class DASMBurrito(dnsm.DNSMBurrito):
     def __init__(self, *args, **kwargs):
-        inner_loss_name = kwargs.pop("inner_loss_name", "nonsyn")
         super().__init__(*args, **kwargs)
-        self.inner_loss_dict = {
-            "nonsyn": nonsyn_inner_loss,
-        }
-        self.set_inner_loss(inner_loss_name)
         self.cce_loss = torch.nn.CrossEntropyLoss()
-
-    def set_inner_loss(self, inner_loss_name):
-        if inner_loss_name not in self.inner_loss_dict:
-            raise ValueError(
-                f"inner_loss_name {inner_loss_name} not in {self.inner_loss_dict.keys()}"
-            )
-        self.inner_loss = self.inner_loss_dict[inner_loss_name]
 
     def prediction_pair_of_batch(self, batch):
         """Get log neutral AA probabilities and log selection factors for a batch of
@@ -180,10 +151,12 @@ class DASMBurrito(dnsm.DNSMBurrito):
         return log_neutral_aa_probs, log_selection_factors
 
     def predictions_of_pair(self, log_neutral_aa_probs, log_selection_factors):
-        # TODO log now: upate
-        # Take the product of the neutral mutation probabilities and the
-        # selection factors, namely p_{j, a} * f_{j, a}.
-        # In contrast to a DNSM, each of these now have last dimension of 20.
+        """
+        Take the sum of the neutral mutation log probabilities and the
+        selection factors.
+
+        In contrast to a DNSM, each of these now have last dimension of 20.
+        """
         predictions = log_neutral_aa_probs + log_selection_factors
         assert torch.isnan(predictions).sum() == 0
         predictions = clamp_log_probability(predictions)
@@ -201,11 +174,11 @@ class DASMBurrito(dnsm.DNSMBurrito):
         return self.predictions_of_pair(log_neutral_aa_probs, log_selection_factors)
 
     def loss_of_batch(self, batch):
-        # TODO we could get this out of the batch in the inner function
         aa_subs_indicator = batch["subs_indicator"].to(self.device)
         mask = batch["mask"].to(self.device)
         aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
-        aa_subs_indicator = aa_subs_indicator.masked_select(mask)
+        aa_children_idxs = batch["aa_children_idxs"].to(self.device)
+        masked_aa_subs_indicator = aa_subs_indicator.masked_select(mask)
         predictions = self.predictions_of_batch(batch)
         # Add one entry, zero, to the last dimension of the predictions tensor
         # to handle the ambiguous amino acids. This is the conservative choice.
@@ -214,14 +187,38 @@ class DASMBurrito(dnsm.DNSMBurrito):
         # for the ambiguous amino acids (see issue #16).
         # If we change something here we should also change the test code
         # in test_dasm.py::test_zero_diagonal.
-        # TODO we have ambiguous amino acids?
+        # TODO we have ambiguous amino acids? Note that we're going to want to
+        # have a symbol for the junction between the heavy and light chains.
         predictions = torch.cat(
             [predictions, torch.zeros_like(predictions[:, :, :1])], dim=-1
         )
 
-        return self.inner_loss(
-            self, mask, predictions, aa_parents_idxs, None, aa_subs_indicator
-        )
+        predictions = zap_predictions_along_diagonal(predictions, aa_parents_idxs)
+
+        # After zeroing out the diagonal, we are effectively summing over the
+        # off-diagonal elements to get the probability of a nonsynonymous
+        # mutation.
+        predictions_of_mut = torch.sum(torch.exp(predictions), dim=-1)
+        predictions_of_mut = predictions_of_mut.masked_select(mask)
+        predictions_of_mut = clamp_probability(predictions_of_mut)
+        mut_occurence_loss = self.bce_loss(predictions_of_mut, masked_aa_subs_indicator)
+
+        # We now need to handle the conditional substitution probability (CSP) loss.
+        # We have already zapped out the diagonal, and we're in logit space, so
+        # we are set up for using the cross entropy loss. However we have to
+        # mask out the sites that are not substituted, i.e. the sites for which
+        # aa_subs_indicator is 0.
+        subs_mask = aa_subs_indicator.bool()
+        # Mask csp_predictions over columns.
+        subs_mask_expanded = subs_mask.unsqueeze(-1).expand(-1, -1, 21)
+        csp_predictions = predictions.masked_select(subs_mask_expanded).view(-1, 21)
+        csp_targets = aa_children_idxs.masked_select(subs_mask)
+        csp_loss = self.cce_loss(csp_predictions, csp_targets)
+
+        # TODO return a list of the two losses
+        return mut_occurence_loss + csp_loss
+
+
 
     def build_selection_matrix_from_parent(self, parent: str):
         # This is simpler than the equivalent in dnsm.py because we get the selection
