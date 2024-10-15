@@ -56,10 +56,10 @@ class DNSMDataset(Dataset):
         self.all_rates = all_rates
         self.all_subs_probs = all_subs_probs
         self.multihit_model = copy.deepcopy(multihit_model)
-        if multihit_model is not None:
-            # We want these parameters to act like fixed data. This is essential
-            # for multithreaded branch length optimization to work.
-            self.multihit_model.values.requires_grad_(False)
+        # if multihit_model is not None:
+        #     # We want these parameters to act like fixed data. This is essential
+        #     # for multithreaded branch length optimization to work.
+        #     self.multihit_model.values.requires_grad_(False)
 
         assert len(self.nt_parents) == len(self.nt_children)
         pcp_count = len(self.nt_parents)
@@ -217,6 +217,7 @@ class DNSMDataset(Dataset):
             mask = mask.to("cpu")
             rates = rates.to("cpu")
             subs_probs = subs_probs.to("cpu")
+            multihit_model = self.multihit_model.to("cpu")
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
             parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
@@ -231,7 +232,7 @@ class DNSMDataset(Dataset):
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
                 normed_subs_probs.reshape(-1, 3, 4),
-                multihit_model=self.multihit_model,
+                multihit_model=multihit_model,
             )
 
             if not torch.isfinite(neutral_aa_mut_prob).all():

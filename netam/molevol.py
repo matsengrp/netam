@@ -10,6 +10,7 @@ into account.
 """
 
 import numpy as np
+import warnings
 
 import torch
 from torch import Tensor, optim
@@ -304,7 +305,11 @@ def build_codon_mutsel(
     codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
 
     if multihit_model is not None:
-        codon_probs = multihit_model(parent_codon_idxs, codon_probs.log()).exp()
+        # codon_probs = multihit_model(parent_codon_idxs, codon_probs.log()).exp()
+        # TODO this is for testing
+        codon_probs = multihit_model(parent_codon_idxs, codon_probs)
+    else:
+        warnings.warn("No multihit model provided. Using uncorrected probabilities.")
 
     # Calculate the codon selection matrix for each sequence via Einstein
     # summation, in which we sum over the repeated indices.
@@ -365,7 +370,11 @@ def neutral_aa_probs(
     codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
 
     if multihit_model is not None:
-        codon_probs = multihit_model(parent_codon_idxs, codon_probs.log()).exp()
+        # codon_probs = multihit_model(parent_codon_idxs, codon_probs.log()).exp()
+        # TODO this is for testing
+        codon_probs = multihit_model(parent_codon_idxs, codon_probs)
+    else:
+        warnings.warn("No multihit model provided. Using uncorrected probabilities.")
 
     # Get the probability of mutating to each amino acid.
     aa_probs = codon_probs.view(-1, 64) @ CODON_AA_INDICATOR_MATRIX
