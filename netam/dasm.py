@@ -99,11 +99,13 @@ class DASMDataset(dnsm.DNSMDataset):
         self.all_subs_probs = self.all_subs_probs.to(device)
 
 
-def nonsyn_inner_loss(burrito, mask, predictions, aa_parents_idxs, aa_children_idxs, aa_subs_indicator):
+def nonsyn_inner_loss(
+    burrito, mask, predictions, aa_parents_idxs, aa_children_idxs, aa_subs_indicator
+):
     """Loss function for nonsynonymous mutations.
-   
+
     Note that this is destructive of the predictions tensor.
-    """ 
+    """
     predictions = zero_predictions_along_diagonal(predictions, aa_parents_idxs)
 
     # After zeroing out the diagonal, we are effectively summing over the
@@ -147,7 +149,9 @@ class DASMBurrito(dnsm.DNSMBurrito):
 
     def set_inner_loss(self, inner_loss_name):
         if inner_loss_name not in self.inner_loss_dict:
-            raise ValueError(f"inner_loss_name {inner_loss_name} not in {self.inner_loss_dict.keys()}")
+            raise ValueError(
+                f"inner_loss_name {inner_loss_name} not in {self.inner_loss_dict.keys()}"
+            )
         self.inner_loss = self.inner_loss_dict[inner_loss_name]
 
     def prediction_pair_of_batch(self, batch):
@@ -201,8 +205,9 @@ class DASMBurrito(dnsm.DNSMBurrito):
             [predictions, torch.zeros_like(predictions[:, :, :1])], dim=-1
         )
 
-        return self.inner_loss(self, mask, predictions, aa_parents_idxs, None, aa_subs_indicator)
-
+        return self.inner_loss(
+            self, mask, predictions, aa_parents_idxs, None, aa_subs_indicator
+        )
 
     def build_selection_matrix_from_parent(self, parent: str):
         # This is simpler than the equivalent in dnsm.py because we get the selection
