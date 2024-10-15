@@ -99,24 +99,6 @@ class DASMDataset(dnsm.DNSMDataset):
         self.all_subs_probs = self.all_subs_probs.to(device)
 
 
-def nonsyn_inner_loss(
-    burrito, mask, predictions, aa_parents_idxs, aa_children_idxs, aa_subs_indicator
-):
-    """Loss function for nonsynonymous mutations.
-
-    Note that this is destructive of the predictions tensor.
-    """
-    predictions = zero_predictions_along_diagonal(predictions, aa_parents_idxs)
-
-    # After zeroing out the diagonal, we are effectively summing over the
-    # off-diagonal elements to get the probability of a nonsynonymous
-    # mutation.
-    predictions_of_mut = torch.sum(predictions, dim=-1)
-    predictions_of_mut = predictions_of_mut.masked_select(mask)
-    predictions_of_mut = clamp_probability(predictions_of_mut)
-    return burrito.bce_loss(predictions_of_mut, aa_subs_indicator)
-
-
 def zero_predictions_along_diagonal(predictions, aa_parents_idxs):
     """Zero out the diagonal of a batch of predictions.
 
@@ -138,6 +120,33 @@ def zero_predictions_along_diagonal(predictions, aa_parents_idxs):
     return predictions
 
 
+def nonsyn_inner_loss(
+    burrito, mask, predictions, aa_parents_idxs, aa_children_idxs, aa_subs_indicator
+):
+    """Loss function for nonsynonymous mutations.
+
+    Note that this is destructive of the predictions tensor.
+    """
+    predictions = zero_predictions_along_diagonal(predictions, aa_parents_idxs)
+
+    # After zeroing out the diagonal, we are effectively summing over the
+    # off-diagonal elements to get the probability of a nonsynonymous
+    # mutation.
+    predictions_of_mut = torch.sum(predictions, dim=-1)
+    predictions_of_mut = predictions_of_mut.masked_select(mask)
+    predictions_of_mut = clamp_probability(predictions_of_mut)
+    return burrito.bce_loss(predictions_of_mut, aa_subs_indicator)
+
+
+# def aa_inner_loss(
+#     burrito, mask, predictions, aa_parents_idxs, aa_children_idxs, aa_subs_indicator
+# ):
+#     """Loss function for amino acid predictions.
+#     """
+#     return burrito.cce_loss(predictions, aa_subs_indicator)
+
+
+
 class DASMBurrito(dnsm.DNSMBurrito):
     def __init__(self, *args, **kwargs):
         inner_loss_name = kwargs.pop("inner_loss_name", "nonsyn")
@@ -146,6 +155,7 @@ class DASMBurrito(dnsm.DNSMBurrito):
             "nonsyn": nonsyn_inner_loss,
         }
         self.set_inner_loss(inner_loss_name)
+        self.cce_loss = torch.nn.CrossEntropyLoss()
 
     def set_inner_loss(self, inner_loss_name):
         if inner_loss_name not in self.inner_loss_dict:
@@ -172,6 +182,10 @@ class DASMBurrito(dnsm.DNSMBurrito):
         # selection factors, namely p_{j, a} * f_{j, a}.
         # In contrast to a DNSM, each of these now have last dimension of 20.
         predictions = torch.exp(log_neutral_aa_probs + log_selection_factors)
+        # TODO: There is something to figure out here! 
+        # On one hand, we could output logits and use the CrossEntropyLoss, but that would mean that we would be probability-normalizing
+        # the way in which we do predictions. What we do now is we take the off-diagonal elements and sum them up, then we use the BCELoss.
+        # Q: why don't we phrase selection factors as logits and then do a 2-element softmax?
         assert torch.isfinite(predictions).all()
         predictions = clamp_probability(predictions)
         return predictions
