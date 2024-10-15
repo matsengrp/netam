@@ -99,6 +99,22 @@ class DASMDataset(dnsm.DNSMDataset):
         self.all_subs_probs = self.all_subs_probs.to(device)
 
 
+def nonsyn_inner_loss(burrito, mask, predictions, aa_parents_idxs, aa_children_idxs, aa_subs_indicator):
+    """Loss function for nonsynonymous mutations.
+   
+    Note that this is destructive of the predictions tensor.
+    """ 
+    predictions = zero_predictions_along_diagonal(predictions, aa_parents_idxs)
+
+    # After zeroing out the diagonal, we are effectively summing over the
+    # off-diagonal elements to get the probability of a nonsynonymous
+    # mutation.
+    predictions_of_mut = torch.sum(predictions, dim=-1)
+    predictions_of_mut = predictions_of_mut.masked_select(mask)
+    predictions_of_mut = clamp_probability(predictions_of_mut)
+    return burrito.bce_loss(predictions_of_mut, aa_subs_indicator)
+
+
 def zero_predictions_along_diagonal(predictions, aa_parents_idxs):
     """Zero out the diagonal of a batch of predictions.
 
@@ -156,6 +172,7 @@ class DASMBurrito(dnsm.DNSMBurrito):
         return self.predictions_of_pair(log_neutral_aa_probs, log_selection_factors)
 
     def loss_of_batch(self, batch):
+        # TODO we could get this out of the batch in the inner function
         aa_subs_indicator = batch["subs_indicator"].to(self.device)
         mask = batch["mask"].to(self.device)
         aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
@@ -172,15 +189,8 @@ class DASMBurrito(dnsm.DNSMBurrito):
             [predictions, torch.zeros_like(predictions[:, :, :1])], dim=-1
         )
 
-        predictions = zero_predictions_along_diagonal(predictions, aa_parents_idxs)
+        return nonsyn_inner_loss(self, mask, predictions, aa_parents_idxs, None, aa_subs_indicator)
 
-        # After zeroing out the diagonal, we are effectively summing over the
-        # off-diagonal elements to get the probability of a nonsynonymous
-        # mutation.
-        predictions_of_mut = torch.sum(predictions, dim=-1)
-        predictions_of_mut = predictions_of_mut.masked_select(mask)
-        predictions_of_mut = clamp_probability(predictions_of_mut)
-        return self.bce_loss(predictions_of_mut, aa_subs_indicator)
 
     def build_selection_matrix_from_parent(self, parent: str):
         # This is simpler than the equivalent in dnsm.py because we get the selection
