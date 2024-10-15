@@ -198,10 +198,10 @@ class DASMBurrito(dnsm.DNSMBurrito):
         # After zeroing out the diagonal, we are effectively summing over the
         # off-diagonal elements to get the probability of a nonsynonymous
         # mutation.
-        predictions_of_mut = torch.sum(torch.exp(predictions), dim=-1)
-        predictions_of_mut = predictions_of_mut.masked_select(mask)
-        predictions_of_mut = clamp_probability(predictions_of_mut)
-        mut_pos_loss = self.bce_loss(predictions_of_mut, masked_aa_subs_indicator)
+        mut_pos_pred = torch.sum(torch.exp(predictions), dim=-1)
+        mut_pos_pred = mut_pos_pred.masked_select(mask)
+        mut_pos_pred = clamp_probability(mut_pos_pred)
+        mut_pos_loss = self.bce_loss(mut_pos_pred, masked_aa_subs_indicator)
 
         # We now need to handle the conditional substitution probability (CSP) loss.
         # We have already zapped out the diagonal, and we're in logit space, so
@@ -209,10 +209,9 @@ class DASMBurrito(dnsm.DNSMBurrito):
         # mask out the sites that are not substituted, i.e. the sites for which
         # aa_subs_indicator is 0.
         subs_mask = aa_subs_indicator.bool()
-        # Mask csp_predictions over columns.
-        csp_predictions = predictions[subs_mask]
+        csp_pred = predictions[subs_mask]
         csp_targets = aa_children_idxs.masked_select(subs_mask)
-        csp_loss = self.cce_loss(csp_predictions, csp_targets)
+        csp_loss = self.cce_loss(csp_pred, csp_targets)
 
         # TODO return a list of the two losses
         return mut_pos_loss + csp_loss
