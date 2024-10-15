@@ -137,6 +137,18 @@ def zero_predictions_along_diagonal(predictions, aa_parents_idxs):
 
 
 class DASMBurrito(dnsm.DNSMBurrito):
+    def __init__(self, *args, **kwargs):
+        inner_loss_name = kwargs.pop("inner_loss_name", "nonsyn")
+        super().__init__(*args, **kwargs)
+        self.inner_loss_dict = {
+            "nonsyn": nonsyn_inner_loss,
+        }
+        self.set_inner_loss(inner_loss_name)
+
+    def set_inner_loss(self, inner_loss_name):
+        if inner_loss_name not in self.inner_loss_dict:
+            raise ValueError(f"inner_loss_name {inner_loss_name} not in {self.inner_loss_dict.keys()}")
+        self.inner_loss = self.inner_loss_dict[inner_loss_name]
 
     def prediction_pair_of_batch(self, batch):
         """Get log neutral AA probabilities and log selection factors for a batch of
@@ -189,7 +201,7 @@ class DASMBurrito(dnsm.DNSMBurrito):
             [predictions, torch.zeros_like(predictions[:, :, :1])], dim=-1
         )
 
-        return nonsyn_inner_loss(self, mask, predictions, aa_parents_idxs, None, aa_subs_indicator)
+        return self.inner_loss(self, mask, predictions, aa_parents_idxs, None, aa_subs_indicator)
 
 
     def build_selection_matrix_from_parent(self, parent: str):
