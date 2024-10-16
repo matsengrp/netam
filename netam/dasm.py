@@ -1,4 +1,4 @@
-"""Here we define a mutation-selection model that is per-amino-acid."""
+"""Here we define a model that outputs a vector of 20 amino acid preferences."""
 
 import torch
 import torch.nn.functional as F
