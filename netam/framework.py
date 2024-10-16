@@ -858,17 +858,34 @@ class SHMBurrito(Burrito):
         return Crepe(encoder, self.model, training_hyperparameters)
 
 
-class RSSHMBurrito(SHMBurrito):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.xent_loss = nn.CrossEntropyLoss()
-        self.loss_weights = torch.tensor([1.0, 0.01]).to(self.device)
+class TwoLossMixin:
+    """A mixin for models that have two losses, one for mutation position and one for
+    conditional substitution probability (CSP)."""
 
     def process_data_loader(self, data_loader, train_mode=False, loss_reduction=None):
         if loss_reduction is None:
             loss_reduction = lambda x: torch.sum(x * self.loss_weights)
 
         return super().process_data_loader(data_loader, train_mode, loss_reduction)
+
+    def write_loss(self, loss_name, loss, step):
+        rate_loss, csp_loss = loss.unbind()
+        self.writer.add_scalar(
+            "Mut pos " + loss_name,
+            rate_loss.item(),
+            step,
+            walltime=self.execution_time(),
+        )
+        self.writer.add_scalar(
+            "CSP " + loss_name, csp_loss.item(), step, walltime=self.execution_time()
+        )
+
+
+class RSSHMBurrito(TwoLossMixin, SHMBurrito):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.xent_loss = nn.CrossEntropyLoss()
+        self.loss_weights = torch.tensor([1.0, 0.01]).to(self.device)
 
     def evaluate(self):
         val_loader = self.build_val_loader()
@@ -890,7 +907,7 @@ class RSSHMBurrito(SHMBurrito):
         mut_prob = 1 - torch.exp(-rates * branch_lengths.unsqueeze(-1))
         mut_prob_masked = mut_prob[masks]
         mutation_indicator_masked = mutation_indicators[masks].float()
-        rate_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
+        mut_pos_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
 
         # Conditional substitution probability (CSP) loss calculation
         # Mask the new_base_idxs to focus only on positions with mutations
@@ -902,7 +919,7 @@ class RSSHMBurrito(SHMBurrito):
         assert (new_base_idxs_masked >= 0).all()
         csp_loss = self.xent_loss(csp_logits_masked, new_base_idxs_masked)
 
-        return torch.stack([rate_loss, csp_loss])
+        return torch.stack([mut_pos_loss, csp_loss])
 
     def _find_optimal_branch_length(
         self,
@@ -982,15 +999,6 @@ class RSSHMBurrito(SHMBurrito):
         self.model.unfreeze()
 
         return torch.tensor(optimal_lengths)
-
-    def write_loss(self, loss_name, loss, step):
-        rate_loss, csp_loss = loss.unbind()
-        self.writer.add_scalar(
-            "Rate " + loss_name, rate_loss.item(), step, walltime=self.execution_time()
-        )
-        self.writer.add_scalar(
-            "CSP " + loss_name, csp_loss.item(), step, walltime=self.execution_time()
-        )
 
 
 def burrito_class_of_model(model):

@@ -1,11 +1,4 @@
-"""Here we define a mutation-selection model that is just about mutation vs no mutation,
-and is trainable.
-
-We'll use these conventions:
-
-* B is the batch size
-* L is the max sequence length
-"""
+"""Defining the deep natural selection model (DNSM)."""
 
 import copy
 import multiprocessing as mp
@@ -74,6 +67,7 @@ class DNSMDataset(Dataset):
         self.aa_parents_idxs = torch.full(
             (pcp_count, self.max_aa_seq_len), MAX_AMBIG_AA_IDX
         )
+        self.aa_children_idxs = self.aa_parents_idxs.clone()
         self.aa_subs_indicator_tensor = torch.zeros((pcp_count, self.max_aa_seq_len))
 
         self.mask = torch.ones((pcp_count, self.max_aa_seq_len), dtype=torch.bool)
@@ -82,6 +76,7 @@ class DNSMDataset(Dataset):
             self.mask[i, :] = aa_mask_tensor_of(aa_parent, self.max_aa_seq_len)
             aa_seq_len = len(aa_parent)
             self.aa_parents_idxs[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(aa_parent)
+            self.aa_children_idxs[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(aa_child)
             self.aa_subs_indicator_tensor[i, :aa_seq_len] = aa_subs_indicator_tensor_of(
                 aa_parent, aa_child
             )

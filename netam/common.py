@@ -89,6 +89,10 @@ def clamp_probability(x: Tensor) -> Tensor:
     return torch.clamp(x, min=SMALL_PROB, max=(1.0 - SMALL_PROB))
 
 
+def clamp_log_probability(x: Tensor) -> Tensor:
+    return torch.clamp(x, max=np.log(1.0 - SMALL_PROB))
+
+
 def print_parameter_count(model):
     total = 0
     for name, module in model.named_modules():
