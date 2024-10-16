@@ -3,6 +3,7 @@ import os
 import torch
 import pytest
 
+from netam.common import BIG
 from netam.framework import (
     crepe_exists,
     load_crepe,
@@ -11,7 +12,7 @@ from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dasm import (
     DASMBurrito,
     DASMDataset,
-    zero_predictions_along_diagonal,
+    zap_predictions_along_diagonal,
 )
 
 
@@ -67,7 +68,7 @@ def test_crepe_roundtrip(dasm_burrito):
         assert torch.equal(t1, t2)
 
 
-def test_zero_diagonal(dasm_burrito):
+def test_zap_diagonal(dasm_burrito):
     batch = dasm_burrito.val_dataset[0:2]
     predictions = dasm_burrito.predictions_of_batch(batch)
     predictions = torch.cat(
@@ -75,7 +76,7 @@ def test_zero_diagonal(dasm_burrito):
     )
     aa_parents_idxs = batch["aa_parents_idxs"].to(dasm_burrito.device)
     zeroed_predictions = predictions.clone()
-    zeroed_predictions = zero_predictions_along_diagonal(
+    zeroed_predictions = zap_predictions_along_diagonal(
         zeroed_predictions, aa_parents_idxs
     )
     L = predictions.shape[1]
@@ -83,7 +84,7 @@ def test_zero_diagonal(dasm_burrito):
         for i in range(L):
             for j in range(20):
                 if j == aa_parents_idxs[batch_idx, i]:
-                    assert zeroed_predictions[batch_idx, i, j] == 0.0
+                    assert zeroed_predictions[batch_idx, i, j] == -BIG
                 else:
                     assert (
                         zeroed_predictions[batch_idx, i, j]
