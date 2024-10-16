@@ -198,7 +198,7 @@ class DASMBurrito(framework.TwoLossMixin, dnsm.DNSMBurrito):
         # logit space, so we are set up for using the cross entropy loss.
         # However we have to mask out the sites that are not substituted, i.e.
         # the sites for which aa_subs_indicator is 0.
-        subs_mask = aa_subs_indicator.bool()
+        subs_mask = aa_subs_indicator == 1
         csp_pred = predictions[subs_mask]
         csp_targets = aa_children_idxs[subs_mask]
         csp_loss = self.xent_loss(csp_pred, csp_targets)
