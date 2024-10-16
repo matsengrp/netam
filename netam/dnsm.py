@@ -1,11 +1,4 @@
-"""Here we define a mutation-selection model that is just about mutation vs no mutation,
-and is trainable.
-
-We'll use these conventions:
-
-* B is the batch size
-* L is the max sequence length
-"""
+"""Defining the deep natural selection model (DNSM)."""
 
 import copy
 import multiprocessing as mp
