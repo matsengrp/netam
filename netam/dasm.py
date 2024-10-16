@@ -103,13 +103,10 @@ class DASMDataset(dnsm.DNSMDataset):
 
 
 def zap_predictions_along_diagonal(predictions, aa_parents_idxs):
-    """Zero out the diagonal of a batch of predictions.
-
-    We do this so that we can sum then have the same type of predictions as for the
-    DNSM.
-    """
-    # We would like to do
-    # predictions[torch.arange(len(aa_parents_idxs)), aa_parents_idxs] = 0.0
+    """Set the diagonal (i.e. no amino acid change) of the predictions tensor to
+    -BIG."""
+    # This is effectively
+    #    predictions[torch.arange(len(aa_parents_idxs)), aa_parents_idxs] = -BIG
     # but we have a batch dimension. Thus the following.
 
     batch_size, L, _ = predictions.shape
