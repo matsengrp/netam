@@ -907,8 +907,7 @@ class RSSHMBurrito(TwoLossMixin, SHMBurrito):
         mut_prob = 1 - torch.exp(-rates * branch_lengths.unsqueeze(-1))
         mut_prob_masked = mut_prob[masks]
         mutation_indicator_masked = mutation_indicators[masks].float()
-        # TODO call this mut_pos_loss?
-        rate_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
+        mut_pos_loss = self.bce_loss(mut_prob_masked, mutation_indicator_masked)
 
         # Conditional substitution probability (CSP) loss calculation
         # Mask the new_base_idxs to focus only on positions with mutations
@@ -920,7 +919,7 @@ class RSSHMBurrito(TwoLossMixin, SHMBurrito):
         assert (new_base_idxs_masked >= 0).all()
         csp_loss = self.xent_loss(csp_logits_masked, new_base_idxs_masked)
 
-        return torch.stack([rate_loss, csp_loss])
+        return torch.stack([mut_pos_loss, csp_loss])
 
     def _find_optimal_branch_length(
         self,

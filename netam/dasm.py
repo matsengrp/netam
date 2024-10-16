@@ -200,7 +200,7 @@ class DASMBurrito(framework.TwoLossMixin, dnsm.DNSMBurrito):
         # the sites for which aa_subs_indicator is 0.
         subs_mask = aa_subs_indicator.bool()
         csp_pred = predictions[subs_mask]
-        csp_targets = aa_children_idxs.masked_select(subs_mask)
+        csp_targets = aa_children_idxs[subs_mask]
         csp_loss = self.xent_loss(csp_pred, csp_targets)
 
         return torch.stack([mut_pos_loss, csp_loss])
