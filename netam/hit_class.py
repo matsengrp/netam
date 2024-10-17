@@ -63,6 +63,7 @@ def apply_multihit_correction(
             target codon, for each of the N parent codons, after applying the hit class factors.
     """
     warnings.warn("hit_class.py:apply_multihit_correction is deprecated, use apply_multihit_correction_nonlog instead")
+    assert False
     per_parent_hit_class = parent_specific_hit_classes(parent_codon_idxs)
     corrections = torch.cat([torch.tensor([0.0]), hit_class_factors])
     reshaped_corrections = corrections[per_parent_hit_class]
@@ -116,10 +117,15 @@ class MultihitApplier:
         if np.allclose(hit_class_factors, 0):
             warnings.warn("Hit class factors are all zero, and will not change probabilities")
         self.corrections = hit_class_factors.to(device)
+        # # TODO This is just for testing
+        # self.corrections = torch.tensor([0.0, 0.0, 0.0]).to(device)
 
     def to(self, device):
         self.corrections = self.corrections.to(device)
         return self
+
+    # def __call__(self, parent_codon_idxs, codon_probs):
+    #     return codon_probs
 
     def __call__(self, parent_codon_idxs, codon_probs):
         return apply_multihit_correction_nonlog(parent_codon_idxs, codon_probs, self.corrections)

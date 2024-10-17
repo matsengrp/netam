@@ -217,7 +217,10 @@ class DNSMDataset(Dataset):
             mask = mask.to("cpu")
             rates = rates.to("cpu")
             subs_probs = subs_probs.to("cpu")
-            multihit_model = self.multihit_model.to("cpu")
+            if self.multihit_model is not None:
+                multihit_model = self.multihit_model.to("cpu")
+            else:
+                multihit_model = None
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
             parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
