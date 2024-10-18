@@ -537,7 +537,8 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         super().__init__()
 
     def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
-        """Do the forward method without gradients from an amino acid string.
+        """Do the forward method then exponentiation without gradients from an amino
+        acid string.
 
         Args:
             aa_str: A string of amino acids.

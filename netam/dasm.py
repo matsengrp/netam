@@ -204,7 +204,8 @@ class DASMBurrito(framework.TwoLossMixin, dnsm.DNSMBurrito):
 
     def build_selection_matrix_from_parent(self, parent: str):
         # This is simpler than the equivalent in dnsm.py because we get the selection
-        # matrix directly.
+        # matrix directly. Note that selection_factors_of_aa_str does the exponentiation
+        # so this indeed gives us the selection factors, not the log selection factors.
         parent = translate_sequence(parent)
         selection_factors = self.model.selection_factors_of_aa_str(parent)
         parent_idxs = sequences.aa_idx_array_of_str(parent)
