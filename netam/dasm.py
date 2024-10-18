@@ -105,12 +105,12 @@ class DASMDataset(dnsm.DNSMDataset):
 def zap_predictions_along_diagonal(predictions, aa_parents_idxs):
     """Set the diagonal (i.e. no amino acid change) of the predictions tensor to -BIG,
     except where aa_parents_idxs >= 20, which indicates no update should be done."""
-    
+
     device = predictions.device
     batch_size, L, _ = predictions.shape
     batch_indices = torch.arange(batch_size, device=device)[:, None].expand(-1, L)
     sequence_indices = torch.arange(L, device=device)[None, :].expand(batch_size, -1)
-    
+
     # Create a mask for valid positions (where aa_parents_idxs is less than 20)
     valid_mask = aa_parents_idxs < 20
 
