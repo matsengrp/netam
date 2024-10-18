@@ -103,18 +103,22 @@ class DASMDataset(dnsm.DNSMDataset):
 
 
 def zap_predictions_along_diagonal(predictions, aa_parents_idxs):
-    """Set the diagonal (i.e. no amino acid change) of the predictions tensor to
-    -BIG."""
-    # This is effectively
-    #    predictions[torch.arange(len(aa_parents_idxs)), aa_parents_idxs] = -BIG
-    # but we have a batch dimension. Thus the following.
-
+    """Set the diagonal (i.e. no amino acid change) of the predictions tensor to -BIG,
+    except where aa_parents_idxs >= 20, which indicates no update should be done."""
+    
+    device = predictions.device
     batch_size, L, _ = predictions.shape
-    batch_indices = torch.arange(batch_size, device=predictions.device)
+    batch_indices = torch.arange(batch_size, device=device)[:, None].expand(-1, L)
+    sequence_indices = torch.arange(L, device=device)[None, :].expand(batch_size, -1)
+    
+    # Create a mask for valid positions (where aa_parents_idxs is less than 20)
+    valid_mask = aa_parents_idxs < 20
+
+    # Only update the predictions for valid positions
     predictions[
-        batch_indices[:, None],
-        torch.arange(L, device=predictions.device),
-        aa_parents_idxs,
+        batch_indices[valid_mask],
+        sequence_indices[valid_mask],
+        aa_parents_idxs[valid_mask],
     ] = -BIG
 
     return predictions
@@ -162,24 +166,15 @@ class DASMBurrito(framework.TwoLossMixin, dnsm.DNSMBurrito):
 
     def loss_of_batch(self, batch):
         aa_subs_indicator = batch["subs_indicator"].to(self.device)
+        # TODO this should be a child mask, right?
         mask = batch["mask"].to(self.device)
         aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
         aa_children_idxs = batch["aa_children_idxs"].to(self.device)
         masked_aa_subs_indicator = aa_subs_indicator.masked_select(mask)
         predictions = self.predictions_of_batch(batch)
-        # Add one entry, zero, to the last dimension of the predictions tensor
-        # to handle the ambiguous amino acids. This is the conservative choice.
-        # It might be faster to reassign all the 20s to 0s if we are confident
-        # in our masking. Perhaps we should always output a 21st dimension
-        # for the ambiguous amino acids (see issue #16).
-        # Note that we're going to want to have a symbol for the junction
-        # between the heavy and light chains.
-        # If we change something here we should also change the test code
-        # in test_dasm.py::test_zero_diagonal.
-        predictions = torch.cat(
-            [predictions, torch.full_like(predictions[:, :, :1], -BIG)], dim=-1
-        )
 
+        # "Zapping" out the diagonal means setting it to zero in log space by
+        # setting it to -BIG.
         predictions = zap_predictions_along_diagonal(predictions, aa_parents_idxs)
 
         # After zapping out the diagonal, we can effectively sum over the
