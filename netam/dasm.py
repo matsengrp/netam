@@ -166,7 +166,7 @@ class DASMBurrito(framework.TwoLossMixin, dnsm.DNSMBurrito):
 
     def loss_of_batch(self, batch):
         aa_subs_indicator = batch["subs_indicator"].to(self.device)
-        # TODO this should be a child mask, right?
+        # Netam issue #16: child mask would be preferable here.
         mask = batch["mask"].to(self.device)
         aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
         aa_children_idxs = batch["aa_children_idxs"].to(self.device)
