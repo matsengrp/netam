@@ -341,8 +341,6 @@ def load_multihit_adjuster(multihit_crepe_prefix, device=None):
     if multihit_crepe_prefix is None:
         multihit_model = None
     else:
-        # # TODO for testing
-        # multihit_model = None
         print(f"Loading multihit model from {multihit_crepe_prefix}")
         multihit_adjust = load_crepe(multihit_crepe_prefix, device=device).model.values.detach().to(device)
         multihit_model = MultihitApplier(multihit_adjust)

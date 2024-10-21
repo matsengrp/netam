@@ -18,7 +18,7 @@ from torch import Tensor, optim
 from netam.sequences import CODON_AA_INDICATOR_MATRIX
 
 import netam.sequences as sequences
-torch.autograd.set_detect_anomaly(True)
+# torch.autograd.set_detect_anomaly(True)
 
 
 def normalize_sub_probs(parent_idxs: Tensor, sub_probs: Tensor) -> Tensor:

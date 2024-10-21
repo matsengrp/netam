@@ -39,6 +39,7 @@ from netam.sequences import (
     translate_sequence,
     translate_sequences,
 )
+# mpctx = mp.get_context('spawn')
 
 
 class DNSMDataset(Dataset):
