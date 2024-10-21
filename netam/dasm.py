@@ -188,7 +188,7 @@ class DASMBurrito(framework.TwoLossMixin, dnsm.DNSMBurrito):
         subs_pos_pred = torch.sum(torch.exp(predictions), dim=-1)
         subs_pos_pred = subs_pos_pred.masked_select(mask)
         subs_pos_pred = clamp_probability(subs_pos_pred)
-        mut_pos_loss = self.bce_loss(subs_pos_pred, masked_aa_subs_indicator)
+        subs_pos_loss = self.bce_loss(subs_pos_pred, masked_aa_subs_indicator)
 
         # We now need to calculate the conditional substitution probability
         # (CSP) loss. We have already zapped out the diagonal, and we're in
@@ -200,7 +200,7 @@ class DASMBurrito(framework.TwoLossMixin, dnsm.DNSMBurrito):
         csp_targets = aa_children_idxs[subs_mask]
         csp_loss = self.xent_loss(csp_pred, csp_targets)
 
-        return torch.stack([mut_pos_loss, csp_loss])
+        return torch.stack([subs_pos_loss, csp_loss])
 
     def build_selection_matrix_from_parent(self, parent: str):
         # This is simpler than the equivalent in dnsm.py because we get the selection
