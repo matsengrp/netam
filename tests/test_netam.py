@@ -31,7 +31,7 @@ def tiny_model():
 @pytest.fixture
 def tiny_burrito(tiny_dataset, tiny_val_dataset, tiny_model):
     burrito = SHMBurrito(tiny_dataset, tiny_val_dataset, tiny_model)
-    burrito.train(epochs=5)
+    burrito.simple_train(epochs=5)
     return burrito
 
 
