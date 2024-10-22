@@ -41,43 +41,8 @@ def parent_specific_hit_classes(parent_codon_idxs: torch.Tensor) -> torch.Tensor
     ]
 
 
+
 def apply_multihit_correction(
-    parent_codon_idxs: torch.Tensor,
-    codon_logprobs: torch.Tensor,
-    hit_class_factors: torch.Tensor,
-) -> torch.Tensor:
-    """Multiply codon probabilities by their hit class factors, and renormalize.
-
-    Suppose there are N codons, then the parameters are as follows:
-
-    Args:
-        parent_codon_idxs (torch.Tensor): A (N, 3) shaped tensor containing for each codon, the
-            indices of the parent codon's nucleotides.
-        codon_logprobs (torch.Tensor): A (N, 4, 4, 4) shaped tensor containing the log probabilities
-            of mutating to each possible target codon, for each of the N parent codons.
-        hit_class_factors (torch.Tensor): A tensor containing the log hit class factors for hit classes 1, 2, and 3. The
-            factor for hit class 0 is assumed to be 1 (that is, 0 in log-space).
-
-    Returns:
-        torch.Tensor: A (N, 4, 4, 4) shaped tensor containing the log probabilities of mutating to each possible
-            target codon, for each of the N parent codons, after applying the hit class factors.
-    """
-    warnings.warn("hit_class.py:apply_multihit_correction is deprecated, use apply_multihit_correction_nonlog instead")
-    assert False
-    per_parent_hit_class = parent_specific_hit_classes(parent_codon_idxs)
-    corrections = torch.cat([torch.tensor([0.0]), hit_class_factors])
-    reshaped_corrections = corrections[per_parent_hit_class]
-    unnormalized_corrected_logprobs = codon_logprobs + reshaped_corrections
-    normalizations = torch.logsumexp(
-        unnormalized_corrected_logprobs, dim=[1, 2, 3], keepdim=True
-    )
-    result = unnormalized_corrected_logprobs - normalizations
-    if torch.any(torch.isnan(result)):
-        print("NAN found in multihit correction application")
-        assert False
-    return result
-
-def apply_multihit_correction_nonlog(
     parent_codon_idxs: torch.Tensor,
     codon_probs: torch.Tensor,
     hit_class_factors: torch.Tensor,
@@ -110,20 +75,6 @@ def apply_multihit_correction_nonlog(
         print("NAN found in multihit correction application")
         assert False
     return result
-
-
-class MultihitApplier:
-    def __init__(self, hit_class_factors, device=None):
-        if np.allclose(hit_class_factors, 0):
-            warnings.warn("Hit class factors are all zero, and will not change probabilities")
-        self.corrections = hit_class_factors.to(device)
-
-    def to(self, device):
-        self.corrections = self.corrections.to(device)
-        return self
-
-    def __call__(self, parent_codon_idxs, codon_probs):
-        return apply_multihit_correction_nonlog(parent_codon_idxs, codon_probs, self.corrections)
 
 
 def hit_class_probs_tensor(

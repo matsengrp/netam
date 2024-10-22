@@ -305,8 +305,6 @@ def build_codon_mutsel(
     codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
 
     if multihit_model is not None:
-        # codon_probs = multihit_model(parent_codon_idxs, codon_probs.log()).exp()
-        # TODO this is for testing
         codon_probs = multihit_model(parent_codon_idxs, codon_probs)
     else:
         warnings.warn("No multihit model provided. Using uncorrected probabilities.")
@@ -370,8 +368,6 @@ def neutral_aa_probs(
     codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
 
     if multihit_model is not None:
-        # codon_probs = multihit_model(parent_codon_idxs, codon_probs.log()).exp()
-        # TODO this is for testing
         codon_probs = multihit_model(parent_codon_idxs, codon_probs)
     else:
         warnings.warn("No multihit model provided. Using uncorrected probabilities.")

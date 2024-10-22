@@ -105,13 +105,9 @@ def test_multihit_correction():
     # We'll verify that aggregating by hit class then adjusting is the same as adjusting then aggregating by hit class.
     codon_idxs = reshape_for_codons(ex_parent_codon_idxs)
     adjusted_codon_probs = hit_class.apply_multihit_correction(
-        codon_idxs, ex_codon_probs.log(), hit_class_factors
-    ).exp()
-    adjusted_nonlog_codon_probs = hit_class.apply_multihit_correction_nonlog(
         codon_idxs, ex_codon_probs, hit_class_factors
     )
     aggregate_last = hit_class.hit_class_probs_tensor(codon_idxs, adjusted_codon_probs)
-    aggregate_last_nonlog = hit_class.hit_class_probs_tensor(codon_idxs, adjusted_nonlog_codon_probs)
 
     uncorrected_hc_log_probs = hit_class.hit_class_probs_tensor(
         codon_idxs, ex_codon_probs
@@ -125,7 +121,6 @@ def test_multihit_correction():
     uncorrected_hc_log_probs += corrections
     aggregate_first = torch.softmax(uncorrected_hc_log_probs, dim=1)
     assert torch.allclose(aggregate_first, aggregate_last)
-    assert torch.allclose(aggregate_first, aggregate_last_nonlog)
 
 
 def test_hit_class_tensor():

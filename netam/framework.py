@@ -27,7 +27,6 @@ from netam.common import (
     VRC01_NT_SEQ,
 )
 from netam import models
-from netam.hit_class import MultihitApplier
 import netam.molevol as molevol
 
 
@@ -335,16 +334,6 @@ def load_crepe(prefix, device=None):
 
 def crepe_exists(prefix):
     return os.path.exists(f"{prefix}.yml") and os.path.exists(f"{prefix}.pth")
-
-
-def load_multihit_adjuster(multihit_crepe_prefix, device=None):
-    if multihit_crepe_prefix is None:
-        multihit_model = None
-    else:
-        print(f"Loading multihit model from {multihit_crepe_prefix}")
-        multihit_adjust = load_crepe(multihit_crepe_prefix, device=device).model.values.detach().to(device)
-        multihit_model = MultihitApplier(multihit_adjust)
-    return multihit_model
 
 
 def trimmed_shm_model_outputs_of_crepe(crepe, parents):
