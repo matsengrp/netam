@@ -186,8 +186,10 @@ def aaprob_of_mut_and_sub(
     parent_codon_idxs: Tensor, mut_probs: Tensor, sub_probs: Tensor
 ) -> Tensor:
     """For a sequence of parent codons and given nucleotide mutability and substitution
-    probabilities, compute the amino acid substitution probabilities for each codon
-    along the sequence.
+    probabilities, compute the probability of a substitution to each amino acid
+    for each codon along the sequence.
+
+    Stop codons don't appear as part of this calculation.
 
     Args:
     parent_codon_idxs (torch.Tensor): A 2D tensor where each row contains indices representing
@@ -310,6 +312,7 @@ def build_codon_mutsel(
     # So, for each site (s) and codon (c), sum over amino acids (a):
     # codon_sel_matrices[s, c] = sum_a(CODON_AA_INDICATOR_MATRIX[c, a] * aa_sel_matrices[s, a])
     # Resulting shape is (S, C) where S is the number of sites and C is the number of codons.
+    # Stop codons don't appear in this sum, so columns for stop codons will be zero.
     codon_sel_matrices = torch.einsum(
         "ca,sa->sc", CODON_AA_INDICATOR_MATRIX, aa_sel_matrices
     )
@@ -322,7 +325,8 @@ def build_codon_mutsel(
 
     # Now we need to recalculate the probability of staying in the same codon.
     # In our setup, this is the probability of nothing happening.
-    # To calculate this, we zero out the previously calculated probabilities...
+    # To calculate this, we zero out the probabilities of mutating to the parent
+    # codon...
     codon_count = parent_codon_idxs.shape[0]
     codon_mutsel[(torch.arange(codon_count), *parent_codon_idxs.T)] = 0.0
     # sum together their probabilities...
