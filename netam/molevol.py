@@ -10,7 +10,6 @@ into account.
 """
 
 import numpy as np
-import warnings
 
 import torch
 from torch import Tensor, optim

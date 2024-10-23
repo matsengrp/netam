@@ -14,7 +14,6 @@ from netam.dasm import (
     DASMDataset,
     zap_predictions_along_diagonal,
 )
-import multiprocessing as mp
 
 
 @pytest.fixture(scope="module")

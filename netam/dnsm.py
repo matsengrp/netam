@@ -399,7 +399,7 @@ class DNSMBurrito(framework.Burrito):
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
             sel_matrix, parent, child, rates, subs_probs, multihit_model
         )
-        if type(starting_branch_length) == torch.Tensor:
+        if isinstance(starting_branch_length, torch.Tensor):
             starting_branch_length = starting_branch_length.detach().item()
         return molevol.optimize_branch_length(
             log_pcp_probability, starting_branch_length, **optimization_kwargs

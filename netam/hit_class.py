@@ -1,8 +1,6 @@
 import torch
 import numpy as np
 
-from netam.common import BASES
-
 
 # Define the number of bases (e.g., 4 for DNA/RNA)
 _num_bases = 4

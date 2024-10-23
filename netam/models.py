@@ -2,10 +2,6 @@ from abc import ABC, abstractmethod
 import math
 import warnings
 
-warnings.filterwarnings(
-    "ignore", category=UserWarning, module="torch.nn.modules.transformer"
-)
-
 import pandas as pd
 
 import torch
@@ -20,6 +16,10 @@ from netam.common import (
     PositionalEncoding,
     generate_kmers,
     aa_mask_tensor_of,
+)
+
+warnings.filterwarnings(
+    "ignore", category=UserWarning, module="torch.nn.modules.transformer"
 )
 
 
@@ -704,7 +704,6 @@ class HitClassModel(nn.Module):
     def hyperparameters(self):
         return {}
 
-    # TODO changed to nonlog version for testing, need to update all calls to reflect this
     def forward(
         self, parent_codon_idxs: torch.Tensor, uncorrected_codon_probs: torch.Tensor
     ):
