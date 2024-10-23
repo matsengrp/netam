@@ -8,18 +8,9 @@ from netam.framework import (
     crepe_exists,
     load_crepe,
 )
-from netam.common import aa_idx_tensor_of_str_ambig, MAX_AMBIG_AA_IDX
+from netam.common import aa_idx_tensor_of_str_ambig, MAX_AMBIG_AA_IDX, force_spawn
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dnsm import DNSMBurrito, DNSMDataset
-
-
-def force_spawn():
-    """Force the spawn start method for multiprocessing.
-
-    This is necessary to avoid conflicts with the internal OpenMP-based thread pool in
-    PyTorch.
-    """
-    mp.set_start_method("spawn", force=True)
 
 
 def test_aa_idx_tensor_of_str_ambig():

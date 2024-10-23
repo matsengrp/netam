@@ -175,7 +175,7 @@ class DNSMDataset(Dataset):
             self.all_rates.copy(),
             self.all_subs_probs.copy(),
             self._branch_lengths.copy(),
-            multihit_model=copy.deepcopy(self.multihit_model),
+            multihit_model=self.multihit_model,
         )
         return new_dataset
 
@@ -192,7 +192,7 @@ class DNSMDataset(Dataset):
             self.all_rates[indices],
             self.all_subs_probs[indices],
             self._branch_lengths[indices],
-            multihit_model=copy.deepcopy(self.multihit_model),
+            multihit_model=self.multihit_model,
         )
         return new_dataset
 

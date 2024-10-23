@@ -3,7 +3,7 @@ import os
 import torch
 import pytest
 
-from netam.common import BIG
+from netam.common import BIG, force_spawn
 from netam.framework import (
     crepe_exists,
     load_crepe,
@@ -15,15 +15,6 @@ from netam.dasm import (
     zap_predictions_along_diagonal,
 )
 import multiprocessing as mp
-
-
-def force_spawn():
-    """Force the spawn start method for multiprocessing.
-
-    This is necessary to avoid conflicts with the internal OpenMP-based thread pool in
-    PyTorch.
-    """
-    mp.set_start_method("spawn", force=True)
 
 
 @pytest.fixture(scope="module")
