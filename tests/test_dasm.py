@@ -14,10 +14,21 @@ from netam.dasm import (
     DASMDataset,
     zap_predictions_along_diagonal,
 )
+import multiprocessing as mp
+
+
+def force_spawn():
+    """Force the spawn start method for multiprocessing.
+
+    This is necessary to avoid conflicts with the internal OpenMP-based thread pool in
+    PyTorch.
+    """
+    mp.set_start_method("spawn", force=True)
 
 
 @pytest.fixture(scope="module")
 def dasm_burrito(pcp_df):
+    force_spawn()
     """Fixture that returns the DNSM Burrito object."""
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False

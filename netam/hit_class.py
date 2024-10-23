@@ -41,7 +41,6 @@ def parent_specific_hit_classes(parent_codon_idxs: torch.Tensor) -> torch.Tensor
     ]
 
 
-
 def apply_multihit_correction(
     parent_codon_idxs: torch.Tensor,
     codon_probs: torch.Tensor,

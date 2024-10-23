@@ -18,6 +18,7 @@ from torch import Tensor, optim
 from netam.sequences import CODON_AA_INDICATOR_MATRIX
 
 import netam.sequences as sequences
+
 # torch.autograd.set_detect_anomaly(True)
 
 
@@ -521,7 +522,10 @@ def optimize_branch_length(
         torch.nn.utils.clip_grad_norm_([log_branch_length], max_norm=5.0)
         optimizer.step()
         if torch.isnan(log_branch_length):
-            print("branch length optimization resulted in NAN, previous log branch length:", prev_log_branch_length)
+            print(
+                "branch length optimization resulted in NAN, previous log branch length:",
+                prev_log_branch_length,
+            )
             if np.isclose(prev_log_branch_length.detach().numpy(), 0):
                 log_branch_length = prev_log_branch_length
                 nan_issue = True

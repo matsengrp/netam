@@ -287,9 +287,7 @@ def child_codon_probs_corrected(
         torch.Tensor: A (codon_count,) shaped tensor containing the corrected probabilities of each child codon.
     """
 
-    corrected_per_parent_probs = model(
-        parent_codon_idxs, uncorrected_per_parent_probs
-    )
+    corrected_per_parent_probs = model(parent_codon_idxs, uncorrected_per_parent_probs)
     return child_codon_probs_from_per_parent_probs(
         corrected_per_parent_probs, child_codon_idxs
     )
@@ -374,9 +372,13 @@ class MultihitBurrito(Burrito):
 
             child_codon_idxs = reshape_for_codons(child_idxs)[codon_mask]
             parent_codon_idxs = reshape_for_codons(parent_idxs)[codon_mask]
-            return child_codon_probs_corrected(
-                codon_probs, parent_codon_idxs, child_codon_idxs, self.model
-            ).log().sum()
+            return (
+                child_codon_probs_corrected(
+                    codon_probs, parent_codon_idxs, child_codon_idxs, self.model
+                )
+                .log()
+                .sum()
+            )
 
         return optimize_branch_length(
             log_pcp_probability,

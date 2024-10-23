@@ -140,7 +140,9 @@ class DNSMDataset(Dataset):
         )
 
     @classmethod
-    def train_val_datasets_of_pcp_df(cls, pcp_df, branch_length_multiplier=5.0, multihit_model=None):
+    def train_val_datasets_of_pcp_df(
+        cls, pcp_df, branch_length_multiplier=5.0, multihit_model=None
+    ):
         """Perform a train-val split based on the 'in_train' column.
 
         This is a class method so it works for subclasses.
