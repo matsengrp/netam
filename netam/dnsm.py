@@ -249,7 +249,7 @@ class DNSMDataset(Dataset):
             rates = rates.to("cpu")
             subs_probs = subs_probs.to("cpu")
             if self.multihit_model is not None:
-                multihit_model = self.multihit_model.to("cpu")
+                multihit_model = copy.deepcopy(self.multihit_model).to("cpu")
             else:
                 multihit_model = None
             # Note we are replacing all Ns with As, which means that we need to be careful
