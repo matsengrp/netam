@@ -42,7 +42,7 @@ def parent_specific_hit_classes(parent_codon_idxs: torch.Tensor) -> torch.Tensor
 def apply_multihit_correction(
     parent_codon_idxs: torch.Tensor,
     codon_probs: torch.Tensor,
-    hit_class_factors: torch.Tensor,
+    log_hit_class_factors: torch.Tensor,
 ) -> torch.Tensor:
     """Multiply codon probabilities by their hit class factors, and renormalize.
 
@@ -53,7 +53,7 @@ def apply_multihit_correction(
             indices of the parent codon's nucleotides.
         codon_probs (torch.Tensor): A (N, 4, 4, 4) shaped tensor containing the probabilities
             of mutating to each possible target codon, for each of the N parent codons.
-        hit_class_factors (torch.Tensor): A tensor containing the log hit class factors for hit classes 1, 2, and 3. The
+        log_hit_class_factors (torch.Tensor): A tensor containing the log hit class factors for hit classes 1, 2, and 3. The
             factor for hit class 0 is assumed to be 1 (that is, 0 in log-space).
 
     Returns:
@@ -61,7 +61,7 @@ def apply_multihit_correction(
             target codon, for each of the N parent codons, after applying the hit class factors.
     """
     per_parent_hit_class = parent_specific_hit_classes(parent_codon_idxs)
-    corrections = torch.cat([torch.tensor([0.0]), hit_class_factors]).exp()
+    corrections = torch.cat([torch.tensor([0.0]), log_hit_class_factors]).exp()
     reshaped_corrections = corrections[per_parent_hit_class]
     unnormalized_corrected_probs = codon_probs * reshaped_corrections
     normalizations = torch.sum(
