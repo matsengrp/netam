@@ -2,10 +2,6 @@ from abc import ABC, abstractmethod
 import math
 import warnings
 
-warnings.filterwarnings(
-    "ignore", category=UserWarning, module="torch.nn.modules.transformer"
-)
-
 import pandas as pd
 
 import torch
@@ -20,6 +16,10 @@ from netam.common import (
     PositionalEncoding,
     generate_kmers,
     aa_mask_tensor_of,
+)
+
+warnings.filterwarnings(
+    "ignore", category=UserWarning, module="torch.nn.modules.transformer"
 )
 
 
@@ -706,13 +706,13 @@ class HitClassModel(nn.Module):
         return {}
 
     def forward(
-        self, parent_codon_idxs: torch.Tensor, uncorrected_log_codon_probs: torch.Tensor
+        self, parent_codon_idxs: torch.Tensor, uncorrected_codon_probs: torch.Tensor
     ):
         """Forward function takes a tensor of target codon distributions, for each
         observed parent codon, and adjusts the distributions according to the hit class
         corrections."""
         return apply_multihit_correction(
-            parent_codon_idxs, uncorrected_log_codon_probs, self.values
+            parent_codon_idxs, uncorrected_codon_probs, self.values
         )
 
     def reinitialize_weights(self):

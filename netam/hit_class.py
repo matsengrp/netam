@@ -1,8 +1,6 @@
 import torch
 import numpy as np
 
-from netam.common import BASES
-
 
 # Define the number of bases (e.g., 4 for DNA/RNA)
 _num_bases = 4
@@ -43,8 +41,8 @@ def parent_specific_hit_classes(parent_codon_idxs: torch.Tensor) -> torch.Tensor
 
 def apply_multihit_correction(
     parent_codon_idxs: torch.Tensor,
-    codon_logprobs: torch.Tensor,
-    hit_class_factors: torch.Tensor,
+    codon_probs: torch.Tensor,
+    log_hit_class_factors: torch.Tensor,
 ) -> torch.Tensor:
     """Multiply codon probabilities by their hit class factors, and renormalize.
 
@@ -53,23 +51,27 @@ def apply_multihit_correction(
     Args:
         parent_codon_idxs (torch.Tensor): A (N, 3) shaped tensor containing for each codon, the
             indices of the parent codon's nucleotides.
-        codon_logprobs (torch.Tensor): A (N, 4, 4, 4) shaped tensor containing the log probabilities
+        codon_probs (torch.Tensor): A (N, 4, 4, 4) shaped tensor containing the probabilities
             of mutating to each possible target codon, for each of the N parent codons.
-        hit_class_factors (torch.Tensor): A tensor containing the log hit class factors for hit classes 1, 2, and 3. The
+        log_hit_class_factors (torch.Tensor): A tensor containing the log hit class factors for hit classes 1, 2, and 3. The
             factor for hit class 0 is assumed to be 1 (that is, 0 in log-space).
 
     Returns:
-        torch.Tensor: A (N, 4, 4, 4) shaped tensor containing the log probabilities of mutating to each possible
+        torch.Tensor: A (N, 4, 4, 4) shaped tensor containing the probabilities of mutating to each possible
             target codon, for each of the N parent codons, after applying the hit class factors.
     """
     per_parent_hit_class = parent_specific_hit_classes(parent_codon_idxs)
-    corrections = torch.cat([torch.tensor([0.0]), hit_class_factors])
+    corrections = torch.cat([torch.tensor([0.0]), log_hit_class_factors]).exp()
     reshaped_corrections = corrections[per_parent_hit_class]
-    unnormalized_corrected_logprobs = codon_logprobs + reshaped_corrections
-    normalizations = torch.logsumexp(
-        unnormalized_corrected_logprobs, dim=[1, 2, 3], keepdim=True
+    unnormalized_corrected_probs = codon_probs * reshaped_corrections
+    normalizations = torch.sum(
+        unnormalized_corrected_probs, dim=[1, 2, 3], keepdim=True
     )
-    return unnormalized_corrected_logprobs - normalizations
+    result = unnormalized_corrected_probs / normalizations
+    if torch.any(torch.isnan(result)):
+        print("NAN found in multihit correction application")
+        assert False
+    return result
 
 
 def hit_class_probs_tensor(

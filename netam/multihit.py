@@ -270,28 +270,26 @@ def child_codon_probs_from_per_parent_probs(per_parent_probs, child_codon_idxs):
     ]
 
 
-def child_codon_logprobs_corrected(
-    uncorrected_per_parent_logprobs, parent_codon_idxs, child_codon_idxs, model
+def child_codon_probs_corrected(
+    uncorrected_per_parent_probs, parent_codon_idxs, child_codon_idxs, model
 ):
     """Calculate the probability of each child codon given the parent codon
     probabilities, corrected by hit class factors.
 
     Args:
-        uncorrected_per_parent_logprobs (torch.Tensor): A (codon_count, 4, 4, 4) shaped tensor containing the log probabilities
+        uncorrected_per_parent_probs (torch.Tensor): A (codon_count, 4, 4, 4) shaped tensor containing the probabilities
             of each possible target codon, for each parent codon.
         parent_codon_idxs (torch.Tensor): A (codon_count, 3) shaped tensor containing the nucleotide indices for each parent codon
         child_codon_idxs (torch.Tensor): A (codon_count, 3) shaped tensor containing the nucleotide indices for each child codon
         model: A HitClassModel implementing the desired correction.
 
     Returns:
-        torch.Tensor: A (codon_count,) shaped tensor containing the corrected log probabilities of each child codon.
+        torch.Tensor: A (codon_count,) shaped tensor containing the corrected probabilities of each child codon.
     """
 
-    corrected_per_parent_logprobs = model(
-        parent_codon_idxs, uncorrected_per_parent_logprobs
-    )
+    corrected_per_parent_probs = model(parent_codon_idxs, uncorrected_per_parent_probs)
     return child_codon_probs_from_per_parent_probs(
-        corrected_per_parent_logprobs, child_codon_idxs
+        corrected_per_parent_probs, child_codon_idxs
     )
 
 
@@ -340,12 +338,12 @@ class MultihitBurrito(Burrito):
             codon_probs, codon_mask=codon_mask
         )
 
-        child_codon_logprobs = child_codon_logprobs_corrected(
-            flat_masked_codon_probs.log(),
+        child_codon_logprobs = child_codon_probs_corrected(
+            flat_masked_codon_probs,
             parent_codons_flat,
             child_codons_flat,
             self.model,
-        )
+        ).log()
         return -child_codon_logprobs.sum()
 
     def _find_optimal_branch_length(
@@ -374,9 +372,13 @@ class MultihitBurrito(Burrito):
 
             child_codon_idxs = reshape_for_codons(child_idxs)[codon_mask]
             parent_codon_idxs = reshape_for_codons(parent_idxs)[codon_mask]
-            return child_codon_logprobs_corrected(
-                codon_probs.log(), parent_codon_idxs, child_codon_idxs, self.model
-            ).sum()
+            return (
+                child_codon_probs_corrected(
+                    codon_probs, parent_codon_idxs, child_codon_idxs, self.model
+                )
+                .log()
+                .sum()
+            )
 
         return optimize_branch_length(
             log_pcp_probability,

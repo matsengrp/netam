@@ -7,11 +7,7 @@ import torch.nn.functional as F
 # optimization on our server.
 torch.set_num_threads(1)
 
-import numpy as np
-import pandas as pd
-
 from netam.common import (
-    clamp_log_probability,
     clamp_probability,
     BIG,
 )

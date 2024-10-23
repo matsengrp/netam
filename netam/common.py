@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torch import nn, Tensor
+import multiprocessing as mp
 
 BIG = 1e9
 SMALL_PROB = 1e-6
@@ -29,6 +30,15 @@ VRC01_NT_SEQ = (
     "AACTGTGATTACAATTGGGACTTCGAACACTGGGGCCGGGGCACCCCGGTCATCGTCTCA"
     "TCA"
 )
+
+
+def force_spawn():
+    """Force the spawn start method for multiprocessing.
+
+    This is necessary to avoid conflicts with the internal OpenMP-based thread pool in
+    PyTorch.
+    """
+    mp.set_start_method("spawn", force=True)
 
 
 def generate_kmers(kmer_length):

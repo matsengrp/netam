@@ -3,7 +3,7 @@ import os
 import torch
 import pytest
 
-from netam.common import BIG
+from netam.common import BIG, force_spawn
 from netam.framework import (
     crepe_exists,
     load_crepe,
@@ -18,6 +18,7 @@ from netam.dasm import (
 
 @pytest.fixture(scope="module")
 def dasm_burrito(pcp_df):
+    force_spawn()
     """Fixture that returns the DNSM Burrito object."""
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
