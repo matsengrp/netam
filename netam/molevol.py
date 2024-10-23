@@ -307,8 +307,6 @@ def build_codon_mutsel(
 
     if multihit_model is not None:
         codon_probs = multihit_model(parent_codon_idxs, codon_probs)
-    else:
-        warnings.warn("No multihit model provided. Using uncorrected probabilities.")
 
     # Calculate the codon selection matrix for each sequence via Einstein
     # summation, in which we sum over the repeated indices.
@@ -370,8 +368,6 @@ def neutral_aa_probs(
 
     if multihit_model is not None:
         codon_probs = multihit_model(parent_codon_idxs, codon_probs)
-    else:
-        warnings.warn("No multihit model provided. Using uncorrected probabilities.")
 
     # Get the probability of mutating to each amino acid.
     aa_probs = codon_probs.view(-1, 64) @ CODON_AA_INDICATOR_MATRIX
