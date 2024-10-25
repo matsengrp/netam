@@ -537,8 +537,8 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         super().__init__()
 
     def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
-        """Do the forward method then exponentiation without gradients from an
-        amino acid string.
+        """Do the forward method then exponentiation without gradients from an amino
+        acid string.
 
         Args:
             aa_str: A string of amino acids.
@@ -608,8 +608,7 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
         self.linear.weight.data.uniform_(-initrange, initrange)
 
     def represent(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        """Represent an index-encoded parent sequence in the model's
-        embedding space.
+        """Represent an index-encoded parent sequence in the model's embedding space.
 
         Args:
             amino_acid_indices: A tensor of shape (B, L) containing the
@@ -716,8 +715,7 @@ class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
         return {}
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        """Build a binary log selection matrix from an index-encoded parent
-        sequence."""
+        """Build a binary log selection matrix from an index-encoded parent sequence."""
         replicated_value = self.single_value.expand_as(amino_acid_indices)
         return replicated_value
 
