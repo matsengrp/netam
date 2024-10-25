@@ -335,8 +335,8 @@ class DNSMBurrito(framework.Burrito):
         self.val_dataset.load_branch_lengths(in_csv_prefix + ".val_branch_lengths.csv")
 
     def prediction_pair_of_batch(self, batch):
-        """Get log neutral amino acid substitution probabilities and log
-        selection factors for a batch of data."""
+        """Get log neutral amino acid substitution probabilities and log selection
+        factors for a batch of data."""
         aa_parents_idxs = batch["aa_parents_idxs"].to(self.device)
         mask = batch["mask"].to(self.device)
         log_neutral_aa_mut_probs = batch["log_neutral_aa_mut_probs"].to(self.device)
@@ -348,8 +348,8 @@ class DNSMBurrito(framework.Burrito):
         return log_neutral_aa_mut_probs, log_selection_factors
 
     def predictions_of_pair(self, log_neutral_aa_mut_probs, log_selection_factors):
-        """Obtain the predictions for a pair consisting of the log neutral amino acid mutation
-        substitution probabilities and the log selection factors."""
+        """Obtain the predictions for a pair consisting of the log neutral amino acid
+        mutation substitution probabilities and the log selection factors."""
         predictions = torch.exp(log_neutral_aa_mut_probs + log_selection_factors)
         assert torch.isfinite(predictions).all()
         predictions = clamp_probability(predictions)

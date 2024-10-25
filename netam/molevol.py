@@ -186,8 +186,8 @@ def aaprob_of_mut_and_sub(
     parent_codon_idxs: Tensor, mut_probs: Tensor, sub_probs: Tensor
 ) -> Tensor:
     """For a sequence of parent codons and given nucleotide mutability and substitution
-    probabilities, compute the probability of a substitution to each amino acid
-    for each codon along the sequence.
+    probabilities, compute the probability of a substitution to each amino acid for each
+    codon along the sequence.
 
     Stop codons don't appear as part of this calculation.
 
