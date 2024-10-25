@@ -60,14 +60,8 @@ def apply_multihit_correction(
         torch.Tensor: A (N, 4, 4, 4) shaped tensor containing the probabilities of mutating to each possible
             target codon, for each of the N parent codons, after applying the hit class factors.
     """
-    from netam.common import print_tensor_devices
-    print_tensor_devices()
-    # flush output
-    import sys
-    sys.stdout.flush()
     per_parent_hit_class = parent_specific_hit_classes(parent_codon_idxs)
-    device = log_hit_class_factors.device
-    corrections = torch.cat([torch.tensor([0.0], device=device), log_hit_class_factors]).exp()
+    corrections = torch.cat([torch.tensor([0.0]), log_hit_class_factors]).exp()
     reshaped_corrections = corrections[per_parent_hit_class]
     unnormalized_corrected_probs = codon_probs * reshaped_corrections
     normalizations = torch.sum(
