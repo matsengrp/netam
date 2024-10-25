@@ -429,7 +429,7 @@ class DNSMBurrito(framework.Burrito):
                 rates[: len(parent)],
                 subs_probs[: len(parent), :],
                 starting_length,
-                dataset.multihit_model,
+                copy.deepcopy(self.multihit_model).to("cpu"),
                 **optimization_kwargs,
             )
 
