@@ -62,6 +62,9 @@ def apply_multihit_correction(
     """
     from netam.common import print_tensor_devices
     print_tensor_devices()
+    # flush output
+    import sys
+    sys.stdout.flush()
     per_parent_hit_class = parent_specific_hit_classes(parent_codon_idxs)
     device = log_hit_class_factors.device
     corrections = torch.cat([torch.tensor([0.0], device=device), log_hit_class_factors]).exp()
