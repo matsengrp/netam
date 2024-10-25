@@ -414,6 +414,8 @@ class DNSMBurrito(framework.Burrito):
 
         if dataset.multihit_model is not None:
             multihit_model = copy.deepcopy(dataset.multihit_model).to("cpu")
+        else:
+            multihit_model = None
 
         for parent, child, rates, subs_probs, starting_length in tqdm(
             zip(
