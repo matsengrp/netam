@@ -21,6 +21,9 @@ lint:
 	# exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
 	flake8 . --count --max-complexity=30 --max-line-length=127 --statistics --exclude=_ignore
 
+lintless:
+	flake8 . --max-complexity=30 --ignore=E731,W503,E402,F541,E501,E203,E266 --statistics --exclude=_ignore
+
 docs:
 	make -C docs html
 
