@@ -290,6 +290,8 @@ def build_codon_mutsel(
     """Build a sequence of codon mutation-selection matrices for codons along a
     sequence.
 
+    These will assign zero for the probability of mutating to a stop codon.
+
     Args:
         parent_codon_idxs (torch.Tensor): The parent codons for each sequence. Shape: (codon_count, 3)
         codon_mut_probs (torch.Tensor): The mutation probabilities for each site in each codon. Shape: (codon_count, 3)
