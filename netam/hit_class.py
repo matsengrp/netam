@@ -61,7 +61,8 @@ def apply_multihit_correction(
             target codon, for each of the N parent codons, after applying the hit class factors.
     """
     per_parent_hit_class = parent_specific_hit_classes(parent_codon_idxs)
-    corrections = torch.cat([torch.tensor([0.0]), log_hit_class_factors]).exp()
+    device = log_hit_class_factors.device
+    corrections = torch.cat([torch.tensor([0.0], device=device), log_hit_class_factors]).exp()
     reshaped_corrections = corrections[per_parent_hit_class]
     unnormalized_corrected_probs = codon_probs * reshaped_corrections
     normalizations = torch.sum(
