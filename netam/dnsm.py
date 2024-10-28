@@ -412,11 +412,6 @@ class DNSMBurrito(framework.Burrito):
         optimal_lengths = []
         failed_count = 0
 
-        if dataset.multihit_model is not None:
-            multihit_model = copy.deepcopy(dataset.multihit_model).to("cpu")
-        else:
-            multihit_model = None
-
         for parent, child, rates, subs_probs, starting_length in tqdm(
             zip(
                 dataset.nt_parents,
@@ -434,7 +429,7 @@ class DNSMBurrito(framework.Burrito):
                 rates[: len(parent)],
                 subs_probs[: len(parent), :],
                 starting_length,
-                multihit_model,
+                dataset.multihit_model,
                 **optimization_kwargs,
             )
 
