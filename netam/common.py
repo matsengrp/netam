@@ -55,7 +55,6 @@ def kmer_to_index_of(all_kmers):
     return {kmer: idx for idx, kmer in enumerate(all_kmers)}
 
 
-# TODO shouldn't this be moved to sequences.py?
 def aa_idx_tensor_of_str_ambig(aa_str):
     """Return the indices of the amino acids in a string, allowing the ambiguous
     character."""
