@@ -461,7 +461,7 @@ class Burrito(ABC):
         and resume training.
         """
         for i in range(max_tries):
-            train_history = self.train(epochs)
+            train_history = self.simple_train(epochs)
             if self.optimizer.param_groups[0]["lr"] < self.min_learning_rate:
                 return train_history
             else:
@@ -571,7 +571,7 @@ class Burrito(ABC):
                 self.write_loss("Validation loss", average_loss, self.global_epoch)
         return loss_reduction(average_loss)
 
-    def train(self, epochs, out_prefix=None):
+    def simple_train(self, epochs, out_prefix=None):
         """Train the model for the given number of epochs.
 
         If out_prefix is provided, then a crepe will be saved to that location.
@@ -760,7 +760,7 @@ class Burrito(ABC):
                 weight * np.log(current_lr) + (1 - weight) * np.log(self.learning_rate)
             )
             self.reset_optimization(new_lr)
-            loss_history_l.append(self.train(epochs, out_prefix=out_prefix))
+            loss_history_l.append(self.simple_train(epochs, out_prefix=out_prefix))
             # We standardize and optimize the branch lengths after each cycle, even the last one.
             optimize_branch_lengths()
             self.mark_branch_lengths_optimized(cycle + 1)

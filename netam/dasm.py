@@ -96,6 +96,8 @@ class DASMDataset(dnsm.DNSMDataset):
         self.log_neutral_aa_probs = self.log_neutral_aa_probs.to(device)
         self.all_rates = self.all_rates.to(device)
         self.all_subs_probs = self.all_subs_probs.to(device)
+        if self.multihit_model is not None:
+            self.multihit_model = self.multihit_model.to(device)
 
 
 def zap_predictions_along_diagonal(predictions, aa_parents_idxs):
@@ -203,8 +205,8 @@ class DASMBurrito(framework.TwoLossMixin, dnsm.DNSMBurrito):
         # matrix directly. Note that selection_factors_of_aa_str does the exponentiation
         # so this indeed gives us the selection factors, not the log selection factors.
         parent = translate_sequence(parent)
-        selection_factors = self.model.selection_factors_of_aa_str(parent)
+        per_aa_selection_factors = self.model.selection_factors_of_aa_str(parent)
         parent_idxs = sequences.aa_idx_array_of_str(parent)
-        selection_factors[torch.arange(len(parent_idxs)), parent_idxs] = 1.0
+        per_aa_selection_factors[torch.arange(len(parent_idxs)), parent_idxs] = 1.0
 
-        return selection_factors
+        return per_aa_selection_factors
