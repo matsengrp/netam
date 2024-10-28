@@ -640,8 +640,8 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
             representation: A tensor of shape (B, L, E) representing the
                 embedded parent sequences.
         Returns:
-            A tensor of shape (B, L, 1) representing the log level of selection
-            for each amino acid site.
+            A tensor of shape (B, L, out_features) representing the log level
+            of selection for each amino acid site.
         """
         return self.linear(representation).squeeze(-1)
 
@@ -656,8 +656,8 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
             mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.
 
         Returns:
-            A tensor of shape (B, L, 20) representing the log level of selection
-            for each possible amino acid at each site.
+            A tensor of shape (B, L, out_features) representing the log level
+            of selection for each possible amino acid at each site.
         """
         return self.predict(self.represent(amino_acid_indices, mask))
 
