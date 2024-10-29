@@ -174,7 +174,7 @@ class HitClassDataset(Dataset):
         for (
             encoded_parent,
             rates,
-            subs_probs,
+            nt_csps,
             branch_length,
         ) in zip(
             self.nt_parents,
@@ -187,7 +187,7 @@ class HitClassDataset(Dataset):
             codon_probs = codon_probs_of_parent_scaled_rates_and_sub_probs(
                 encoded_parent,
                 scaled_rates[: len(encoded_parent)],
-                subs_probs[: len(encoded_parent)],
+                nt_csps[: len(encoded_parent)],
             )
             new_codon_probs.append(codon_probs)
 
@@ -217,7 +217,7 @@ class HitClassDataset(Dataset):
             "child": self.nt_children[idx],
             "observed_hcs": self.observed_hcs[idx],
             "rates": self.nt_ratess[idx],
-            "subs_probs": self.nt_cspss[idx],
+            "nt_csps": self.nt_cspss[idx],
             "hit_class_probs": self.hit_class_probs[idx],
             "codon_probs": self.codon_probs[idx],
             "codon_mask": self.codon_mask[idx],
@@ -351,7 +351,7 @@ class MultihitBurrito(Burrito):
         parent_idxs,
         child_idxs,
         rates,
-        subs_probs,
+        nt_csps,
         codon_mask,
         starting_branch_length,
         **optimization_kwargs,
@@ -367,7 +367,7 @@ class MultihitBurrito(Burrito):
             # Codon probs is a Cx4x4x4 tensor containing for each codon idx the
             # distribution on possible target codons (all 64 of them!)
             codon_probs = codon_probs_of_parent_scaled_rates_and_sub_probs(
-                parent_idxs, scaled_rates, subs_probs
+                parent_idxs, scaled_rates, nt_csps
             )[codon_mask]
 
             child_codon_idxs = reshape_for_codons(child_idxs)[codon_mask]
@@ -393,7 +393,7 @@ class MultihitBurrito(Burrito):
             parent_idxs,
             child_idxs,
             rates,
-            subs_probs,
+            nt_csps,
             codon_mask,
             starting_length,
         ) in tqdm(
@@ -413,7 +413,7 @@ class MultihitBurrito(Burrito):
                     parent_idxs,
                     child_idxs,
                     rates[: len(parent_idxs)],
-                    subs_probs[: len(parent_idxs), :],
+                    nt_csps[: len(parent_idxs), :],
                     codon_mask,
                     starting_length,
                     **optimization_kwargs,
@@ -439,13 +439,13 @@ def hit_class_dataset_from_pcp_df(
     nt_parents = pcp_df["parent"].reset_index(drop=True)
     nt_children = pcp_df["child"].reset_index(drop=True)
     rates = pcp_df["rates"].reset_index(drop=True)
-    subs_probs = pcp_df["subs_probs"].reset_index(drop=True)
+    nt_csps = pcp_df["nt_csps"].reset_index(drop=True)
 
     return HitClassDataset(
         nt_parents,
         nt_children,
         rates,
-        subs_probs,
+        nt_csps,
         branch_length_multiplier=branch_length_multiplier,
     )
 
@@ -458,21 +458,21 @@ def train_test_datasets_of_pcp_df(
     nt_parents = pcp_df["parent"].reset_index(drop=True)
     nt_children = pcp_df["child"].reset_index(drop=True)
     rates = pcp_df["rates"].reset_index(drop=True)
-    subs_probs = pcp_df["subs_probs"].reset_index(drop=True)
+    nt_csps = pcp_df["nt_csps"].reset_index(drop=True)
 
     train_len = int(train_frac * len(nt_parents))
     train_parents, val_parents = nt_parents[:train_len], nt_parents[train_len:]
     train_children, val_children = nt_children[:train_len], nt_children[train_len:]
     train_rates, val_rates = rates[:train_len], rates[train_len:]
-    train_subs_probs, val_subs_probs = (
-        subs_probs[:train_len],
-        subs_probs[train_len:],
+    train_nt_csps, val_nt_csps = (
+        nt_csps[:train_len],
+        nt_csps[train_len:],
     )
     val_dataset = HitClassDataset(
         val_parents,
         val_children,
         val_rates,
-        val_subs_probs,
+        val_nt_csps,
         branch_length_multiplier=branch_length_multiplier,
     )
     if train_frac == 0.0:
@@ -482,7 +482,7 @@ def train_test_datasets_of_pcp_df(
         train_parents,
         train_children,
         train_rates,
-        train_subs_probs,
+        train_nt_csps,
         branch_length_multiplier=branch_length_multiplier,
     )
     return val_dataset, train_dataset
@@ -503,5 +503,5 @@ def prepare_pcp_df(
         crepe, pcp_df["parent"]
     )
     pcp_df["rates"] = ratess
-    pcp_df["subs_probs"] = cspss
+    pcp_df["nt_csps"] = cspss
     return pcp_df
