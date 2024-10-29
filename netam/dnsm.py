@@ -129,12 +129,12 @@ class DNSMDataset(Dataset):
     def of_pcp_df(cls, pcp_df, branch_length_multiplier=5.0, multihit_model=None):
         """Alternative constructor that takes in a pcp_df and calculates the initial
         branch lengths."""
-        assert "rates" in pcp_df.columns, "pcp_df must have a neutral rates column"
+        assert "nt_rates" in pcp_df.columns, "pcp_df must have a neutral rates column"
         return cls.of_seriess(
             pcp_df["parent"],
             pcp_df["child"],
-            pcp_df["rates"],
-            pcp_df["subs_probs"],
+            pcp_df["nt_rates"],
+            pcp_df["nt_csps"],
             branch_length_multiplier=branch_length_multiplier,
             multihit_model=multihit_model,
         )
