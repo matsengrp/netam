@@ -98,8 +98,8 @@ class DNSMDataset(Dataset):
         cls,
         nt_parents: pd.Series,
         nt_children: pd.Series,
-        nt_ratess_series: pd.Series,
-        nt_cspss_series: pd.Series,
+        nt_rates_series: pd.Series,
+        nt_csps_series: pd.Series,
         branch_length_multiplier=5.0,
         multihit_model=None,
     ):
@@ -119,8 +119,8 @@ class DNSMDataset(Dataset):
         return cls(
             nt_parents.reset_index(drop=True),
             nt_children.reset_index(drop=True),
-            stack_heterogeneous(nt_ratess_series.reset_index(drop=True)),
-            stack_heterogeneous(nt_cspss_series.reset_index(drop=True)),
+            stack_heterogeneous(nt_rates_series.reset_index(drop=True)),
+            stack_heterogeneous(nt_csps_series.reset_index(drop=True)),
             initial_branch_lengths,
             multihit_model=multihit_model,
         )
