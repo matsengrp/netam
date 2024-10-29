@@ -25,38 +25,38 @@ class DASMDataset(dnsm.DNSMDataset):
     def update_neutral_probs(self):
         neutral_aa_probs_l = []
 
-        for nt_parent, mask, rates, branch_length, subs_probs in zip(
+        for nt_parent, mask, nt_rates, branch_length, nt_csps in zip(
             self.nt_parents,
             self.mask,
-            self.all_rates,
+            self.nt_ratess,
             self._branch_lengths,
-            self.all_subs_probs,
+            self.nt_cspss,
         ):
             mask = mask.to("cpu")
-            rates = rates.to("cpu")
-            subs_probs = subs_probs.to("cpu")
+            nt_rates = nt_rates.to("cpu")
+            nt_csps = nt_csps.to("cpu")
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
             parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
             parent_len = len(nt_parent)
 
-            mut_probs = 1.0 - torch.exp(-branch_length * rates[:parent_len])
-            normed_subs_probs = molevol.normalize_sub_probs(
-                parent_idxs, subs_probs[:parent_len, :]
+            mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
+            normed_nt_csps = molevol.normalize_sub_probs(
+                parent_idxs, nt_csps[:parent_len, :]
             )
 
             neutral_aa_probs = molevol.neutral_aa_probs(
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
-                normed_subs_probs.reshape(-1, 3, 4),
+                normed_nt_csps.reshape(-1, 3, 4),
             )
 
             if not torch.isfinite(neutral_aa_probs).all():
                 print(f"Found a non-finite neutral_aa_probs")
                 print(f"nt_parent: {nt_parent}")
                 print(f"mask: {mask}")
-                print(f"rates: {rates}")
-                print(f"subs_probs: {subs_probs}")
+                print(f"nt_rates: {nt_rates}")
+                print(f"nt_csps: {nt_csps}")
                 print(f"branch_length: {branch_length}")
                 raise ValueError(f"neutral_aa_probs is not finite: {neutral_aa_probs}")
 
@@ -84,8 +84,8 @@ class DASMDataset(dnsm.DNSMDataset):
             "subs_indicator": self.aa_subs_indicator_tensor[idx],
             "mask": self.mask[idx],
             "log_neutral_aa_probs": self.log_neutral_aa_probs[idx],
-            "rates": self.all_rates[idx],
-            "subs_probs": self.all_subs_probs[idx],
+            "nt_rates": self.nt_ratess[idx],
+            "nt_csps": self.nt_cspss[idx],
         }
 
     def to(self, device):
@@ -94,8 +94,8 @@ class DASMDataset(dnsm.DNSMDataset):
         self.aa_subs_indicator_tensor = self.aa_subs_indicator_tensor.to(device)
         self.mask = self.mask.to(device)
         self.log_neutral_aa_probs = self.log_neutral_aa_probs.to(device)
-        self.all_rates = self.all_rates.to(device)
-        self.all_subs_probs = self.all_subs_probs.to(device)
+        self.nt_ratess = self.nt_ratess.to(device)
+        self.nt_cspss = self.nt_cspss.to(device)
         if self.multihit_model is not None:
             self.multihit_model = self.multihit_model.to(device)
 

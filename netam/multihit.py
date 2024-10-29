@@ -19,7 +19,7 @@ from typing import Sequence
 from netam.molevol import (
     reshape_for_codons,
     optimize_branch_length,
-    codon_probs_of_parent_scaled_rates_and_sub_probs,
+    codon_probs_of_parent_scaled_nt_rates_and_csps,
 )
 from netam.hit_class import hit_class_probs_tensor
 from netam import sequences
@@ -96,8 +96,8 @@ class HitClassDataset(Dataset):
         self,
         nt_parents: Sequence[str],
         nt_children: Sequence[str],
-        all_rates: Sequence[list[float]],
-        all_subs_probs: Sequence[list[list[float]]],
+        nt_ratess: Sequence[list[float]],
+        nt_cspss: Sequence[list[list[float]]],
         branch_length_multiplier: float = 1.0,
     ):
         trimmed_parents = _trim_to_codon_boundary_and_max_len(nt_parents)
@@ -114,13 +114,13 @@ class HitClassDataset(Dataset):
                 for child in trimmed_children
             )
         )
-        self.all_rates = stack_heterogeneous(
-            pd.Series(_trim_to_codon_boundary_and_max_len(all_rates)).reset_index(
+        self.nt_ratess = stack_heterogeneous(
+            pd.Series(_trim_to_codon_boundary_and_max_len(nt_ratess)).reset_index(
                 drop=True
             )
         )
-        self.all_subs_probs = stack_heterogeneous(
-            pd.Series(_trim_to_codon_boundary_and_max_len(all_subs_probs)).reset_index(
+        self.nt_cspss = stack_heterogeneous(
+            pd.Series(_trim_to_codon_boundary_and_max_len(nt_cspss)).reset_index(
                 drop=True
             )
         )
@@ -173,21 +173,21 @@ class HitClassDataset(Dataset):
         new_hc_probs = []
         for (
             encoded_parent,
-            rates,
-            subs_probs,
+            nt_rates,
+            nt_csps,
             branch_length,
         ) in zip(
             self.nt_parents,
-            self.all_rates,
-            self.all_subs_probs,
+            self.nt_ratess,
+            self.nt_cspss,
             self.branch_lengths,
         ):
-            scaled_rates = branch_length * rates
+            scaled_rates = branch_length * nt_rates
 
-            codon_probs = codon_probs_of_parent_scaled_rates_and_sub_probs(
+            codon_probs = codon_probs_of_parent_scaled_nt_rates_and_csps(
                 encoded_parent,
                 scaled_rates[: len(encoded_parent)],
-                subs_probs[: len(encoded_parent)],
+                nt_csps[: len(encoded_parent)],
             )
             new_codon_probs.append(codon_probs)
 
@@ -216,8 +216,8 @@ class HitClassDataset(Dataset):
             "parent": self.nt_parents[idx],
             "child": self.nt_children[idx],
             "observed_hcs": self.observed_hcs[idx],
-            "rates": self.all_rates[idx],
-            "subs_probs": self.all_subs_probs[idx],
+            "nt_rates": self.nt_ratess[idx],
+            "nt_csps": self.nt_cspss[idx],
             "hit_class_probs": self.hit_class_probs[idx],
             "codon_probs": self.codon_probs[idx],
             "codon_mask": self.codon_mask[idx],
@@ -227,8 +227,8 @@ class HitClassDataset(Dataset):
         self.nt_parents = self.nt_parents.to(device)
         self.nt_children = self.nt_children.to(device)
         self.observed_hcs = self.observed_hcs.to(device)
-        self.all_rates = self.all_rates.to(device)
-        self.all_subs_probs = self.all_subs_probs.to(device)
+        self.nt_ratess = self.nt_ratess.to(device)
+        self.nt_cspss = self.nt_cspss.to(device)
         self.hit_class_probs = self.hit_class_probs.to(device)
         self.codon_mask = self.codon_mask.to(device)
         self.branch_lengths = self.branch_lengths.to(device)
@@ -350,8 +350,8 @@ class MultihitBurrito(Burrito):
         self,
         parent_idxs,
         child_idxs,
-        rates,
-        subs_probs,
+        nt_rates,
+        nt_csps,
         codon_mask,
         starting_branch_length,
         **optimization_kwargs,
@@ -361,13 +361,13 @@ class MultihitBurrito(Burrito):
             # We want to first return the log-probability of the observed branch, using codon probs.
             # Then we'll want to adjust codon probs using our hit class probabilities
             branch_length = torch.exp(log_branch_length)
-            scaled_rates = rates * branch_length
+            scaled_rates = nt_rates * branch_length
             # Rates is a 1d tensor containing one rate for each nt site.
 
             # Codon probs is a Cx4x4x4 tensor containing for each codon idx the
             # distribution on possible target codons (all 64 of them!)
-            codon_probs = codon_probs_of_parent_scaled_rates_and_sub_probs(
-                parent_idxs, scaled_rates, subs_probs
+            codon_probs = codon_probs_of_parent_scaled_nt_rates_and_csps(
+                parent_idxs, scaled_rates, nt_csps
             )[codon_mask]
 
             child_codon_idxs = reshape_for_codons(child_idxs)[codon_mask]
@@ -392,16 +392,16 @@ class MultihitBurrito(Burrito):
         for (
             parent_idxs,
             child_idxs,
-            rates,
-            subs_probs,
+            nt_rates,
+            nt_csps,
             codon_mask,
             starting_length,
         ) in tqdm(
             zip(
                 dataset.nt_parents,
                 dataset.nt_children,
-                dataset.all_rates,
-                dataset.all_subs_probs,
+                dataset.nt_ratess,
+                dataset.nt_cspss,
                 dataset.codon_mask,
                 dataset.branch_lengths,
             ),
@@ -412,8 +412,8 @@ class MultihitBurrito(Burrito):
                 self._find_optimal_branch_length(
                     parent_idxs,
                     child_idxs,
-                    rates[: len(parent_idxs)],
-                    subs_probs[: len(parent_idxs), :],
+                    nt_rates[: len(parent_idxs)],
+                    nt_csps[: len(parent_idxs), :],
                     codon_mask,
                     starting_length,
                     **optimization_kwargs,
@@ -438,14 +438,14 @@ def hit_class_dataset_from_pcp_df(
 ) -> HitClassDataset:
     nt_parents = pcp_df["parent"].reset_index(drop=True)
     nt_children = pcp_df["child"].reset_index(drop=True)
-    rates = pcp_df["rates"].reset_index(drop=True)
-    subs_probs = pcp_df["subs_probs"].reset_index(drop=True)
+    nt_rates = pcp_df["nt_rates"].reset_index(drop=True)
+    nt_csps = pcp_df["nt_csps"].reset_index(drop=True)
 
     return HitClassDataset(
         nt_parents,
         nt_children,
-        rates,
-        subs_probs,
+        nt_rates,
+        nt_csps,
         branch_length_multiplier=branch_length_multiplier,
     )
 
@@ -457,22 +457,22 @@ def train_test_datasets_of_pcp_df(
     HitClassDataset."""
     nt_parents = pcp_df["parent"].reset_index(drop=True)
     nt_children = pcp_df["child"].reset_index(drop=True)
-    rates = pcp_df["rates"].reset_index(drop=True)
-    subs_probs = pcp_df["subs_probs"].reset_index(drop=True)
+    nt_rates = pcp_df["nt_rates"].reset_index(drop=True)
+    nt_csps = pcp_df["nt_csps"].reset_index(drop=True)
 
     train_len = int(train_frac * len(nt_parents))
     train_parents, val_parents = nt_parents[:train_len], nt_parents[train_len:]
     train_children, val_children = nt_children[:train_len], nt_children[train_len:]
-    train_rates, val_rates = rates[:train_len], rates[train_len:]
-    train_subs_probs, val_subs_probs = (
-        subs_probs[:train_len],
-        subs_probs[train_len:],
+    train_rates, val_rates = nt_rates[:train_len], nt_rates[train_len:]
+    train_nt_csps, val_nt_csps = (
+        nt_csps[:train_len],
+        nt_csps[train_len:],
     )
     val_dataset = HitClassDataset(
         val_parents,
         val_children,
         val_rates,
-        val_subs_probs,
+        val_nt_csps,
         branch_length_multiplier=branch_length_multiplier,
     )
     if train_frac == 0.0:
@@ -482,7 +482,7 @@ def train_test_datasets_of_pcp_df(
         train_parents,
         train_children,
         train_rates,
-        train_subs_probs,
+        train_nt_csps,
         branch_length_multiplier=branch_length_multiplier,
     )
     return val_dataset, train_dataset
@@ -491,8 +491,8 @@ def train_test_datasets_of_pcp_df(
 def prepare_pcp_df(
     pcp_df: pd.DataFrame, crepe: framework.Crepe, site_count: int
 ) -> pd.DataFrame:
-    """Trim parent and child sequences in pcp_df to codon boundaries and add the rates
-    and substitution probabilities.
+    """Trim parent and child sequences in pcp_df to codon boundaries and add the
+    nt_rates and substitution probabilities.
 
     Returns the modified dataframe, which is the input dataframe modified in-place.
     """
@@ -502,6 +502,6 @@ def prepare_pcp_df(
     ratess, cspss = framework.trimmed_shm_model_outputs_of_crepe(
         crepe, pcp_df["parent"]
     )
-    pcp_df["rates"] = ratess
-    pcp_df["subs_probs"] = cspss
+    pcp_df["nt_rates"] = ratess
+    pcp_df["nt_csps"] = cspss
     return pcp_df
