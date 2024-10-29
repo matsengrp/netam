@@ -491,8 +491,8 @@ def train_test_datasets_of_pcp_df(
 def prepare_pcp_df(
     pcp_df: pd.DataFrame, crepe: framework.Crepe, site_count: int
 ) -> pd.DataFrame:
-    """Trim parent and child sequences in pcp_df to codon boundaries and add the nt_rates
-    and substitution probabilities.
+    """Trim parent and child sequences in pcp_df to codon boundaries and add the
+    nt_rates and substitution probabilities.
 
     Returns the modified dataframe, which is the input dataframe modified in-place.
     """
