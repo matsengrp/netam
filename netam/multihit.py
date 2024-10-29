@@ -19,7 +19,7 @@ from typing import Sequence
 from netam.molevol import (
     reshape_for_codons,
     optimize_branch_length,
-    codon_probs_of_parent_scaled_rates_and_sub_probs,
+    codon_probs_of_parent_scaled_nt_rates_and_csps,
 )
 from netam.hit_class import hit_class_probs_tensor
 from netam import sequences
@@ -184,7 +184,7 @@ class HitClassDataset(Dataset):
         ):
             scaled_rates = branch_length * nt_rates
 
-            codon_probs = codon_probs_of_parent_scaled_rates_and_sub_probs(
+            codon_probs = codon_probs_of_parent_scaled_nt_rates_and_csps(
                 encoded_parent,
                 scaled_rates[: len(encoded_parent)],
                 nt_csps[: len(encoded_parent)],
@@ -366,7 +366,7 @@ class MultihitBurrito(Burrito):
 
             # Codon probs is a Cx4x4x4 tensor containing for each codon idx the
             # distribution on possible target codons (all 64 of them!)
-            codon_probs = codon_probs_of_parent_scaled_rates_and_sub_probs(
+            codon_probs = codon_probs_of_parent_scaled_nt_rates_and_csps(
                 parent_idxs, scaled_rates, nt_csps
             )[codon_mask]
 

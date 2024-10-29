@@ -4,7 +4,7 @@ import netam.multihit as multihit
 import netam.framework as framework
 import netam.hit_class as hit_class
 from netam.molevol import (
-    codon_probs_of_parent_scaled_rates_and_sub_probs,
+    codon_probs_of_parent_scaled_nt_rates_and_csps,
     reshape_for_codons,
 )
 from netam.sequences import nt_idx_tensor_of_str
@@ -25,7 +25,7 @@ ex_scaled_rates = torch.tensor([0.01, 0.001, 0.005])
 ex_sub_probs = torch.tensor(
     [[0.0, 0.3, 0.5, 0.2], [0.4, 0.0, 0.1, 0.5], [0.2, 0.3, 0.0, 0.5]]
 )
-# This is an example, and the correct output for test_codon_probs_of_parent_scaled_rates_and_sub_probs
+# This is an example, and the correct output for test_codon_probs_of_parent_scaled_nt_rates_and_sub_probs
 ex_codon_probs = torch.tensor(
     [
         [
@@ -89,8 +89,8 @@ def test_serialize(hitclass_burrito):
     assert torch.allclose(new_crepe.model.values, hitclass_burrito.model.values)
 
 
-def test_codon_probs_of_parent_scaled_rates_and_sub_probs():
-    computed_tensor = codon_probs_of_parent_scaled_rates_and_sub_probs(
+def test_codon_probs_of_parent_scaled_nt_rates_and_sub_probs():
+    computed_tensor = codon_probs_of_parent_scaled_nt_rates_and_csps(
         ex_parent_codon_idxs, ex_scaled_rates, ex_sub_probs
     )
     correct_tensor = ex_codon_probs

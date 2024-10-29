@@ -13,7 +13,7 @@ from netam.sequences import (
 # These happen to be the same as some examples in test_models.py but that's fine.
 # If it was important that they were shared, we should put them in a conftest.py.
 ex_mut_probs = torch.tensor([0.01, 0.02, 0.03])
-ex_sub_probs = torch.tensor(
+ex_csps = torch.tensor(
     [[0.0, 0.3, 0.5, 0.2], [0.4, 0.0, 0.1, 0.5], [0.2, 0.3, 0.0, 0.5]]
 )
 
@@ -21,10 +21,10 @@ ex_parent_codon_idxs = nt_idx_tensor_of_str("ACG")
 parent_nt_seq = "CAGGTGCAGCTGGTGGAG"  # QVQLVE
 
 
-def test_aaprobs_of_parent_scaled_rates_and_sub_probs():
+def test_aaprobs_of_parent_scaled_rates_and_csps():
 
-    def old_aaprobs_of_parent_scaled_rates_and_sub_probs(
-        parent_idxs: torch.Tensor, scaled_rates: torch.Tensor, sub_probs: torch.Tensor
+    def old_aaprobs_of_parent_scaled_rates_and_csps(
+        parent_idxs: torch.Tensor, scaled_rates: torch.Tensor, csps: torch.Tensor
     ) -> torch.Tensor:
         """Calculate per-site amino acid probabilities from per-site nucleotide rates
         and substitution probabilities.
@@ -33,7 +33,7 @@ def test_aaprobs_of_parent_scaled_rates_and_sub_probs():
             parent_idxs (torch.Tensor): Parent nucleotide indices. Shape should be (site_count,).
             scaled_rates (torch.Tensor): Poisson rates of mutation per site, scaled by branch length.
                                          Shape should be (site_count,).
-            sub_probs (torch.Tensor): Substitution probabilities per site: a 2D
+            csps (torch.Tensor): Substitution probabilities per site: a 2D
                                       tensor with shape (site_count, 4).
 
         Returns:
@@ -46,19 +46,19 @@ def test_aaprobs_of_parent_scaled_rates_and_sub_probs():
         # Reshape the inputs to include a codon dimension.
         parent_codon_idxs = molevol.reshape_for_codons(parent_idxs)
         codon_mut_probs = molevol.reshape_for_codons(mut_probs)
-        codon_sub_probs = molevol.reshape_for_codons(sub_probs)
+        codon_csps = molevol.reshape_for_codons(csps)
 
         # Vectorized calculation of amino acid probabilities.
         return molevol.aaprob_of_mut_and_sub(
-            parent_codon_idxs, codon_mut_probs, codon_sub_probs
+            parent_codon_idxs, codon_mut_probs, codon_csps
         )
 
     assert torch.allclose(
-        old_aaprobs_of_parent_scaled_rates_and_sub_probs(
-            ex_parent_codon_idxs, ex_mut_probs, ex_sub_probs
+        old_aaprobs_of_parent_scaled_rates_and_csps(
+            ex_parent_codon_idxs, ex_mut_probs, ex_csps
         ),
-        molevol.aaprobs_of_parent_scaled_rates_and_sub_probs(
-            ex_parent_codon_idxs, ex_mut_probs, ex_sub_probs
+        molevol.aaprobs_of_parent_scaled_rates_and_csps(
+            ex_parent_codon_idxs, ex_mut_probs, ex_csps
         ),
     )
 
@@ -77,7 +77,7 @@ def test_build_mutation_matrix():
     computed_tensor = molevol.build_mutation_matrices(
         ex_parent_codon_idxs.unsqueeze(0),
         ex_mut_probs.unsqueeze(0),
-        ex_sub_probs.unsqueeze(0),
+        ex_csps.unsqueeze(0),
     ).squeeze()
 
     assert torch.allclose(correct_tensor, computed_tensor)
@@ -93,7 +93,7 @@ def test_neutral_aa_mut_probs():
     computed_tensor = molevol.neutral_aa_mut_probs(
         ex_parent_codon_idxs.unsqueeze(0),
         ex_mut_probs.unsqueeze(0),
-        ex_sub_probs.unsqueeze(0),
+        ex_csps.unsqueeze(0),
     ).squeeze()
 
     assert torch.allclose(correct_tensor, computed_tensor)
@@ -114,7 +114,7 @@ def test_normalize_sub_probs():
     ), "Unexpected normalized values"
 
 
-def iterative_aaprob_of_mut_and_sub(parent_codon, mut_probs, sub_probs):
+def iterative_aaprob_of_mut_and_sub(parent_codon, mut_probs, csps):
     """Original version of codon_to_aa_probabilities, used for testing."""
     aa_probs = {}
     for aa in AA_STR_SORTED:
@@ -134,7 +134,7 @@ def iterative_aaprob_of_mut_and_sub(parent_codon, mut_probs, sub_probs):
                 child_prob *= 1.0 - mut_probs[isite]
             else:
                 child_prob *= mut_probs[isite]
-                child_prob *= sub_probs[isite][NT_STR_SORTED.index(child_codon[isite])]
+                child_prob *= csps[isite][NT_STR_SORTED.index(child_codon[isite])]
 
         aa_probs[aa] += child_prob
 
