@@ -19,7 +19,6 @@ from netam.sequences import CODON_AA_INDICATOR_MATRIX
 import netam.sequences as sequences
 
 
-# TODO I don't think this is necessary anymore because netam gives us actual CSPs.
 def normalize_sub_probs(parent_idxs: Tensor, sub_probs: Tensor) -> Tensor:
     """Normalize substitution probabilities.
 
