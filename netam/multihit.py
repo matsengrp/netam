@@ -97,7 +97,7 @@ class HitClassDataset(Dataset):
         nt_parents: Sequence[str],
         nt_children: Sequence[str],
         nt_ratess: Sequence[list[float]],
-        all_subs_probs: Sequence[list[list[float]]],
+        nt_cspss: Sequence[list[list[float]]],
         branch_length_multiplier: float = 1.0,
     ):
         trimmed_parents = _trim_to_codon_boundary_and_max_len(nt_parents)
@@ -119,8 +119,8 @@ class HitClassDataset(Dataset):
                 drop=True
             )
         )
-        self.all_subs_probs = stack_heterogeneous(
-            pd.Series(_trim_to_codon_boundary_and_max_len(all_subs_probs)).reset_index(
+        self.nt_cspss = stack_heterogeneous(
+            pd.Series(_trim_to_codon_boundary_and_max_len(nt_cspss)).reset_index(
                 drop=True
             )
         )
@@ -179,7 +179,7 @@ class HitClassDataset(Dataset):
         ) in zip(
             self.nt_parents,
             self.nt_ratess,
-            self.all_subs_probs,
+            self.nt_cspss,
             self.branch_lengths,
         ):
             scaled_rates = branch_length * rates
@@ -217,7 +217,7 @@ class HitClassDataset(Dataset):
             "child": self.nt_children[idx],
             "observed_hcs": self.observed_hcs[idx],
             "rates": self.nt_ratess[idx],
-            "subs_probs": self.all_subs_probs[idx],
+            "subs_probs": self.nt_cspss[idx],
             "hit_class_probs": self.hit_class_probs[idx],
             "codon_probs": self.codon_probs[idx],
             "codon_mask": self.codon_mask[idx],
@@ -228,7 +228,7 @@ class HitClassDataset(Dataset):
         self.nt_children = self.nt_children.to(device)
         self.observed_hcs = self.observed_hcs.to(device)
         self.nt_ratess = self.nt_ratess.to(device)
-        self.all_subs_probs = self.all_subs_probs.to(device)
+        self.nt_cspss = self.nt_cspss.to(device)
         self.hit_class_probs = self.hit_class_probs.to(device)
         self.codon_mask = self.codon_mask.to(device)
         self.branch_lengths = self.branch_lengths.to(device)
@@ -401,7 +401,7 @@ class MultihitBurrito(Burrito):
                 dataset.nt_parents,
                 dataset.nt_children,
                 dataset.nt_ratess,
-                dataset.all_subs_probs,
+                dataset.nt_cspss,
                 dataset.codon_mask,
                 dataset.branch_lengths,
             ),

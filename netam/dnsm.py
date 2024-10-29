@@ -41,14 +41,14 @@ class DNSMDataset(Dataset):
         nt_parents: pd.Series,
         nt_children: pd.Series,
         nt_ratess: torch.Tensor,
-        all_subs_probs: torch.Tensor,
+        nt_cspss: torch.Tensor,
         branch_lengths: torch.Tensor,
         multihit_model=None,
     ):
         self.nt_parents = nt_parents
         self.nt_children = nt_children
         self.nt_ratess = nt_ratess
-        self.all_subs_probs = all_subs_probs
+        self.nt_cspss = nt_cspss
         self.multihit_model = copy.deepcopy(multihit_model)
         if multihit_model is not None:
             # We want these parameters to act like fixed data. This is essential
@@ -173,7 +173,7 @@ class DNSMDataset(Dataset):
             self.nt_parents,
             self.nt_children,
             self.nt_ratess.copy(),
-            self.all_subs_probs.copy(),
+            self.nt_cspss.copy(),
             self._branch_lengths.copy(),
             multihit_model=self.multihit_model,
         )
@@ -190,7 +190,7 @@ class DNSMDataset(Dataset):
             self.nt_parents[indices].reset_index(drop=True),
             self.nt_children[indices].reset_index(drop=True),
             self.nt_ratess[indices],
-            self.all_subs_probs[indices],
+            self.nt_cspss[indices],
             self._branch_lengths[indices],
             multihit_model=self.multihit_model,
         )
@@ -245,7 +245,7 @@ class DNSMDataset(Dataset):
             self.mask,
             self.nt_ratess,
             self._branch_lengths,
-            self.all_subs_probs,
+            self.nt_cspss,
         ):
             mask = mask.to("cpu")
             rates = rates.to("cpu")
@@ -309,7 +309,7 @@ class DNSMDataset(Dataset):
             "mask": self.mask[idx],
             "log_neutral_aa_mut_probs": self.log_neutral_aa_mut_probs[idx],
             "rates": self.nt_ratess[idx],
-            "subs_probs": self.all_subs_probs[idx],
+            "subs_probs": self.nt_cspss[idx],
         }
 
     def to(self, device):
@@ -318,7 +318,7 @@ class DNSMDataset(Dataset):
         self.mask = self.mask.to(device)
         self.log_neutral_aa_mut_probs = self.log_neutral_aa_mut_probs.to(device)
         self.nt_ratess = self.nt_ratess.to(device)
-        self.all_subs_probs = self.all_subs_probs.to(device)
+        self.nt_cspss = self.nt_cspss.to(device)
         if self.multihit_model is not None:
             self.multihit_model = self.multihit_model.to(device)
 
@@ -417,7 +417,7 @@ class DNSMBurrito(framework.Burrito):
                 dataset.nt_parents,
                 dataset.nt_children,
                 dataset.nt_ratess,
-                dataset.all_subs_probs,
+                dataset.nt_cspss,
                 dataset.branch_lengths,
             ),
             total=len(dataset.nt_parents),

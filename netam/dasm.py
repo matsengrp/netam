@@ -30,7 +30,7 @@ class DASMDataset(dnsm.DNSMDataset):
             self.mask,
             self.nt_ratess,
             self._branch_lengths,
-            self.all_subs_probs,
+            self.nt_cspss,
         ):
             mask = mask.to("cpu")
             rates = rates.to("cpu")
@@ -85,7 +85,7 @@ class DASMDataset(dnsm.DNSMDataset):
             "mask": self.mask[idx],
             "log_neutral_aa_probs": self.log_neutral_aa_probs[idx],
             "rates": self.nt_ratess[idx],
-            "subs_probs": self.all_subs_probs[idx],
+            "subs_probs": self.nt_cspss[idx],
         }
 
     def to(self, device):
@@ -95,7 +95,7 @@ class DASMDataset(dnsm.DNSMDataset):
         self.mask = self.mask.to(device)
         self.log_neutral_aa_probs = self.log_neutral_aa_probs.to(device)
         self.nt_ratess = self.nt_ratess.to(device)
-        self.all_subs_probs = self.all_subs_probs.to(device)
+        self.nt_cspss = self.nt_cspss.to(device)
         if self.multihit_model is not None:
             self.multihit_model = self.multihit_model.to(device)
 
