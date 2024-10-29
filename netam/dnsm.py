@@ -129,7 +129,7 @@ class DNSMDataset(Dataset):
     def of_pcp_df(cls, pcp_df, branch_length_multiplier=5.0, multihit_model=None):
         """Alternative constructor that takes in a pcp_df and calculates the initial
         branch lengths."""
-        assert "nt_rates" in pcp_df.columns, "pcp_df must have a neutral rates column"
+        assert "nt_rates" in pcp_df.columns, "pcp_df must have a neutral nt_rates column"
         return cls.of_seriess(
             pcp_df["parent"],
             pcp_df["child"],
@@ -240,7 +240,7 @@ class DNSMDataset(Dataset):
         """
         neutral_aa_mut_prob_l = []
 
-        for nt_parent, mask, rates, branch_length, nt_csps in zip(
+        for nt_parent, mask, nt_rates, branch_length, nt_csps in zip(
             self.nt_parents,
             self.mask,
             self.nt_ratess,
@@ -248,7 +248,7 @@ class DNSMDataset(Dataset):
             self.nt_cspss,
         ):
             mask = mask.to("cpu")
-            rates = rates.to("cpu")
+            nt_rates = nt_rates.to("cpu")
             nt_csps = nt_csps.to("cpu")
             if self.multihit_model is not None:
                 multihit_model = copy.deepcopy(self.multihit_model).to("cpu")
@@ -259,7 +259,7 @@ class DNSMDataset(Dataset):
             parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
             parent_len = len(nt_parent)
 
-            mut_probs = 1.0 - torch.exp(-branch_length * rates[:parent_len])
+            mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
             normed_nt_csps = molevol.normalize_sub_probs(
                 parent_idxs, nt_csps[:parent_len, :]
             )
@@ -275,7 +275,7 @@ class DNSMDataset(Dataset):
                 print(f"Found a non-finite neutral_aa_mut_prob")
                 print(f"nt_parent: {nt_parent}")
                 print(f"mask: {mask}")
-                print(f"rates: {rates}")
+                print(f"nt_rates: {nt_rates}")
                 print(f"nt_csps: {nt_csps}")
                 print(f"branch_length: {branch_length}")
                 raise ValueError(
@@ -308,7 +308,7 @@ class DNSMDataset(Dataset):
             "subs_indicator": self.aa_subs_indicator_tensor[idx],
             "mask": self.mask[idx],
             "log_neutral_aa_mut_probs": self.log_neutral_aa_mut_probs[idx],
-            "rates": self.nt_ratess[idx],
+            "nt_rates": self.nt_ratess[idx],
             "nt_csps": self.nt_cspss[idx],
         }
 
@@ -390,7 +390,7 @@ class DNSMBurrito(framework.Burrito):
         self,
         parent,
         child,
-        rates,
+        nt_rates,
         nt_csps,
         starting_branch_length,
         multihit_model,
@@ -400,7 +400,7 @@ class DNSMBurrito(framework.Burrito):
             return 0.0
         sel_matrix = self.build_selection_matrix_from_parent(parent)
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
-            sel_matrix, parent, child, rates, nt_csps, multihit_model
+            sel_matrix, parent, child, nt_rates, nt_csps, multihit_model
         )
         if isinstance(starting_branch_length, torch.Tensor):
             starting_branch_length = starting_branch_length.detach().item()
@@ -412,7 +412,7 @@ class DNSMBurrito(framework.Burrito):
         optimal_lengths = []
         failed_count = 0
 
-        for parent, child, rates, nt_csps, starting_length in tqdm(
+        for parent, child, nt_rates, nt_csps, starting_length in tqdm(
             zip(
                 dataset.nt_parents,
                 dataset.nt_children,
@@ -426,7 +426,7 @@ class DNSMBurrito(framework.Burrito):
             branch_length, failed_to_converge = self._find_optimal_branch_length(
                 parent,
                 child,
-                rates[: len(parent)],
+                nt_rates[: len(parent)],
                 nt_csps[: len(parent), :],
                 starting_length,
                 dataset.multihit_model,

@@ -25,7 +25,7 @@ class DASMDataset(dnsm.DNSMDataset):
     def update_neutral_probs(self):
         neutral_aa_probs_l = []
 
-        for nt_parent, mask, rates, branch_length, nt_csps in zip(
+        for nt_parent, mask, nt_rates, branch_length, nt_csps in zip(
             self.nt_parents,
             self.mask,
             self.nt_ratess,
@@ -33,14 +33,14 @@ class DASMDataset(dnsm.DNSMDataset):
             self.nt_cspss,
         ):
             mask = mask.to("cpu")
-            rates = rates.to("cpu")
+            nt_rates = nt_rates.to("cpu")
             nt_csps = nt_csps.to("cpu")
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
             parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
             parent_len = len(nt_parent)
 
-            mut_probs = 1.0 - torch.exp(-branch_length * rates[:parent_len])
+            mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
             normed_nt_csps = molevol.normalize_sub_probs(
                 parent_idxs, nt_csps[:parent_len, :]
             )
@@ -55,7 +55,7 @@ class DASMDataset(dnsm.DNSMDataset):
                 print(f"Found a non-finite neutral_aa_probs")
                 print(f"nt_parent: {nt_parent}")
                 print(f"mask: {mask}")
-                print(f"rates: {rates}")
+                print(f"nt_rates: {nt_rates}")
                 print(f"nt_csps: {nt_csps}")
                 print(f"branch_length: {branch_length}")
                 raise ValueError(f"neutral_aa_probs is not finite: {neutral_aa_probs}")
@@ -84,7 +84,7 @@ class DASMDataset(dnsm.DNSMDataset):
             "subs_indicator": self.aa_subs_indicator_tensor[idx],
             "mask": self.mask[idx],
             "log_neutral_aa_probs": self.log_neutral_aa_probs[idx],
-            "rates": self.nt_ratess[idx],
+            "nt_rates": self.nt_ratess[idx],
             "nt_csps": self.nt_cspss[idx],
         }
 

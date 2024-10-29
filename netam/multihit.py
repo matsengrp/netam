@@ -173,7 +173,7 @@ class HitClassDataset(Dataset):
         new_hc_probs = []
         for (
             encoded_parent,
-            rates,
+            nt_rates,
             nt_csps,
             branch_length,
         ) in zip(
@@ -182,7 +182,7 @@ class HitClassDataset(Dataset):
             self.nt_cspss,
             self.branch_lengths,
         ):
-            scaled_rates = branch_length * rates
+            scaled_rates = branch_length * nt_rates
 
             codon_probs = codon_probs_of_parent_scaled_rates_and_sub_probs(
                 encoded_parent,
@@ -216,7 +216,7 @@ class HitClassDataset(Dataset):
             "parent": self.nt_parents[idx],
             "child": self.nt_children[idx],
             "observed_hcs": self.observed_hcs[idx],
-            "rates": self.nt_ratess[idx],
+            "nt_rates": self.nt_ratess[idx],
             "nt_csps": self.nt_cspss[idx],
             "hit_class_probs": self.hit_class_probs[idx],
             "codon_probs": self.codon_probs[idx],
@@ -350,7 +350,7 @@ class MultihitBurrito(Burrito):
         self,
         parent_idxs,
         child_idxs,
-        rates,
+        nt_rates,
         nt_csps,
         codon_mask,
         starting_branch_length,
@@ -361,7 +361,7 @@ class MultihitBurrito(Burrito):
             # We want to first return the log-probability of the observed branch, using codon probs.
             # Then we'll want to adjust codon probs using our hit class probabilities
             branch_length = torch.exp(log_branch_length)
-            scaled_rates = rates * branch_length
+            scaled_rates = nt_rates * branch_length
             # Rates is a 1d tensor containing one rate for each nt site.
 
             # Codon probs is a Cx4x4x4 tensor containing for each codon idx the
@@ -392,7 +392,7 @@ class MultihitBurrito(Burrito):
         for (
             parent_idxs,
             child_idxs,
-            rates,
+            nt_rates,
             nt_csps,
             codon_mask,
             starting_length,
@@ -412,7 +412,7 @@ class MultihitBurrito(Burrito):
                 self._find_optimal_branch_length(
                     parent_idxs,
                     child_idxs,
-                    rates[: len(parent_idxs)],
+                    nt_rates[: len(parent_idxs)],
                     nt_csps[: len(parent_idxs), :],
                     codon_mask,
                     starting_length,
@@ -438,13 +438,13 @@ def hit_class_dataset_from_pcp_df(
 ) -> HitClassDataset:
     nt_parents = pcp_df["parent"].reset_index(drop=True)
     nt_children = pcp_df["child"].reset_index(drop=True)
-    rates = pcp_df["rates"].reset_index(drop=True)
+    nt_rates = pcp_df["nt_rates"].reset_index(drop=True)
     nt_csps = pcp_df["nt_csps"].reset_index(drop=True)
 
     return HitClassDataset(
         nt_parents,
         nt_children,
-        rates,
+        nt_rates,
         nt_csps,
         branch_length_multiplier=branch_length_multiplier,
     )
@@ -457,13 +457,13 @@ def train_test_datasets_of_pcp_df(
     HitClassDataset."""
     nt_parents = pcp_df["parent"].reset_index(drop=True)
     nt_children = pcp_df["child"].reset_index(drop=True)
-    rates = pcp_df["rates"].reset_index(drop=True)
+    nt_rates = pcp_df["nt_rates"].reset_index(drop=True)
     nt_csps = pcp_df["nt_csps"].reset_index(drop=True)
 
     train_len = int(train_frac * len(nt_parents))
     train_parents, val_parents = nt_parents[:train_len], nt_parents[train_len:]
     train_children, val_children = nt_children[:train_len], nt_children[train_len:]
-    train_rates, val_rates = rates[:train_len], rates[train_len:]
+    train_rates, val_rates = nt_rates[:train_len], nt_rates[train_len:]
     train_nt_csps, val_nt_csps = (
         nt_csps[:train_len],
         nt_csps[train_len:],
@@ -491,7 +491,7 @@ def train_test_datasets_of_pcp_df(
 def prepare_pcp_df(
     pcp_df: pd.DataFrame, crepe: framework.Crepe, site_count: int
 ) -> pd.DataFrame:
-    """Trim parent and child sequences in pcp_df to codon boundaries and add the rates
+    """Trim parent and child sequences in pcp_df to codon boundaries and add the nt_rates
     and substitution probabilities.
 
     Returns the modified dataframe, which is the input dataframe modified in-place.
@@ -502,6 +502,6 @@ def prepare_pcp_df(
     ratess, cspss = framework.trimmed_shm_model_outputs_of_crepe(
         crepe, pcp_df["parent"]
     )
-    pcp_df["rates"] = ratess
+    pcp_df["nt_rates"] = ratess
     pcp_df["nt_csps"] = cspss
     return pcp_df
