@@ -96,7 +96,7 @@ class HitClassDataset(Dataset):
         self,
         nt_parents: Sequence[str],
         nt_children: Sequence[str],
-        all_rates: Sequence[list[float]],
+        nt_ratess: Sequence[list[float]],
         all_subs_probs: Sequence[list[list[float]]],
         branch_length_multiplier: float = 1.0,
     ):
@@ -114,8 +114,8 @@ class HitClassDataset(Dataset):
                 for child in trimmed_children
             )
         )
-        self.all_rates = stack_heterogeneous(
-            pd.Series(_trim_to_codon_boundary_and_max_len(all_rates)).reset_index(
+        self.nt_ratess = stack_heterogeneous(
+            pd.Series(_trim_to_codon_boundary_and_max_len(nt_ratess)).reset_index(
                 drop=True
             )
         )
@@ -178,7 +178,7 @@ class HitClassDataset(Dataset):
             branch_length,
         ) in zip(
             self.nt_parents,
-            self.all_rates,
+            self.nt_ratess,
             self.all_subs_probs,
             self.branch_lengths,
         ):
@@ -216,7 +216,7 @@ class HitClassDataset(Dataset):
             "parent": self.nt_parents[idx],
             "child": self.nt_children[idx],
             "observed_hcs": self.observed_hcs[idx],
-            "rates": self.all_rates[idx],
+            "rates": self.nt_ratess[idx],
             "subs_probs": self.all_subs_probs[idx],
             "hit_class_probs": self.hit_class_probs[idx],
             "codon_probs": self.codon_probs[idx],
@@ -227,7 +227,7 @@ class HitClassDataset(Dataset):
         self.nt_parents = self.nt_parents.to(device)
         self.nt_children = self.nt_children.to(device)
         self.observed_hcs = self.observed_hcs.to(device)
-        self.all_rates = self.all_rates.to(device)
+        self.nt_ratess = self.nt_ratess.to(device)
         self.all_subs_probs = self.all_subs_probs.to(device)
         self.hit_class_probs = self.hit_class_probs.to(device)
         self.codon_mask = self.codon_mask.to(device)
@@ -400,7 +400,7 @@ class MultihitBurrito(Burrito):
             zip(
                 dataset.nt_parents,
                 dataset.nt_children,
-                dataset.all_rates,
+                dataset.nt_ratess,
                 dataset.all_subs_probs,
                 dataset.codon_mask,
                 dataset.branch_lengths,

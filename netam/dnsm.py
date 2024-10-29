@@ -40,14 +40,14 @@ class DNSMDataset(Dataset):
         self,
         nt_parents: pd.Series,
         nt_children: pd.Series,
-        all_rates: torch.Tensor,
+        nt_ratess: torch.Tensor,
         all_subs_probs: torch.Tensor,
         branch_lengths: torch.Tensor,
         multihit_model=None,
     ):
         self.nt_parents = nt_parents
         self.nt_children = nt_children
-        self.all_rates = all_rates
+        self.nt_ratess = nt_ratess
         self.all_subs_probs = all_subs_probs
         self.multihit_model = copy.deepcopy(multihit_model)
         if multihit_model is not None:
@@ -172,7 +172,7 @@ class DNSMDataset(Dataset):
         new_dataset = self.__class__(
             self.nt_parents,
             self.nt_children,
-            self.all_rates.copy(),
+            self.nt_ratess.copy(),
             self.all_subs_probs.copy(),
             self._branch_lengths.copy(),
             multihit_model=self.multihit_model,
@@ -189,7 +189,7 @@ class DNSMDataset(Dataset):
         new_dataset = self.__class__(
             self.nt_parents[indices].reset_index(drop=True),
             self.nt_children[indices].reset_index(drop=True),
-            self.all_rates[indices],
+            self.nt_ratess[indices],
             self.all_subs_probs[indices],
             self._branch_lengths[indices],
             multihit_model=self.multihit_model,
@@ -243,7 +243,7 @@ class DNSMDataset(Dataset):
         for nt_parent, mask, rates, branch_length, subs_probs in zip(
             self.nt_parents,
             self.mask,
-            self.all_rates,
+            self.nt_ratess,
             self._branch_lengths,
             self.all_subs_probs,
         ):
@@ -308,7 +308,7 @@ class DNSMDataset(Dataset):
             "subs_indicator": self.aa_subs_indicator_tensor[idx],
             "mask": self.mask[idx],
             "log_neutral_aa_mut_probs": self.log_neutral_aa_mut_probs[idx],
-            "rates": self.all_rates[idx],
+            "rates": self.nt_ratess[idx],
             "subs_probs": self.all_subs_probs[idx],
         }
 
@@ -317,7 +317,7 @@ class DNSMDataset(Dataset):
         self.aa_subs_indicator_tensor = self.aa_subs_indicator_tensor.to(device)
         self.mask = self.mask.to(device)
         self.log_neutral_aa_mut_probs = self.log_neutral_aa_mut_probs.to(device)
-        self.all_rates = self.all_rates.to(device)
+        self.nt_ratess = self.nt_ratess.to(device)
         self.all_subs_probs = self.all_subs_probs.to(device)
         if self.multihit_model is not None:
             self.multihit_model = self.multihit_model.to(device)
@@ -416,7 +416,7 @@ class DNSMBurrito(framework.Burrito):
             zip(
                 dataset.nt_parents,
                 dataset.nt_children,
-                dataset.all_rates,
+                dataset.nt_ratess,
                 dataset.all_subs_probs,
                 dataset.branch_lengths,
             ),

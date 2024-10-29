@@ -28,7 +28,7 @@ class DASMDataset(dnsm.DNSMDataset):
         for nt_parent, mask, rates, branch_length, subs_probs in zip(
             self.nt_parents,
             self.mask,
-            self.all_rates,
+            self.nt_ratess,
             self._branch_lengths,
             self.all_subs_probs,
         ):
@@ -84,7 +84,7 @@ class DASMDataset(dnsm.DNSMDataset):
             "subs_indicator": self.aa_subs_indicator_tensor[idx],
             "mask": self.mask[idx],
             "log_neutral_aa_probs": self.log_neutral_aa_probs[idx],
-            "rates": self.all_rates[idx],
+            "rates": self.nt_ratess[idx],
             "subs_probs": self.all_subs_probs[idx],
         }
 
@@ -94,7 +94,7 @@ class DASMDataset(dnsm.DNSMDataset):
         self.aa_subs_indicator_tensor = self.aa_subs_indicator_tensor.to(device)
         self.mask = self.mask.to(device)
         self.log_neutral_aa_probs = self.log_neutral_aa_probs.to(device)
-        self.all_rates = self.all_rates.to(device)
+        self.nt_ratess = self.nt_ratess.to(device)
         self.all_subs_probs = self.all_subs_probs.to(device)
         if self.multihit_model is not None:
             self.multihit_model = self.multihit_model.to(device)
