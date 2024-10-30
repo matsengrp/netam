@@ -260,16 +260,15 @@ class DNSMDataset(Dataset):
             # with masking out these positions later. We do this below.
             parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
             parent_len = len(nt_parent)
+            molevol.check_csps(parent_idxs, nt_csps)
 
             mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
-            normed_nt_csps = molevol.normalize_sub_probs(
-                parent_idxs, nt_csps[:parent_len, :]
-            )
+            nt_csps = nt_csps[:parent_len, :]
 
             neutral_aa_mut_prob = molevol.neutral_aa_mut_probs(
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
-                normed_nt_csps.reshape(-1, 3, 4),
+                nt_csps.reshape(-1, 3, 4),
                 multihit_model=multihit_model,
             )
 

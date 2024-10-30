@@ -41,14 +41,13 @@ class DASMDataset(dnsm.DNSMDataset):
             parent_len = len(nt_parent)
 
             mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
-            normed_nt_csps = molevol.normalize_sub_probs(
-                parent_idxs, nt_csps[:parent_len, :]
-            )
+            nt_csps = nt_csps[:parent_len, :]
+            molevol.check_csps(parent_idxs, nt_csps)
 
             neutral_aa_probs = molevol.neutral_aa_probs(
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
-                normed_nt_csps.reshape(-1, 3, 4),
+                nt_csps.reshape(-1, 3, 4),
             )
 
             if not torch.isfinite(neutral_aa_probs).all():
