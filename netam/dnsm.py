@@ -302,7 +302,7 @@ class DNSMDataset(Dataset):
 
         # Note that our masked out positions will have a nan log probability,
         # which will require us to handle them correctly downstream.
-        self.aa_neutral_aa_mut_probss = torch.log(torch.stack(neutral_aa_mut_prob_l))
+        self.log_neutral_aa_mut_probss = torch.log(torch.stack(neutral_aa_mut_prob_l))
 
     def __len__(self):
         return len(self.aa_parents_idxss)
@@ -312,7 +312,7 @@ class DNSMDataset(Dataset):
             "aa_parents_idxs": self.aa_parents_idxss[idx],
             "subs_indicator": self.aa_subs_indicators[idx],
             "mask": self.masks[idx],
-            "log_neutral_aa_mut_probs": self.aa_neutral_aa_mut_probss[idx],
+            "log_neutral_aa_mut_probs": self.log_neutral_aa_mut_probss[idx],
             "nt_rates": self.nt_ratess[idx],
             "nt_csps": self.nt_cspss[idx],
         }
@@ -321,7 +321,7 @@ class DNSMDataset(Dataset):
         self.aa_parents_idxss = self.aa_parents_idxss.to(device)
         self.aa_subs_indicators = self.aa_subs_indicators.to(device)
         self.masks = self.masks.to(device)
-        self.aa_neutral_aa_mut_probss = self.aa_neutral_aa_mut_probss.to(device)
+        self.log_neutral_aa_mut_probss = self.log_neutral_aa_mut_probss.to(device)
         self.nt_ratess = self.nt_ratess.to(device)
         self.nt_cspss = self.nt_cspss.to(device)
         if self.multihit_model is not None:
