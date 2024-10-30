@@ -122,10 +122,10 @@ def zap_predictions_along_diagonal(predictions, aa_parents_idxs):
 
 
 class DASMBurrito(framework.TwoLossMixin, dnsm.DNSMBurrito):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, loss_weights: list = [1.0, 0.01], **kwargs):
         super().__init__(*args, **kwargs)
         self.xent_loss = torch.nn.CrossEntropyLoss()
-        self.loss_weights = torch.tensor([1.0, 0.01]).to(self.device)
+        self.loss_weights = torch.tensor(loss_weights).to(self.device)
 
     def prediction_pair_of_batch(self, batch):
         """Get log neutral AA probabilities and log selection factors for a batch of
