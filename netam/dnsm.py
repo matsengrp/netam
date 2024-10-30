@@ -70,25 +70,29 @@ class DNSMDataset(Dataset):
         # We have sequences of varying length, so we start with all tensors set
         # to the ambiguous amino acid, and then will fill in the actual values
         # below.
-        self.aa_parents_idxs = torch.full(
+        self.aa_parents_idxss = torch.full(
             (pcp_count, self.max_aa_seq_len), MAX_AMBIG_AA_IDX
         )
-        self.aa_children_idxs = self.aa_parents_idxs.clone()
-        self.aa_subs_indicator_tensor = torch.zeros((pcp_count, self.max_aa_seq_len))
+        self.aa_children_idxss = self.aa_parents_idxss.clone()
+        self.aa_subs_indicators = torch.zeros((pcp_count, self.max_aa_seq_len))
 
-        self.mask = torch.ones((pcp_count, self.max_aa_seq_len), dtype=torch.bool)
+        self.masks = torch.ones((pcp_count, self.max_aa_seq_len), dtype=torch.bool)
 
         for i, (aa_parent, aa_child) in enumerate(zip(aa_parents, aa_children)):
-            self.mask[i, :] = aa_mask_tensor_of(aa_parent, self.max_aa_seq_len)
+            self.masks[i, :] = aa_mask_tensor_of(aa_parent, self.max_aa_seq_len)
             aa_seq_len = len(aa_parent)
-            self.aa_parents_idxs[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(aa_parent)
-            self.aa_children_idxs[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(aa_child)
-            self.aa_subs_indicator_tensor[i, :aa_seq_len] = aa_subs_indicator_tensor_of(
+            self.aa_parents_idxss[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(
+                aa_parent
+            )
+            self.aa_children_idxss[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(
+                aa_child
+            )
+            self.aa_subs_indicators[i, :aa_seq_len] = aa_subs_indicator_tensor_of(
                 aa_parent, aa_child
             )
 
-        assert torch.all(self.mask.sum(dim=1) > 0)
-        assert torch.max(self.aa_parents_idxs) <= MAX_AMBIG_AA_IDX
+        assert torch.all(self.masks.sum(dim=1) > 0)
+        assert torch.max(self.aa_parents_idxss) <= MAX_AMBIG_AA_IDX
 
         self._branch_lengths = branch_lengths
         self.update_neutral_probs()
@@ -242,12 +246,12 @@ class DNSMDataset(Dataset):
         """
         neutral_aa_mut_prob_l = []
 
-        for nt_parent, mask, nt_rates, branch_length, nt_csps in zip(
+        for nt_parent, mask, nt_rates, nt_csps, branch_length in zip(
             self.nt_parents,
-            self.mask,
+            self.masks,
             self.nt_ratess,
-            self._branch_lengths,
             self.nt_cspss,
+            self._branch_lengths,
         ):
             mask = mask.to("cpu")
             nt_rates = nt_rates.to("cpu")
@@ -260,16 +264,15 @@ class DNSMDataset(Dataset):
             # with masking out these positions later. We do this below.
             parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
             parent_len = len(nt_parent)
+            molevol.check_csps(parent_idxs, nt_csps)
 
             mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
-            normed_nt_csps = molevol.normalize_sub_probs(
-                parent_idxs, nt_csps[:parent_len, :]
-            )
+            nt_csps = nt_csps[:parent_len, :]
 
             neutral_aa_mut_prob = molevol.neutral_aa_mut_probs(
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
-                normed_nt_csps.reshape(-1, 3, 4),
+                nt_csps.reshape(-1, 3, 4),
                 multihit_model=multihit_model,
             )
 
@@ -299,26 +302,26 @@ class DNSMDataset(Dataset):
 
         # Note that our masked out positions will have a nan log probability,
         # which will require us to handle them correctly downstream.
-        self.log_neutral_aa_mut_probs = torch.log(torch.stack(neutral_aa_mut_prob_l))
+        self.log_neutral_aa_mut_probss = torch.log(torch.stack(neutral_aa_mut_prob_l))
 
     def __len__(self):
-        return len(self.aa_parents_idxs)
+        return len(self.aa_parents_idxss)
 
     def __getitem__(self, idx):
         return {
-            "aa_parents_idxs": self.aa_parents_idxs[idx],
-            "subs_indicator": self.aa_subs_indicator_tensor[idx],
-            "mask": self.mask[idx],
-            "log_neutral_aa_mut_probs": self.log_neutral_aa_mut_probs[idx],
+            "aa_parents_idxs": self.aa_parents_idxss[idx],
+            "aa_subs_indicator": self.aa_subs_indicators[idx],
+            "mask": self.masks[idx],
+            "log_neutral_aa_mut_probs": self.log_neutral_aa_mut_probss[idx],
             "nt_rates": self.nt_ratess[idx],
             "nt_csps": self.nt_cspss[idx],
         }
 
     def to(self, device):
-        self.aa_parents_idxs = self.aa_parents_idxs.to(device)
-        self.aa_subs_indicator_tensor = self.aa_subs_indicator_tensor.to(device)
-        self.mask = self.mask.to(device)
-        self.log_neutral_aa_mut_probs = self.log_neutral_aa_mut_probs.to(device)
+        self.aa_parents_idxss = self.aa_parents_idxss.to(device)
+        self.aa_subs_indicators = self.aa_subs_indicators.to(device)
+        self.masks = self.masks.to(device)
+        self.log_neutral_aa_mut_probss = self.log_neutral_aa_mut_probss.to(device)
         self.nt_ratess = self.nt_ratess.to(device)
         self.nt_cspss = self.nt_cspss.to(device)
         if self.multihit_model is not None:
@@ -369,7 +372,7 @@ class DNSMBurrito(framework.Burrito):
         return self.predictions_of_pair(log_neutral_aa_mut_probs, log_selection_factors)
 
     def loss_of_batch(self, batch):
-        aa_subs_indicator = batch["subs_indicator"].to(self.device)
+        aa_subs_indicator = batch["aa_subs_indicator"].to(self.device)
         mask = batch["mask"].to(self.device)
         aa_subs_indicator = aa_subs_indicator.masked_select(mask)
         predictions = self.predictions_of_batch(batch).masked_select(mask)

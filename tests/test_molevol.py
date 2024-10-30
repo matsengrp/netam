@@ -1,4 +1,6 @@
 import torch
+import pytest
+
 import netam.molevol as molevol
 from netam import framework
 
@@ -99,19 +101,14 @@ def test_neutral_aa_mut_probs():
     assert torch.allclose(correct_tensor, computed_tensor)
 
 
-def test_normalize_sub_probs():
+def test_check_csps():
     parent_idxs = nt_idx_tensor_of_str("AC")
-    sub_probs = torch.tensor([[0.2, 0.3, 0.4, 0.1], [0.1, 0.2, 0.3, 0.4]])
+    csp = torch.tensor([[0.0, 0.375, 0.5, 0.125], [0.125, 0.0, 0.375, 0.5]])
+    molevol.check_csps(parent_idxs, csp)
 
-    expected_normalized = torch.tensor(
-        [[0.0, 0.375, 0.5, 0.125], [0.125, 0.0, 0.375, 0.5]]
-    )
-    normalized_sub_probs = molevol.normalize_sub_probs(parent_idxs, sub_probs)
-
-    assert normalized_sub_probs.shape == (2, 4), "Result has incorrect shape"
-    assert torch.allclose(
-        normalized_sub_probs, expected_normalized
-    ), "Unexpected normalized values"
+    not_csp = torch.tensor([[0.2, 0.3, 0.4, 0.1], [0.1, 0.2, 0.3, 0.4]])
+    with pytest.raises(AssertionError):
+        molevol.check_csps(parent_idxs, not_csp)
 
 
 def iterative_aaprob_of_mut_and_sub(parent_codon, mut_probs, csps):

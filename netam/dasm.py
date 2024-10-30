@@ -25,12 +25,12 @@ class DASMDataset(dnsm.DNSMDataset):
     def update_neutral_probs(self):
         neutral_aa_probs_l = []
 
-        for nt_parent, mask, nt_rates, branch_length, nt_csps in zip(
+        for nt_parent, mask, nt_rates, nt_csps, branch_length in zip(
             self.nt_parents,
-            self.mask,
+            self.masks,
             self.nt_ratess,
-            self._branch_lengths,
             self.nt_cspss,
+            self._branch_lengths,
         ):
             mask = mask.to("cpu")
             nt_rates = nt_rates.to("cpu")
@@ -41,14 +41,13 @@ class DASMDataset(dnsm.DNSMDataset):
             parent_len = len(nt_parent)
 
             mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
-            normed_nt_csps = molevol.normalize_sub_probs(
-                parent_idxs, nt_csps[:parent_len, :]
-            )
+            nt_csps = nt_csps[:parent_len, :]
+            molevol.check_csps(parent_idxs, nt_csps)
 
             neutral_aa_probs = molevol.neutral_aa_probs(
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
-                normed_nt_csps.reshape(-1, 3, 4),
+                nt_csps.reshape(-1, 3, 4),
             )
 
             if not torch.isfinite(neutral_aa_probs).all():
@@ -75,25 +74,25 @@ class DASMDataset(dnsm.DNSMDataset):
 
         # Note that our masked out positions will have a nan log probability,
         # which will require us to handle them correctly downstream.
-        self.log_neutral_aa_probs = torch.log(torch.stack(neutral_aa_probs_l))
+        self.log_neutral_aa_probss = torch.log(torch.stack(neutral_aa_probs_l))
 
     def __getitem__(self, idx):
         return {
-            "aa_parents_idxs": self.aa_parents_idxs[idx],
-            "aa_children_idxs": self.aa_children_idxs[idx],
-            "subs_indicator": self.aa_subs_indicator_tensor[idx],
-            "mask": self.mask[idx],
-            "log_neutral_aa_probs": self.log_neutral_aa_probs[idx],
+            "aa_parents_idxs": self.aa_parents_idxss[idx],
+            "aa_children_idxs": self.aa_children_idxss[idx],
+            "subs_indicator": self.aa_subs_indicators[idx],
+            "mask": self.masks[idx],
+            "log_neutral_aa_probs": self.log_neutral_aa_probss[idx],
             "nt_rates": self.nt_ratess[idx],
             "nt_csps": self.nt_cspss[idx],
         }
 
     def to(self, device):
-        self.aa_parents_idxs = self.aa_parents_idxs.to(device)
-        self.aa_children_idxs = self.aa_children_idxs.to(device)
-        self.aa_subs_indicator_tensor = self.aa_subs_indicator_tensor.to(device)
-        self.mask = self.mask.to(device)
-        self.log_neutral_aa_probs = self.log_neutral_aa_probs.to(device)
+        self.aa_parents_idxss = self.aa_parents_idxss.to(device)
+        self.aa_children_idxss = self.aa_children_idxss.to(device)
+        self.aa_subs_indicators = self.aa_subs_indicators.to(device)
+        self.masks = self.masks.to(device)
+        self.log_neutral_aa_probss = self.log_neutral_aa_probss.to(device)
         self.nt_ratess = self.nt_ratess.to(device)
         self.nt_cspss = self.nt_cspss.to(device)
         if self.multihit_model is not None:

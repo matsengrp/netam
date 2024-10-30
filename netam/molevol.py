@@ -1,12 +1,7 @@
 """Free functions for molecular evolution computation.
 
-We will follow terminology from Yaari et al 2013, where "mutability" refers to the
-probability of a nucleotide mutating at a given site, while "substitution" refers to the
-probability of a nucleotide mutating to another nucleotide at a given site conditional
-on having a mutation.
-
-We assume that the mutation and substitution probabilities already take branch length
-into account.
+CSP means conditional substitution probability. CSPs are the probabilities of alternate
+states conditioned on there being a substitution.
 """
 
 import numpy as np
@@ -19,41 +14,33 @@ from netam.sequences import CODON_AA_INDICATOR_MATRIX
 import netam.sequences as sequences
 
 
-def normalize_sub_probs(parent_idxs: Tensor, sub_probs: Tensor) -> Tensor:
-    """Normalize substitution probabilities.
-
-    Given a parent DNA sequence and a 2D PyTorch tensor representing substitution
-    probabilities, this function sets the probability of the actual nucleotide
-    in the parent sequence to zero and then normalizes each row to form a valid
-    probability distribution.
+def check_csps(parent_idxs: Tensor, csps: Tensor) -> Tensor:
+    """Make sure that the CSPs are valid, i.e. that they are a probability distribution
+    and the parent state is zero.
 
     Args:
         parent_idxs (torch.Tensor): The parent sequence indices.
         sub_probs (torch.Tensor): A 2D PyTorch tensor representing substitution
             probabilities. Rows correspond to sites, and columns correspond
-            to "ACGT" bases.
-
-    Returns:
-        torch.Tensor: A 2D PyTorch tensor with normalized substitution probabilities.
+            to states (e.g. nucleotides).
     """
 
     # Assert that sub_probs are within the range [0, 1] modulo rounding error
+    assert torch.all(csps >= -1e-6), "Substitution probabilities must be non-negative"
     assert torch.all(
-        sub_probs >= -1e-6
-    ), "Substitution probabilities must be non-negative"
-    assert torch.all(
-        sub_probs <= 1 + 1e-6
+        csps <= 1 + 1e-6
     ), "Substitution probabilities must be less than or equal to 1"
 
     # Create an array of row indices that matches the shape of `parent_idxs`.
     row_indices = torch.arange(len(parent_idxs))
 
-    # Set the entries corresponding to the parent sequence to zero.
-    sub_probs[row_indices, parent_idxs] = 0.0
-
-    # Normalize the probabilities.
-    row_sums = torch.sum(sub_probs, dim=1, keepdim=True)
-    return sub_probs / row_sums
+    # Assert that the parent entry has a substitution probability of nearly 0.
+    assert torch.all(
+        csps[row_indices, parent_idxs] < 1e-6
+    ), "Parent entry must have a substitution probability of nearly 0"
+    assert torch.allclose(
+        csps[: len(parent_idxs)].sum(dim=1), torch.ones(len(parent_idxs))
+    )
 
 
 def build_mutation_matrices(
