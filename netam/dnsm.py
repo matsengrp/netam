@@ -81,8 +81,12 @@ class DNSMDataset(Dataset):
         for i, (aa_parent, aa_child) in enumerate(zip(aa_parents, aa_children)):
             self.masks[i, :] = aa_mask_tensor_of(aa_parent, self.max_aa_seq_len)
             aa_seq_len = len(aa_parent)
-            self.aa_parents_idxss[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(aa_parent)
-            self.aa_children_idxss[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(aa_child)
+            self.aa_parents_idxss[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(
+                aa_parent
+            )
+            self.aa_children_idxss[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(
+                aa_child
+            )
             self.aa_subs_indicators[i, :aa_seq_len] = aa_subs_indicator_tensor_of(
                 aa_parent, aa_child
             )

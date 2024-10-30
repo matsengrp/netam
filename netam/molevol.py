@@ -1,7 +1,7 @@
 """Free functions for molecular evolution computation.
 
-CSP means conditional substitution probability. CSPs are the probabilities of
-alternate states conditioned on there being a substitution. 
+CSP means conditional substitution probability. CSPs are the probabilities of alternate
+states conditioned on there being a substitution.
 """
 
 import numpy as np
@@ -15,8 +15,8 @@ import netam.sequences as sequences
 
 
 def check_csps(parent_idxs: Tensor, csps: Tensor) -> Tensor:
-    """Make sure that the CSPs are valid, i.e. that they are a probability
-    distribution and the parent state is zero.
+    """Make sure that the CSPs are valid, i.e. that they are a probability distribution
+    and the parent state is zero.
 
     Args:
         parent_idxs (torch.Tensor): The parent sequence indices.
@@ -26,9 +26,7 @@ def check_csps(parent_idxs: Tensor, csps: Tensor) -> Tensor:
     """
 
     # Assert that sub_probs are within the range [0, 1] modulo rounding error
-    assert torch.all(
-        csps >= -1e-6
-    ), "Substitution probabilities must be non-negative"
+    assert torch.all(csps >= -1e-6), "Substitution probabilities must be non-negative"
     assert torch.all(
         csps <= 1 + 1e-6
     ), "Substitution probabilities must be less than or equal to 1"
@@ -41,7 +39,8 @@ def check_csps(parent_idxs: Tensor, csps: Tensor) -> Tensor:
         csps[row_indices, parent_idxs] < 1e-6
     ), "Parent entry must have a substitution probability of nearly 0"
     assert torch.allclose(
-        csps[:len(parent_idxs)].sum(dim=1), torch.ones(len(parent_idxs)))
+        csps[: len(parent_idxs)].sum(dim=1), torch.ones(len(parent_idxs))
+    )
 
 
 def build_mutation_matrices(
