@@ -310,7 +310,7 @@ class DNSMDataset(Dataset):
     def __getitem__(self, idx):
         return {
             "aa_parents_idxs": self.aa_parents_idxss[idx],
-            "subs_indicator": self.aa_subs_indicators[idx],
+            "aa_subs_indicator": self.aa_subs_indicators[idx],
             "mask": self.masks[idx],
             "log_neutral_aa_mut_probs": self.log_neutral_aa_mut_probss[idx],
             "nt_rates": self.nt_ratess[idx],
@@ -372,7 +372,7 @@ class DNSMBurrito(framework.Burrito):
         return self.predictions_of_pair(log_neutral_aa_mut_probs, log_selection_factors)
 
     def loss_of_batch(self, batch):
-        aa_subs_indicator = batch["subs_indicator"].to(self.device)
+        aa_subs_indicator = batch["aa_subs_indicator"].to(self.device)
         mask = batch["mask"].to(self.device)
         aa_subs_indicator = aa_subs_indicator.masked_select(mask)
         predictions = self.predictions_of_batch(batch).masked_select(mask)
