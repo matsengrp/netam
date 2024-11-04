@@ -1,7 +1,6 @@
 black
 docformatter
 fire
-pulp==2.7.0   # see issue https://github.com/snakemake/snakemake/issues/2607
 pytest
 snakemake
 tensorboardX
