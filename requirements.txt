@@ -1,6 +1,7 @@
 black
 docformatter
 fire
+nbconvert
 pytest
 snakemake
 tensorboardX

@@ -16,6 +16,7 @@ setup(
         "optuna",
         "pandas",
         "pyyaml",
+        "requests",
         "tensorboardX",
         "torch",
         "tqdm",

@@ -7,6 +7,7 @@ from netam.molevol import (
     codon_probs_of_parent_scaled_nt_rates_and_csps,
     reshape_for_codons,
 )
+from netam import pretrained
 from netam.sequences import nt_idx_tensor_of_str
 import pytest
 import pandas as pd
@@ -63,7 +64,7 @@ ex_parent_codon_idxs = nt_idx_tensor_of_str("ACG")
 @pytest.fixture
 def mini_multihit_train_val_datasets():
     df = pd.read_csv("data/wyatt-10x-1p5m_pcp_2023-11-30_NI.first100.csv.gz")
-    crepe = framework.load_crepe("data/cnn_joi_sml-shmoof_small")
+    crepe = pretrained.load("ThriftyHumV1.0-45")
     df = multihit.prepare_pcp_df(df, crepe, 500)
     return multihit.train_test_datasets_of_pcp_df(df)
 

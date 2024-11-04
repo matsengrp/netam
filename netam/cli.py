@@ -1,5 +1,17 @@
+import os
+import shutil
+
 import fire
 import pandas as pd
+
+from netam.pretrained import PRETRAINED_DIR
+
+
+def clear_model_cache():
+    """This function clears the cache of pre-trained models."""
+    if os.path.exists(PRETRAINED_DIR):
+        print(f"Removing {PRETRAINED_DIR}")
+        shutil.rmtree(PRETRAINED_DIR)
 
 
 def concatenate_csvs(
