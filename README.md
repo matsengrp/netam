@@ -19,6 +19,3 @@ If you are running one of the experiment repos, such as:
 * [dnsm-experiments-1](https://github.com/matsengrp/dnsm-experiments-1/)
 
 you will want to visit those repos and follow the installation instructions there.
-
-
-TODO make a lock file upon release
