@@ -157,3 +157,4 @@ _ignore/
 .DS_Store
 _logs/
 _checkpoints
+_pretrained

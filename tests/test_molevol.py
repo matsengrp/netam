@@ -3,6 +3,7 @@ import pytest
 
 import netam.molevol as molevol
 from netam import framework
+from netam import pretrained
 
 from netam.sequences import (
     nt_idx_tensor_of_str,
@@ -143,8 +144,7 @@ def iterative_aaprob_of_mut_and_sub(parent_codon, mut_probs, csps):
 
 
 def test_aaprob_of_mut_and_sub():
-    crepe_path = "data/cnn_joi_sml-shmoof_small"
-    crepe = framework.load_crepe(crepe_path)
+    crepe = pretrained.load("ThriftyHumV1.0-45")
     [rates], [subs] = crepe([parent_nt_seq])
     mut_probs = 1.0 - torch.exp(-rates.squeeze().clone().detach())
     parent_codon = parent_nt_seq[0:3]
