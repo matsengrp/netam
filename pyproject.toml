@@ -2,7 +2,4 @@
 requires = ["setuptools>=64", "wheel", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
-[project]
-dynamic = ["version"]
-
 [tool.setuptools_scm]
