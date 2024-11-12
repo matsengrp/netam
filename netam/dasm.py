@@ -12,6 +12,7 @@ from netam.common import (
     BIG,
 )
 import netam.dnsm as dnsm
+from netam.dxsm import DXSMDataset, DXSMBurrito
 import netam.framework as framework
 import netam.molevol as molevol
 import netam.sequences as sequences
@@ -20,7 +21,7 @@ from netam.sequences import (
 )
 
 
-class DASMDataset(dnsm.DNSMDataset):
+class DASMDataset(DXSMDataset):
 
     def update_neutral_probs(self):
         neutral_aa_probs_l = []
@@ -121,7 +122,7 @@ def zap_predictions_along_diagonal(predictions, aa_parents_idxs):
     return predictions
 
 
-class DASMBurrito(framework.TwoLossMixin, dnsm.DNSMBurrito):
+class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
     def __init__(self, *args, loss_weights: list = [1.0, 0.01], **kwargs):
         super().__init__(*args, **kwargs)
         self.xent_loss = torch.nn.CrossEntropyLoss()
