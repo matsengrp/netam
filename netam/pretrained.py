@@ -76,7 +76,7 @@ def local_path_for_model(model_name: str):
     return local_crepe_path
 
 
-def load(model_name: str):
+def load(model_name: str, device=None):
     """Load a pre-trained model.
 
     If the model is not already downloaded, it will be downloaded from the appropriate
@@ -84,4 +84,4 @@ def load(model_name: str):
     """
 
     local_crepe_path = local_path_for_model(model_name)
-    return load_crepe(local_crepe_path)
+    return load_crepe(local_crepe_path, device=device)

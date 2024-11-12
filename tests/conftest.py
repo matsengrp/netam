@@ -3,7 +3,7 @@ from netam.framework import (
     load_pcp_df,
     add_shm_model_outputs_to_pcp_df,
 )
-from netam.pretrained import local_path_for_model
+from netam import pretrained
 
 
 @pytest.fixture(scope="module")
@@ -13,6 +13,6 @@ def pcp_df():
     )
     df = add_shm_model_outputs_to_pcp_df(
         df,
-        local_path_for_model("ThriftyHumV1.0-45"),
+        pretrained.load("ThriftyHumV1.0-45"),
     )
     return df
