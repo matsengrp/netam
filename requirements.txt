@@ -6,3 +6,4 @@ pytest
 snakemake
 tensorboardX
 typing_extensions
+seaborn
