@@ -51,3 +51,4 @@ jobs:
         run: |
           cd main
           make test
+          make notebooks

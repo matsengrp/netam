@@ -4,7 +4,11 @@ Neural NETworks for antibody Affinity Maturation.
 
 ## pip installation
 
-TODO
+Netam is available on PyPI, and works with Python 3.8-3.11.
+
+```
+pip install netam
+```
 
 This will allow you to use the models.
 

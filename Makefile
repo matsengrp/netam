@@ -24,7 +24,7 @@ docs:
 notebooks:
 	mkdir -p notebooks/_ignore
 	for nb in notebooks/*.ipynb; do \
-		jupyter nbconvert --to notebook --execute "$$nb" --output notebooks/_ignore/"$$(basename $$nb)"; \
+		jupyter nbconvert --to notebook --execute "$$nb" --output _ignore/"$$(basename $$nb)"; \
 	done
 
 .PHONY: install test notebooks format lint docs
