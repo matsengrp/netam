@@ -3,22 +3,14 @@
 import torch
 import torch.nn.functional as F
 
-# Amazingly, using one thread makes things 50x faster for branch length
-# optimization on our server.
-torch.set_num_threads(1)
-
 from netam.common import (
     clamp_probability,
     BIG,
 )
-import netam.dnsm as dnsm
 from netam.dxsm import DXSMDataset, DXSMBurrito
 import netam.framework as framework
 import netam.molevol as molevol
 import netam.sequences as sequences
-from netam.sequences import (
-    translate_sequence,
-)
 
 
 class DASMDataset(DXSMDataset):
@@ -204,7 +196,7 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
         # This is simpler than the equivalent in dnsm.py because we get the selection
         # matrix directly. Note that selection_factors_of_aa_str does the exponentiation
         # so this indeed gives us the selection factors, not the log selection factors.
-        parent = translate_sequence(parent)
+        parent = sequences.translate_sequence(parent)
         per_aa_selection_factors = self.model.selection_factors_of_aa_str(parent)
         parent_idxs = sequences.aa_idx_array_of_str(parent)
         per_aa_selection_factors[torch.arange(len(parent_idxs)), parent_idxs] = 1.0

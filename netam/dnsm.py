@@ -9,13 +9,9 @@ from netam.common import (
     clamp_probability,
 )
 from netam.dxsm import DXSMDataset, DXSMBurrito
-import netam.framework as framework
 from netam.hyper_burrito import HyperBurrito
 import netam.molevol as molevol
 import netam.sequences as sequences
-from netam.sequences import (
-    translate_sequence,
-)
 
 
 class DNSMDataset(DXSMDataset):
@@ -162,7 +158,7 @@ class DNSMBurrito(DXSMBurrito):
         return self.bce_loss(predictions, aa_subs_indicator)
 
     def build_selection_matrix_from_parent(self, parent: str):
-        parent = translate_sequence(parent)
+        parent = sequences.translate_sequence(parent)
         selection_factors = self.model.selection_factors_of_aa_str(parent)
         selection_matrix = torch.zeros((len(selection_factors), 20), dtype=torch.float)
         # Every "off-diagonal" entry of the selection matrix is set to the selection
