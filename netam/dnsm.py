@@ -90,9 +90,6 @@ class DNSMDataset(DXSMDataset):
         # which will require us to handle them correctly downstream.
         self.log_neutral_aa_mut_probss = torch.log(torch.stack(neutral_aa_mut_prob_l))
 
-    def __len__(self):
-        return len(self.aa_parents_idxss)
-
     def __getitem__(self, idx):
         return {
             "aa_parents_idxs": self.aa_parents_idxss[idx],
@@ -176,7 +173,6 @@ class DNSMBurrito(DXSMBurrito):
         selection_matrix[torch.arange(len(parent_idxs)), parent_idxs] = 1.0
 
         return selection_matrix
-
 
 
 class DNSMHyperBurrito(HyperBurrito):

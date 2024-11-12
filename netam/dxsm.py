@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import copy
 import multiprocessing as mp
 from functools import partial
@@ -29,7 +30,8 @@ from netam.sequences import (
     translate_sequences,
 )
 
-class DXSMDataset(Dataset):
+
+class DXSMDataset(Dataset, ABC):
     def __init__(
         self,
         nt_parents: pd.Series,
@@ -231,11 +233,12 @@ class DXSMDataset(Dataset):
             pd.read_csv(in_csv_path)["branch_length"].values
         )
 
+    @abstractmethod
     def update_neutral_probs(self):
-        # TODO virtual
         pass
 
-class DXSMBurrito(framework.Burrito):
+
+class DXSMBurrito(framework.Burrito, ABC):
     def _find_optimal_branch_length(
         self,
         parent,
@@ -323,6 +326,10 @@ class DXSMBurrito(framework.Burrito):
         }
         encoder = framework.PlaceholderEncoder()
         return framework.Crepe(encoder, self.model, training_hyperparameters)
+
+    @abstractmethod
+    def loss_of_batch(self, batch):
+        pass
 
 
 def worker_optimize_branch_length(burrito_class, model, dataset, optimization_kwargs):
