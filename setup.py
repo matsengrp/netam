@@ -22,6 +22,7 @@ setup(
         "tensorboardX",
         "torch",
         "tqdm",
+        "fire",
     ],
     classifiers=[
         "Development Status :: 3 - Alpha",
