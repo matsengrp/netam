@@ -5,15 +5,14 @@ It was inspired by the `load_model` module of [AbLang2](https://github.com/oxpig
 
 import os
 import zipfile
-import pkg_resources
+from importlib.resources import files
 
 import requests
 
 from netam.framework import load_crepe
 
-# This throws a deprecation warning. It could also be done by looking at
-# __file__, or by using importlib.resources.
-PRETRAINED_DIR = pkg_resources.resource_filename(__name__, "_pretrained")
+with files(__package__).joinpath("_pretrained") as pretrained_path:
+    PRETRAINED_DIR = str(pretrained_path)
 
 PACKAGE_LOCATIONS_AND_CONTENTS = (
     # Order of entries:

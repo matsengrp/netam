@@ -11,7 +11,7 @@ setup(
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     packages=find_packages(),
-    python_requires=">=3.8,<3.12",
+    python_requires=">=3.9,<3.12",
     install_requires=[
         "biopython",
         "natsort",
@@ -22,6 +22,7 @@ setup(
         "tensorboardX",
         "torch",
         "tqdm",
+        "fire",
     ],
     classifiers=[
         "Development Status :: 3 - Alpha",

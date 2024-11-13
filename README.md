@@ -4,7 +4,7 @@ Neural NETworks for antibody Affinity Maturation.
 
 ## pip installation
 
-Netam is available on PyPI, and works with Python 3.8 through 3.11.
+Netam is available on PyPI, and works with Python 3.9 through 3.11.
 
 ```
 pip install netam
@@ -60,3 +60,12 @@ If you are running one of the experiment repos, such as:
 * [dnsm-experiments-1](https://github.com/matsengrp/dnsm-experiments-1/)
 
 you will want to visit those repos and follow the installation instructions there.
+
+
+## Troubleshooting
+* On some machines, pip may install a version of numpy that is too new for the
+    available version of pytorch, returning an error such as `A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.0.2 as it may crash.` The solution is to downgrade to `numpy<2`:
+    ```console
+    pip install --force-reinstall "numpy<2"
+    ```

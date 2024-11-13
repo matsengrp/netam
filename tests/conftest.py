@@ -13,6 +13,6 @@ def pcp_df():
     )
     df = add_shm_model_outputs_to_pcp_df(
         df,
-        pretrained.load("ThriftyHumV1.0-45"),
+        pretrained.load("ThriftyHumV0.2-45"),
     )
     return df
