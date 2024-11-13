@@ -5,7 +5,9 @@ import shutil
 
 def test_names_unique():
     # Check all defined models can be loaded and they have unique names
-    assert len(set(pretrained.MODEL_TO_LOCAL.keys())) == sum(len(models) for _, _, _, models in pretrained.PACKAGE_LOCATIONS_AND_CONTENTS)
+    assert len(set(pretrained.MODEL_TO_LOCAL.keys())) == sum(
+        len(models) for _, _, _, models in pretrained.PACKAGE_LOCATIONS_AND_CONTENTS
+    )
 
 
 def test_load_all_models():
