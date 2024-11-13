@@ -204,9 +204,9 @@ def pick_device(gpu_preference=None):
     If gpu_preference is a string, use the device with that name. This is considered a
     strong preference from a user who knows what they are doing.
 
-    If gpu_preference is an integer, this is a weak preference for a numbered
-    GPU.  If CUDA is available, use the least used GPU, and if all are idle use
-    the gpu_index modulo the number of GPUs. If gpu_index is None, then use a random GPU.
+    If gpu_preference is an integer, this is a weak preference for a numbered GPU.  If
+    CUDA is available, use the least used GPU, and if all are idle use the gpu_index
+    modulo the number of GPUs. If gpu_index is None, then use a random GPU.
     """
 
     # Strong preference for a specific device.
