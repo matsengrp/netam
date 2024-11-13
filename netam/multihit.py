@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 import pandas as pd
-from typing import Sequence
+from typing import Sequence, List, Tuple
 
 from netam.molevol import (
     reshape_for_codons,
@@ -30,8 +30,8 @@ from netam.models import HitClassModel
 
 
 def _trim_to_codon_boundary_and_max_len(
-    seqs: list[Sequence], max_len: int = None
-) -> list[Sequence]:
+    seqs: List[Sequence], max_len: int = None
+) -> List[Sequence]:
     """Trims sequences to codon boundary and maximum length.
 
     No assumption is made about the data of a sequence, other than that it is
@@ -55,7 +55,7 @@ def _observed_hit_classes(parents: Sequence[str], children: Sequence[str]):
         children (Sequence[str]): A list of the corresponding child sequences.
 
     Returns:
-        list[torch.Tensor]: A list of tensors, each containing the observed
+        List[torch.Tensor]: A list of tensors, each containing the observed
             hit classes for each codon in the parent sequence. At any codon position
             where the parent or child sequence contains an N, the corresponding tensor
             element will be -100.
@@ -96,8 +96,8 @@ class HitClassDataset(Dataset):
         self,
         nt_parents: Sequence[str],
         nt_children: Sequence[str],
-        nt_ratess: Sequence[list[float]],
-        nt_cspss: Sequence[list[list[float]]],
+        nt_ratess: Sequence[List[float]],
+        nt_cspss: Sequence[List[List[float]]],
         branch_length_multiplier: float = 1.0,
     ):
         trimmed_parents = _trim_to_codon_boundary_and_max_len(nt_parents)
@@ -452,7 +452,7 @@ def hit_class_dataset_from_pcp_df(
 
 def train_test_datasets_of_pcp_df(
     pcp_df: pd.DataFrame, train_frac: float = 0.8, branch_length_multiplier: float = 1.0
-) -> tuple[HitClassDataset, HitClassDataset]:
+) -> Tuple[HitClassDataset, HitClassDataset]:
     """Splits a pcp_df prepared by `prepare_pcp_df` into a training and testing
     HitClassDataset."""
     nt_parents = pcp_df["parent"].reset_index(drop=True)

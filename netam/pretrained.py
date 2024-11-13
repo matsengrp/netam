@@ -11,22 +11,24 @@ import requests
 
 from netam.framework import load_crepe
 
+# This throws a deprecation warning. It could also be done by looking at
+# __file__, or by using importlib.resources.
 PRETRAINED_DIR = pkg_resources.resource_filename(__name__, "_pretrained")
 
 PACKAGE_LOCATIONS_AND_CONTENTS = (
     # Order of entries:
     # * Local file name
     # * Remote URL
-    # * Directory in which the models appear after extraction
+    # * Directory in which the models appear after extraction (must match path determined by archive)
     # * List of models in the package
     [
-        "thrifty-1.0.zip",
-        "https://github.com/matsengrp/thrifty-models/archive/refs/heads/release/1.0.zip",
-        "thrifty-models-release-1.0/models",
+        "thrifty-0.2.0.zip",
+        "https://github.com/matsengrp/thrifty-models/archive/refs/tags/v0.2.0.zip",
+        "thrifty-models-0.2.0/models",
         [
-            "ThriftyHumV1.0-20",
-            "ThriftyHumV1.0-45",
-            "ThriftyHumV1.0-59",
+            "ThriftyHumV0.2-20",
+            "ThriftyHumV0.2-45",
+            "ThriftyHumV0.2-59",
         ],
     ],
 )
@@ -39,7 +41,7 @@ for local_file, remote, models_dir, models in PACKAGE_LOCATIONS_AND_CONTENTS:
     LOCAL_TO_REMOTE[local_file] = remote
 
     for model in models:
-        MODEL_TO_LOCAL[model] = local_file
+        MODEL_TO_LOCAL[model] = (local_file, models_dir)
 
 
 def local_path_for_model(model_name: str):
@@ -50,7 +52,7 @@ def local_path_for_model(model_name: str):
 
     os.makedirs(PRETRAINED_DIR, exist_ok=True)
 
-    local_package = MODEL_TO_LOCAL[model_name]
+    local_package, models_dir = MODEL_TO_LOCAL[model_name]
     local_package_path = os.path.join(PRETRAINED_DIR, local_package)
 
     if not os.path.exists(local_package_path):
@@ -62,14 +64,16 @@ def local_path_for_model(model_name: str):
             f.write(response.content)
         if local_package.endswith(".zip"):
             with zipfile.ZipFile(local_package_path, "r") as zip_ref:
-                zip_ref.extractall(PRETRAINED_DIR)
+                zip_ref.extractall(path=PRETRAINED_DIR)
         else:
             raise ValueError(f"Unknown file type for {local_package}")
+    else:
+        print(f"Using cached models: {local_package_path}")
 
     local_crepe_path = os.path.join(PRETRAINED_DIR, models_dir, model_name)
 
     if not os.path.exists(local_crepe_path + ".yml"):
-        raise ValueError(f"Model {model_name} not found in pre-trained models.")
+        raise ValueError(f"Model {local_crepe_path} not found in pre-trained models.")
     if not os.path.exists(local_crepe_path + ".pth"):
         raise ValueError(f"Model {model_name} missing model weights.")
 

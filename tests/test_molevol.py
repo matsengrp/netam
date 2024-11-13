@@ -144,7 +144,7 @@ def iterative_aaprob_of_mut_and_sub(parent_codon, mut_probs, csps):
 
 
 def test_aaprob_of_mut_and_sub():
-    crepe = pretrained.load("ThriftyHumV1.0-45")
+    crepe = pretrained.load("ThriftyHumV0.2-45")
     [rates], [subs] = crepe([parent_nt_seq])
     mut_probs = 1.0 - torch.exp(-rates.squeeze().clone().detach())
     parent_codon = parent_nt_seq[0:3]
