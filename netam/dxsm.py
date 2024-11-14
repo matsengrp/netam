@@ -31,6 +31,7 @@ from netam.sequences import (
 
 
 class DXSMDataset(Dataset, ABC):
+    prefix = "dxsm"
     def __init__(
         self,
         nt_parents: pd.Series,
@@ -238,6 +239,7 @@ class DXSMDataset(Dataset, ABC):
 
 
 class DXSMBurrito(framework.Burrito, ABC):
+    prefix = "dxsm"
     def _find_optimal_branch_length(
         self,
         parent,
