@@ -314,6 +314,13 @@ class DXSMBurrito(framework.Burrito, ABC):
             )
         return torch.cat(results)
 
+    def load_branch_lengths(self, in_csv_prefix):
+        if self.train_dataset is not None:
+            self.train_dataset.load_branch_lengths(
+                in_csv_prefix + ".train_branch_lengths.csv"
+            )
+        self.val_dataset.load_branch_lengths(in_csv_prefix + ".val_branch_lengths.csv")
+
     def to_crepe(self):
         training_hyperparameters = {
             key: self.__dict__[key]

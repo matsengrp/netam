@@ -110,15 +110,9 @@ class DNSMDataset(DXSMDataset):
 
 class DNSMBurrito(DXSMBurrito):
     prefix = "dnsm"
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-    def load_branch_lengths(self, in_csv_prefix):
-        if self.train_dataset is not None:
-            self.train_dataset.load_branch_lengths(
-                in_csv_prefix + ".train_branch_lengths.csv"
-            )
-        self.val_dataset.load_branch_lengths(in_csv_prefix + ".val_branch_lengths.csv")
 
     def prediction_pair_of_batch(self, batch):
         """Get log neutral amino acid substitution probabilities and log selection
