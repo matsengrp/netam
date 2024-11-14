@@ -31,6 +31,8 @@ from netam.sequences import (
 
 
 class DXSMDataset(Dataset, ABC):
+    prefix = "dxsm"
+
     def __init__(
         self,
         nt_parents: pd.Series,
@@ -238,6 +240,8 @@ class DXSMDataset(Dataset, ABC):
 
 
 class DXSMBurrito(framework.Burrito, ABC):
+    prefix = "dxsm"
+
     def _find_optimal_branch_length(
         self,
         parent,
@@ -311,6 +315,13 @@ class DXSMBurrito(framework.Burrito, ABC):
                 [(self.model, split, optimization_kwargs) for split in splits],
             )
         return torch.cat(results)
+
+    def load_branch_lengths(self, in_csv_prefix):
+        if self.train_dataset is not None:
+            self.train_dataset.load_branch_lengths(
+                in_csv_prefix + ".train_branch_lengths.csv"
+            )
+        self.val_dataset.load_branch_lengths(in_csv_prefix + ".val_branch_lengths.csv")
 
     def to_crepe(self):
         training_hyperparameters = {
