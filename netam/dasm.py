@@ -117,6 +117,7 @@ def zap_predictions_along_diagonal(predictions, aa_parents_idxs):
 
 class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
     prefix = "dasm"
+
     def __init__(self, *args, loss_weights: list = [1.0, 0.01], **kwargs):
         super().__init__(*args, **kwargs)
         self.xent_loss = torch.nn.CrossEntropyLoss()
