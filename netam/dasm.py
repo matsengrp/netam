@@ -142,6 +142,8 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
 
         In contrast to a DNSM, each of these now have last dimension of 20.
         """
+        print(log_neutral_aa_probs.shape)
+        print(log_selection_factors.shape)
         predictions = log_neutral_aa_probs + log_selection_factors
         assert torch.isnan(predictions).sum() == 0
         return predictions
