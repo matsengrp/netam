@@ -720,7 +720,9 @@ class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
         if self.output_dim == 1:
             return self.single_value.expand(amino_acid_indices.shape)
         else:
-            return self.single_value.expand(amino_acid_indices.shape + (self.output_dim,))
+            return self.single_value.expand(
+                amino_acid_indices.shape + (self.output_dim,)
+            )
 
 
 class HitClassModel(nn.Module):
