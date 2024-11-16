@@ -706,18 +706,23 @@ class TransformerBinarySelectionModelTrainableWiggleAct(
 class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
     """A one parameter selection model as a baseline."""
 
-    def __init__(self):
+    def __init__(self, output_dim: int = 1):
         super().__init__()
         self.single_value = nn.Parameter(torch.tensor(0.0))
+        self.output_dim = output_dim
 
     @property
     def hyperparameters(self):
-        return {}
+        return {"output_dim": self.output_dim}
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         """Build a binary log selection matrix from an index-encoded parent sequence."""
-        replicated_value = self.single_value.expand_as(amino_acid_indices)
-        return replicated_value
+        if self.output_dim == 1:
+            return self.single_value.expand(amino_acid_indices.shape)
+        else:
+            return self.single_value.expand(
+                amino_acid_indices.shape + (self.output_dim,)
+            )
 
 
 class HitClassModel(nn.Module):
