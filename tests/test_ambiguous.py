@@ -1,0 +1,121 @@
+import pytest
+
+from netam.common import force_spawn
+from netam.framework import (
+    crepe_exists,
+    load_crepe,
+)
+from netam.models import TransformerBinarySelectionModelWiggleAct
+from netam.dasm import (
+    DASMBurrito,
+    DASMDataset,
+)
+from netam.framework import SHMoofDataset, SHMBurrito, RSSHMBurrito
+from netam.models import SHMoofModel, RSSHMoofModel, IndepRSCNNModel
+from netam.dnsm import DNSMBurrito, DNSMDataset
+import pytest
+from netam.framework import (
+    load_pcp_df,
+    add_shm_model_outputs_to_pcp_df,
+)
+from netam import pretrained
+import random
+
+
+# Function to randomly insert 'N' in sequences
+def randomize_with_ns(parent_seq, child_seq):
+    seq_length = len(parent_seq)
+
+    # Decide which type of modification to apply
+    modification_type = random.choice(["same_site", "different_site", "chunk", "none"])
+
+    if modification_type == "same_site":
+        # Select random positions to place 'N' in both parent and child at the same positions
+        num_ns = random.randint(
+            1, seq_length // 3
+        )  # Random number of Ns, max third the sequence length
+        positions = random.sample(range(seq_length), num_ns)
+        parent_seq = "".join(
+            ["N" if i in positions else base for i, base in enumerate(parent_seq)]
+        )
+        child_seq = "".join(
+            ["N" if i in positions else base for i, base in enumerate(child_seq)]
+        )
+
+    elif modification_type == "different_site":
+        # Insert 'N's at random positions in parent and child, but not the same positions
+        num_ns_parent = random.randint(1, seq_length // 3)
+        num_ns_child = random.randint(1, seq_length // 3)
+        positions_parent = random.sample(range(seq_length), num_ns_parent)
+        positions_child = random.sample(range(seq_length), num_ns_child)
+
+        parent_seq = "".join(
+            [
+                "N" if i in positions_parent else base
+                for i, base in enumerate(parent_seq)
+            ]
+        )
+        child_seq = "".join(
+            ["N" if i in positions_child else base for i, base in enumerate(child_seq)]
+        )
+
+    elif modification_type == "chunk":
+        # Replace a chunk of bases with 'N's in both parent and child
+        chunk_size = random.randint(1, seq_length // 3)
+        start_pos = random.randint(0, seq_length - chunk_size)
+        parent_seq = (
+            parent_seq[:start_pos]
+            + "N" * chunk_size
+            + parent_seq[start_pos + chunk_size :]
+        )
+        child_seq = (
+            child_seq[:start_pos]
+            + "N" * chunk_size
+            + child_seq[start_pos + chunk_size :]
+        )
+
+    return parent_seq, child_seq
+
+
+@pytest.fixture
+def ambig_pcp_df():
+    random.seed(1)
+    df = load_pcp_df(
+        "data/wyatt-10x-1p5m_pcp_2023-11-30_NI.first100.csv.gz",
+    )
+    # Apply the random N adding function to each row
+    df[["parent", "child"]] = df.apply(
+        lambda row: randomize_with_ns(row["parent"], row["child"]),
+        axis=1,
+        result_type="expand",
+    )
+
+    df = add_shm_model_outputs_to_pcp_df(
+        df,
+        pretrained.load("ThriftyHumV0.2-45"),
+    )
+    return df
+
+@pytest.fixture
+def dnsm_model():
+    return TransformerBinarySelectionModelWiggleAct(
+        nhead=2, d_model_per_head=4, dim_feedforward=256, layer_count=2
+    )
+
+def test_dnsm_burrito(ambig_pcp_df, dnsm_model):
+    """Fixture that returns the DNSM Burrito object."""
+    force_spawn()
+    ambig_pcp_df["in_train"] = True
+    ambig_pcp_df.loc[ambig_pcp_df.index[-15:], "in_train"] = False
+    train_dataset, val_dataset = DNSMDataset.train_val_datasets_of_pcp_df(ambig_pcp_df)
+
+    burrito = DNSMBurrito(
+        train_dataset,
+        val_dataset,
+        dnsm_model,
+        batch_size=32,
+        learning_rate=0.001,
+        min_learning_rate=0.0001,
+    )
+    burrito.joint_train(epochs=1, cycle_count=2, training_method="full")
+    return burrito
