@@ -29,6 +29,20 @@ from netam.sequences import (
     translate_sequences,
 )
 
+def cautious_mask_tensor_of(nt_str, aa_length):
+    """Return a mask tensor indicating codons which contain at least one N.
+
+    Codons beyond the length of the sequence are masked.
+    """
+    if aa_length is None:
+        aa_length = len(nt_str) // 3
+    mask = ["N" not in nt_str[i * 3:(i + 1) * 3] for i in range(len(nt_str) // 3)]
+    if len(mask) < aa_length:
+        mask += [False] * (aa_length - len(mask))
+    else:
+        mask = mask[:aa_length]
+    assert len(mask) == aa_length
+    return torch.tensor(mask, dtype=torch.bool)
 
 class DXSMDataset(Dataset, ABC):
     prefix = "dxsm"
@@ -42,6 +56,7 @@ class DXSMDataset(Dataset, ABC):
         branch_lengths: torch.Tensor,
         multihit_model=None,
     ):
+        print("starting DXSMDataset init")
         self.nt_parents = nt_parents
         self.nt_children = nt_children
         self.nt_ratess = nt_ratess
@@ -64,6 +79,7 @@ class DXSMDataset(Dataset, ABC):
         aa_parents = translate_sequences(self.nt_parents)
         aa_children = translate_sequences(self.nt_children)
         self.max_aa_seq_len = max(len(seq) for seq in aa_parents)
+        print("max_aa_seq_len:", self.max_aa_seq_len)
         # We have sequences of varying length, so we start with all tensors set
         # to the ambiguous amino acid, and then will fill in the actual values
         # below.
@@ -76,7 +92,10 @@ class DXSMDataset(Dataset, ABC):
         self.masks = torch.ones((pcp_count, self.max_aa_seq_len), dtype=torch.bool)
 
         for i, (aa_parent, aa_child) in enumerate(zip(aa_parents, aa_children)):
-            self.masks[i, :] = aa_mask_tensor_of(aa_parent, self.max_aa_seq_len)
+            # self.masks[i, :] = aa_mask_tensor_of(aa_parent, self.max_aa_seq_len)
+            # TODO Figure out how we're really going to handle masking
+            self.masks[i, :] = cautious_mask_tensor_of(nt_parents[i], self.max_aa_seq_len)
+
             aa_seq_len = len(aa_parent)
             self.aa_parents_idxss[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(
                 aa_parent
@@ -248,32 +267,49 @@ class DXSMBurrito(framework.Burrito, ABC):
         child,
         nt_rates,
         nt_csps,
+        aa_mask,
         starting_branch_length,
         multihit_model,
         **optimization_kwargs,
     ):
-        if parent == child:
-            return 0.0
+        # TODO: This doesn't seem quite right, because we'll mask whole codons
+        # if they contain just one ambiguity, even when we know they also
+        # contain a substitution.
+        if all(p_c == c_c for idx, (p_c, c_c) in enumerate(zip(parent, child)) if aa_mask[idx // 3]):
+            print("Parent and child are the same when codons containing N are masked")
+            assert False
+        # if parent == child:
+        #     return 0.0
+        # TODO this doesn't use any mask, couldn't we use already-computed
+        # aa_parent?
         sel_matrix = self.build_selection_matrix_from_parent(parent)
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
-            sel_matrix, parent, child, nt_rates, nt_csps, multihit_model
+            sel_matrix, parent, child, nt_rates, nt_csps, aa_mask[:len(sel_matrix)], multihit_model
         )
         if isinstance(starting_branch_length, torch.Tensor):
             starting_branch_length = starting_branch_length.detach().item()
-        return molevol.optimize_branch_length(
+        res = molevol.optimize_branch_length(
             log_pcp_probability, starting_branch_length, **optimization_kwargs
         )
+        if np.isclose(res[0], 0.0):
+            print("Optimization converged to 0.0")
+            print("parent:", parent)
+            print("child:", child)
+            assert False
+        else:
+            return res
 
     def serial_find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         optimal_lengths = []
         failed_count = 0
 
-        for parent, child, nt_rates, nt_csps, starting_length in tqdm(
+        for parent, child, nt_rates, nt_csps, aa_mask, starting_length in tqdm(
             zip(
                 dataset.nt_parents,
                 dataset.nt_children,
                 dataset.nt_ratess,
                 dataset.nt_cspss,
+                dataset.masks,
                 dataset.branch_lengths,
             ),
             total=len(dataset.nt_parents),
@@ -284,6 +320,7 @@ class DXSMBurrito(framework.Burrito, ABC):
                 child,
                 nt_rates[: len(parent)],
                 nt_csps[: len(parent), :],
+                aa_mask,
                 starting_length,
                 dataset.multihit_model,
                 **optimization_kwargs,
@@ -301,9 +338,10 @@ class DXSMBurrito(framework.Burrito, ABC):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         worker_count = min(mp.cpu_count() // 2, 10)
-        # # The following can be used when one wants a better traceback.
-        # burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
-        # return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
+        # The following can be used when one wants a better traceback.
+        burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
+        return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
+
         our_optimize_branch_length = partial(
             worker_optimize_branch_length,
             self.__class__,

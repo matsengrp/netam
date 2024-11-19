@@ -23,8 +23,15 @@ import random
 
 
 # Function to randomly insert 'N' in sequences
-def randomize_with_ns(parent_seq, child_seq):
+def randomize_with_ns(parent_seq, child_seq, avoid_masked_equality=True):
+    old_parent = parent_seq
+    old_child = child_seq
     seq_length = len(parent_seq)
+    try:
+        first_mut = next((idx, p, c) for idx, (p, c) in enumerate(zip(parent_seq, child_seq)) if p != c)
+    except:
+        return parent_seq, child_seq
+
 
     # Decide which type of modification to apply
     modification_type = random.choice(["same_site", "different_site", "chunk", "none"])
@@ -74,6 +81,27 @@ def randomize_with_ns(parent_seq, child_seq):
             + child_seq[start_pos + chunk_size :]
         )
 
+    if parent_seq == child_seq:
+        # If sequences are the same, put one mutated site back in:
+        idx, p, c = first_mut
+        parent_seq = parent_seq[:idx] + p + parent_seq[idx + 1 :]
+        child_seq = child_seq[:idx] + c + child_seq[idx + 1 :]
+    if avoid_masked_equality:
+        codon_pairs = [
+            (parent_seq[i*3: (i+1)*3], child_seq[i*3: (i+1)*3])
+            for i in range(seq_length // 3)
+        ]
+        if all(p == c for p, c in filter(lambda pair: "N" not in pair[0] and "N" not in pair[1], codon_pairs)):
+            # put original codon containing a mutation back in.
+            idx, p, c = first_mut
+            codon_start = (idx // 3) * 3
+            codon_end = codon_start + 3
+            parent_seq = parent_seq[:codon_start] + old_parent[codon_start:codon_end] + parent_seq[codon_end:]
+            child_seq = child_seq[:codon_start] + old_child[codon_start:codon_end] + child_seq[codon_end:]
+
+    assert len(parent_seq) == len(child_seq)
+    assert len(parent_seq) == seq_length
+
     return parent_seq, child_seq
 
 
@@ -104,6 +132,7 @@ def dnsm_model():
 
 def test_dnsm_burrito(ambig_pcp_df, dnsm_model):
     """Fixture that returns the DNSM Burrito object."""
+    # TODO fix and make also work with randomize_with_ns avoid_masked_equality=False
     force_spawn()
     ambig_pcp_df["in_train"] = True
     ambig_pcp_df.loc[ambig_pcp_df.index[-15:], "in_train"] = False
