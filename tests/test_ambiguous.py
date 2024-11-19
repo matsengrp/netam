@@ -148,3 +148,34 @@ def test_dnsm_burrito(ambig_pcp_df, dnsm_model):
     )
     burrito.joint_train(epochs=1, cycle_count=2, training_method="full")
     return burrito
+
+@pytest.fixture
+def dasm_model():
+    return TransformerBinarySelectionModelWiggleAct(
+        nhead=2,
+        d_model_per_head=4,
+        dim_feedforward=256,
+        layer_count=2,
+        output_dim=20,
+    )
+
+
+def test_dasm_burrito(ambig_pcp_df, dasm_model):
+    force_spawn()
+    """Fixture that returns the DNSM Burrito object."""
+    ambig_pcp_df["in_train"] = True
+    ambig_pcp_df.loc[ambig_pcp_df.index[-15:], "in_train"] = False
+    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(ambig_pcp_df)
+
+    burrito = DASMBurrito(
+        train_dataset,
+        val_dataset,
+        dasm_model,
+        batch_size=32,
+        learning_rate=0.001,
+        min_learning_rate=0.0001,
+    )
+    burrito.joint_train(
+        epochs=1, cycle_count=2, training_method="full", optimize_bl_first_cycle=False
+    )
+    return burrito

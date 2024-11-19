@@ -29,7 +29,6 @@ class DNSMDataset(DXSMDataset):
         """
         neutral_aa_mut_prob_l = []
 
-        print("starting update_neutral_probs loop")
         for nt_parent, mask, nt_rates, nt_csps, branch_length in zip(
             self.nt_parents,
             self.masks,
