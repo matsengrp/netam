@@ -56,7 +56,6 @@ class DXSMDataset(Dataset, ABC):
         branch_lengths: torch.Tensor,
         multihit_model=None,
     ):
-        print("starting DXSMDataset init")
         self.nt_parents = nt_parents
         self.nt_children = nt_children
         self.nt_ratess = nt_ratess
@@ -79,7 +78,6 @@ class DXSMDataset(Dataset, ABC):
         aa_parents = translate_sequences(self.nt_parents)
         aa_children = translate_sequences(self.nt_children)
         self.max_aa_seq_len = max(len(seq) for seq in aa_parents)
-        print("max_aa_seq_len:", self.max_aa_seq_len)
         # We have sequences of varying length, so we start with all tensors set
         # to the ambiguous amino acid, and then will fill in the actual values
         # below.

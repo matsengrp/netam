@@ -149,6 +149,7 @@ def test_dnsm_burrito(ambig_pcp_df, dnsm_model):
     burrito.joint_train(epochs=1, cycle_count=2, training_method="full")
     return burrito
 
+
 @pytest.fixture
 def dasm_model():
     return TransformerBinarySelectionModelWiggleAct(
