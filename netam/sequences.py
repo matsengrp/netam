@@ -183,3 +183,14 @@ def assert_full_sequences(parent, child):
 
     if "N" in parent or "N" in child:
         raise ValueError("Found ambiguous bases in the parent or child sequence.")
+
+def apply_aa_mask_to_nt_sequence(nt_seq, aa_mask):
+    """Apply an amino acid mask to a nucleotide sequence."""
+    return "".join(
+        nt for nt, mask_val in zip(nt_seq, aa_mask.repeat_interleave(3)) if mask_val
+    )
+
+def iter_codons(nt_seq):
+    """Iterate over the codons in a nucleotide sequence."""
+    for i in range(0, len(nt_seq), 3):
+        yield nt_seq[i : i + 3]

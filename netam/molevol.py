@@ -434,7 +434,7 @@ def neutral_aa_mut_probs(
 
 
 def mutsel_log_pcp_probability_of(
-    sel_matrix, parent, child, nt_rates, nt_csps, aa_mask, multihit_model=None
+    sel_matrix, parent, child, nt_rates, nt_csps, multihit_model=None
 ):
     """Constructs the log_pcp_probability function specific to given nt_rates and
     nt_csps.
@@ -446,9 +446,6 @@ def mutsel_log_pcp_probability_of(
     assert len(parent) % 3 == 0
     assert sel_matrix.shape == (len(parent) // 3, 20)
 
-    # This is masked out later
-    parent = parent.replace("N", "A")
-    child = child.replace("N", "A")
     parent_idxs = sequences.nt_idx_tensor_of_str(parent)
     child_idxs = sequences.nt_idx_tensor_of_str(child)
 
@@ -457,10 +454,10 @@ def mutsel_log_pcp_probability_of(
         nt_mut_probs = 1.0 - torch.exp(-branch_length * nt_rates)
 
         codon_mutsel, sums_too_big = build_codon_mutsel(
-            parent_idxs.reshape(-1, 3)[aa_mask],
-            nt_mut_probs.reshape(-1, 3)[aa_mask],
-            nt_csps.reshape(-1, 3, 4)[aa_mask],
-            sel_matrix[aa_mask],
+            parent_idxs.reshape(-1, 3),
+            nt_mut_probs.reshape(-1, 3),
+            nt_csps.reshape(-1, 3, 4),
+            sel_matrix,
             multihit_model=multihit_model,
         )
 
@@ -468,7 +465,7 @@ def mutsel_log_pcp_probability_of(
         # if sums_too_big is not None:
         #     self.csv_file.write(f"{parent},{child},{branch_length},{sums_too_big}\n")
 
-        reshaped_child_idxs = child_idxs.reshape(-1, 3)[aa_mask]
+        reshaped_child_idxs = child_idxs.reshape(-1, 3)
         child_prob_vector = codon_mutsel[
             torch.arange(len(reshaped_child_idxs)),
             reshaped_child_idxs[:, 0],

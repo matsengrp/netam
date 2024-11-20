@@ -10,6 +10,7 @@ import torch.optim as optim
 from torch import nn, Tensor
 import multiprocessing as mp
 
+from netam.sequences import iter_codons, apply_aa_mask_to_nt_sequence
 BIG = 1e9
 SMALL_PROB = 1e-6
 BASES = ["A", "C", "G", "T"]
@@ -81,6 +82,51 @@ def generic_mask_tensor_of(ambig_symb, seq_str, length=None):
         seq_str = seq_str[:length]
     mask[[c != ambig_symb for c in seq_str]] = 1
     return mask
+
+
+def codon_mask_tensor_of(nt_parent, nt_child, aa_length=None):
+    """Return a mask tensor indicating codons which contain at least one N.
+
+    Codons beyond the length of the sequence are masked.
+    """
+    if aa_length is None:
+        aa_length = len(nt_parent) // 3
+    mask = [
+        ("N" not in parent_codon and "N" not in child_codon)
+        for parent_codon, child_codon in zip(iter_codons(nt_parent), iter_codons(nt_child))
+    ]
+    if len(mask) < aa_length:
+        mask += [False] * (aa_length - len(mask))
+    else:
+        mask = mask[:aa_length]
+    assert len(mask) == aa_length
+    return torch.tensor(mask, dtype=torch.bool)
+
+def check_pcp_valid(parent, child, aa_mask=None):
+    """Check that the parent-child pairs are valid.
+
+    * The parent and child sequences must be the same length
+    * There must be unmasked codons
+    * The parent and child sequences must not match after masking codons containing
+      ambiguities.
+
+    Args:
+        parent: The parent sequence.
+        child: The child sequence.
+        aa_mask: The mask tensor for the amino acid sequence. If None, it will be
+            computed from the parent and child sequences.
+    """
+    if aa_mask is None:
+        aa_mask = codon_mask_tensor_of(parent, child)
+    if len(parent) != len(child):
+        raise ValueError("Parent and child sequences are not the same length.")
+    if not aa_mask.any():
+        raise ValueError("Parent-child pair is masked in all codons.")
+    if (
+            apply_aa_mask_to_nt_sequence(parent, aa_mask)
+            == apply_aa_mask_to_nt_sequence(child, aa_mask)
+    ):
+        raise ValueError("Parent-child pair matches after masking codons containing ambiguities")
 
 
 def nt_mask_tensor_of(*args, **kwargs):

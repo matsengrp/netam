@@ -147,7 +147,6 @@ def test_dnsm_burrito(ambig_pcp_df, dnsm_model):
         min_learning_rate=0.0001,
     )
     burrito.joint_train(epochs=1, cycle_count=2, training_method="full")
-    return burrito
 
 
 @pytest.fixture
@@ -179,4 +178,3 @@ def test_dasm_burrito(ambig_pcp_df, dasm_model):
     burrito.joint_train(
         epochs=1, cycle_count=2, training_method="full", optimize_bl_first_cycle=False
     )
-    return burrito
