@@ -1,4 +1,4 @@
-"""
+r"""
 We are going to get the attention weights using the [MultiHeadAttention](https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html) module in PyTorch. These weights are
 
 $$
@@ -9,10 +9,10 @@ So this tells us that the rows of the attention map correspond to the queries, w
 
 In our terminology, an attention map is the attention map for a single head. An
 "attention maps" object is a collection of attention maps: a tensor where the
-first dimension is the number of heads. This assumes all layers have the same 
+first dimension is the number of heads. This assumes all layers have the same
 number of heads. An "attention mapss" is a list of attention maps objects, one
 for each sequence in the batch. An "attention profile" is some 1-D summary of an
-attention map, such as the maximum attention score for each key position. 
+attention map, such as the maximum attention score for each key position.
 
 # Adapted from https://gist.github.com/airalcorn2/50ec06517ce96ecc143503e21fa6cb91
 """

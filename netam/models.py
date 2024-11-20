@@ -552,8 +552,6 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
 
         aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
         aa_idxs = aa_idxs.to(model_device)
-        # TODO: Shouldn't we be using the new codon mask here, and allowing
-        # a pre-computed mask to be passed in?
         mask = aa_mask_tensor_of(aa_str)
         mask = mask.to(model_device)
 

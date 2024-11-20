@@ -50,11 +50,8 @@ class DNSMDataset(DXSMDataset):
             parent_len = len(nt_parent)
             # Cannot assume that nt_csps and mask are same length, because when
             # datasets are split, masks are recomputed.
-            # TODO Figure out how we're really going to handle masking, because
-            # old method allowed some nt N's to be unmasked.
-            nt_mask = mask.repeat_interleave(3)[: len(nt_parent)]
-            molevol.check_csps(parent_idxs[nt_mask], nt_csps[:len(nt_parent)][nt_mask])
-            # molevol.check_csps(parent_idxs[nt_mask], nt_csps[:len(parent_idxs)][nt_mask])
+            nt_mask = mask.repeat_interleave(3)[:parent_len]
+            molevol.check_csps(parent_idxs[nt_mask], nt_csps[:parent_len][nt_mask])
 
             mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
             nt_csps = nt_csps[:parent_len, :]
@@ -161,13 +158,16 @@ class DNSMBurrito(DXSMBurrito):
         return self.bce_loss(predictions, aa_subs_indicator)
 
     def build_selection_matrix_from_parent(self, parent: str):
+        """Build a selection matrix from a parent amino acid sequence.
+
+        Values at ambiguous sites are meaningless.
+        """
         parent = sequences.translate_sequence(parent)
         selection_factors = self.model.selection_factors_of_aa_str(parent)
         selection_matrix = torch.zeros((len(selection_factors), 20), dtype=torch.float)
         # Every "off-diagonal" entry of the selection matrix is set to the selection
         # factor, where "diagonal" means keeping the same amino acid.
         selection_matrix[:, :] = selection_factors[:, None]
-        # TODO this nonsense output will need to get masked
         parent = parent.replace("X", "A")
         # Set "diagonal" elements to one.
         parent_idxs = sequences.aa_idx_array_of_str(parent)

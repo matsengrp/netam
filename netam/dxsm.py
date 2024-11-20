@@ -18,18 +18,17 @@ from tqdm import tqdm
 from netam.common import (
     MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
-    aa_mask_tensor_of,
     stack_heterogeneous,
     codon_mask_tensor_of,
-    check_pcp_valid,
+    assert_pcp_valid,
 )
 import netam.framework as framework
 import netam.molevol as molevol
-import netam.sequences as sequences
 from netam.sequences import (
     aa_subs_indicator_tensor_of,
     translate_sequences,
     apply_aa_mask_to_nt_sequence,
+    nt_mutation_frequency,
 )
 
 
@@ -73,9 +72,13 @@ class DXSMDataset(Dataset, ABC):
         self.masks = torch.ones((pcp_count, self.max_aa_seq_len), dtype=torch.bool)
 
         for i, (aa_parent, aa_child) in enumerate(zip(aa_parents, aa_children)):
-            self.masks[i, :] = codon_mask_tensor_of(nt_parents[i], nt_children[i], self.max_aa_seq_len)
+            self.masks[i, :] = codon_mask_tensor_of(
+                nt_parents[i], nt_children[i], self.max_aa_seq_len
+            )
             aa_seq_len = len(aa_parent)
-            check_pcp_valid(nt_parents[i], nt_children[i], aa_mask=self.masks[i][: aa_seq_len])
+            assert_pcp_valid(
+                nt_parents[i], nt_children[i], aa_mask=self.masks[i][:aa_seq_len]
+            )
 
             self.aa_parents_idxss[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(
                 aa_parent
@@ -111,8 +114,7 @@ class DXSMDataset(Dataset, ABC):
         """
         initial_branch_lengths = np.array(
             [
-                sequences.nt_mutation_frequency(parent, child)
-                * branch_length_multiplier
+                nt_mutation_frequency(parent, child) * branch_length_multiplier
                 for parent, child in zip(nt_parents, nt_children)
             ]
         )
@@ -252,14 +254,12 @@ class DXSMBurrito(framework.Burrito, ABC):
         multihit_model,
         **optimization_kwargs,
     ):
-        # TODO this doesn't use any mask, couldn't we use already-computed
-        # aa_parent and its mask?
         sel_matrix = self.build_selection_matrix_from_parent(parent)
         trimmed_aa_mask = aa_mask[: len(sel_matrix)]
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
             sel_matrix[trimmed_aa_mask],
-            sequences.apply_aa_mask_to_nt_sequence(parent, trimmed_aa_mask[: len(parent)]),
-            sequences.apply_aa_mask_to_nt_sequence(child, trimmed_aa_mask[: len(child)]),
+            apply_aa_mask_to_nt_sequence(parent, trimmed_aa_mask),
+            apply_aa_mask_to_nt_sequence(child, trimmed_aa_mask),
             nt_rates[trimmed_aa_mask.repeat_interleave(3)],
             nt_csps[trimmed_aa_mask.repeat_interleave(3)],
             multihit_model,
@@ -316,11 +316,9 @@ class DXSMBurrito(framework.Burrito, ABC):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         worker_count = min(mp.cpu_count() // 2, 10)
-        # The following can be used when one wants a better traceback.
-        # TODO disable later...
-        burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
-        return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
-
+        # # The following can be used when one wants a better traceback.
+        # burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
+        # return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
         our_optimize_branch_length = partial(
             worker_optimize_branch_length,
             self.__class__,

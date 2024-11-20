@@ -37,7 +37,7 @@ class DASMDataset(DXSMDataset):
             mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
             nt_csps = nt_csps[:parent_len, :]
             nt_mask = mask.repeat_interleave(3)[: len(nt_parent)]
-            molevol.check_csps(parent_idxs[nt_mask], nt_csps[:len(nt_parent)][nt_mask])
+            molevol.check_csps(parent_idxs[nt_mask], nt_csps[: len(nt_parent)][nt_mask])
 
             # TODO don't we need to pass multihit model in here?
             neutral_aa_probs = molevol.neutral_aa_probs(
@@ -198,13 +198,16 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
         return torch.stack([subs_pos_loss, csp_loss])
 
     def build_selection_matrix_from_parent(self, parent: str):
+        """Build a selection matrix from a parent amino acid sequence.
+
+        Values at ambiguous sites are meaningless.
+        """
         # This is simpler than the equivalent in dnsm.py because we get the selection
         # matrix directly. Note that selection_factors_of_aa_str does the exponentiation
         # so this indeed gives us the selection factors, not the log selection factors.
         parent = sequences.translate_sequence(parent)
         per_aa_selection_factors = self.model.selection_factors_of_aa_str(parent)
 
-        # TODO this nonsense output will need to get masked
         parent = parent.replace("X", "A")
         parent_idxs = sequences.aa_idx_array_of_str(parent)
         per_aa_selection_factors[torch.arange(len(parent_idxs)), parent_idxs] = 1.0

@@ -1,19 +1,12 @@
 import pytest
 
 from netam.common import force_spawn
-from netam.framework import (
-    crepe_exists,
-    load_crepe,
-)
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dasm import (
     DASMBurrito,
     DASMDataset,
 )
-from netam.framework import SHMoofDataset, SHMBurrito, RSSHMBurrito
-from netam.models import SHMoofModel, RSSHMoofModel, IndepRSCNNModel
 from netam.dnsm import DNSMBurrito, DNSMDataset
-import pytest
 from netam.framework import (
     load_pcp_df,
     add_shm_model_outputs_to_pcp_df,
@@ -28,10 +21,13 @@ def randomize_with_ns(parent_seq, child_seq, avoid_masked_equality=True):
     old_child = child_seq
     seq_length = len(parent_seq)
     try:
-        first_mut = next((idx, p, c) for idx, (p, c) in enumerate(zip(parent_seq, child_seq)) if p != c)
+        first_mut = next(
+            (idx, p, c)
+            for idx, (p, c) in enumerate(zip(parent_seq, child_seq))
+            if p != c
+        )
     except:
         return parent_seq, child_seq
-
 
     # Decide which type of modification to apply
     modification_type = random.choice(["same_site", "different_site", "chunk", "none"])
@@ -88,16 +84,29 @@ def randomize_with_ns(parent_seq, child_seq, avoid_masked_equality=True):
         child_seq = child_seq[:idx] + c + child_seq[idx + 1 :]
     if avoid_masked_equality:
         codon_pairs = [
-            (parent_seq[i*3: (i+1)*3], child_seq[i*3: (i+1)*3])
+            (parent_seq[i * 3 : (i + 1) * 3], child_seq[i * 3 : (i + 1) * 3])
             for i in range(seq_length // 3)
         ]
-        if all(p == c for p, c in filter(lambda pair: "N" not in pair[0] and "N" not in pair[1], codon_pairs)):
+        if all(
+            p == c
+            for p, c in filter(
+                lambda pair: "N" not in pair[0] and "N" not in pair[1], codon_pairs
+            )
+        ):
             # put original codon containing a mutation back in.
             idx, p, c = first_mut
             codon_start = (idx // 3) * 3
             codon_end = codon_start + 3
-            parent_seq = parent_seq[:codon_start] + old_parent[codon_start:codon_end] + parent_seq[codon_end:]
-            child_seq = child_seq[:codon_start] + old_child[codon_start:codon_end] + child_seq[codon_end:]
+            parent_seq = (
+                parent_seq[:codon_start]
+                + old_parent[codon_start:codon_end]
+                + parent_seq[codon_end:]
+            )
+            child_seq = (
+                child_seq[:codon_start]
+                + old_child[codon_start:codon_end]
+                + child_seq[codon_end:]
+            )
 
     assert len(parent_seq) == len(child_seq)
     assert len(parent_seq) == seq_length
@@ -124,15 +133,16 @@ def ambig_pcp_df():
     )
     return df
 
+
 @pytest.fixture
 def dnsm_model():
     return TransformerBinarySelectionModelWiggleAct(
         nhead=2, d_model_per_head=4, dim_feedforward=256, layer_count=2
     )
 
+
 def test_dnsm_burrito(ambig_pcp_df, dnsm_model):
     """Fixture that returns the DNSM Burrito object."""
-    # TODO fix and make also work with randomize_with_ns avoid_masked_equality=False
     force_spawn()
     ambig_pcp_df["in_train"] = True
     ambig_pcp_df.loc[ambig_pcp_df.index[-15:], "in_train"] = False
