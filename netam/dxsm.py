@@ -73,7 +73,7 @@ class DXSMDataset(Dataset, ABC):
 
         for i, (aa_parent, aa_child) in enumerate(zip(aa_parents, aa_children)):
             self.masks[i, :] = codon_mask_tensor_of(
-                nt_parents[i], nt_children[i], self.max_aa_seq_len
+                nt_parents[i], nt_children[i], aa_length=self.max_aa_seq_len
             )
             aa_seq_len = len(aa_parent)
             assert_pcp_valid(
