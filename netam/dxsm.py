@@ -252,16 +252,8 @@ class DXSMBurrito(framework.Burrito, ABC):
         multihit_model,
         **optimization_kwargs,
     ):
-        # TODO: This doesn't seem quite right, because we'll mask whole codons
-        # if they contain just one ambiguity, even when we know they also
-        # contain a substitution.
-        if all(p_c == c_c for idx, (p_c, c_c) in enumerate(zip(parent, child)) if aa_mask[idx // 3]):
-            print("Parent and child are the same when codons containing N are masked")
-            assert False
-        # if parent == child:
-        #     return 0.0
         # TODO this doesn't use any mask, couldn't we use already-computed
-        # aa_parent?
+        # aa_parent and its mask?
         sel_matrix = self.build_selection_matrix_from_parent(parent)
         trimmed_aa_mask = aa_mask[: len(sel_matrix)]
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
