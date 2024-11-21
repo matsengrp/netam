@@ -45,7 +45,6 @@ class DNSMDataset(DXSMDataset):
                 multihit_model = None
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
-            # nt_mask = torch.tensor([it != "N" for it in nt_parent], dtype=torch.bool)
             parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
             parent_len = len(nt_parent)
             # Cannot assume that nt_csps and mask are same length, because when

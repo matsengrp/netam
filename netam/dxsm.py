@@ -266,16 +266,9 @@ class DXSMBurrito(framework.Burrito, ABC):
         )
         if isinstance(starting_branch_length, torch.Tensor):
             starting_branch_length = starting_branch_length.detach().item()
-        res = molevol.optimize_branch_length(
+        return molevol.optimize_branch_length(
             log_pcp_probability, starting_branch_length, **optimization_kwargs
         )
-        if np.isclose(res[0], 0.0):
-            print("Optimization converged to 0.0")
-            print("parent:", parent)
-            print("child:", child)
-            assert False
-        else:
-            return res
 
     def serial_find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         optimal_lengths = []
