@@ -63,7 +63,7 @@ def test_make_dataset(tiny_dataset):
     assert branch_length == 1 / 5
 
 
-def test_write_output(tiny_burrito):
+def test_write_tinyburrito_output(tiny_burrito):
     os.makedirs("_ignore", exist_ok=True)
     tiny_burrito.model.write_shmoof_output("_ignore")
 
@@ -105,7 +105,7 @@ def mini_rsburrito(mini_dataset, tiny_rsscnnmodel):
     return burrito
 
 
-def test_write_output(mini_rsburrito):
+def test_write_mini_rsburrito_output(mini_rsburrito):
     os.makedirs("_ignore", exist_ok=True)
     mini_rsburrito.save_crepe("_ignore/mini_rscrepe")
 

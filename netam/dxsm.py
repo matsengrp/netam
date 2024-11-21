@@ -18,15 +18,17 @@ from tqdm import tqdm
 from netam.common import (
     MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
-    aa_mask_tensor_of,
     stack_heterogeneous,
+    codon_mask_tensor_of,
+    assert_pcp_valid,
 )
 import netam.framework as framework
 import netam.molevol as molevol
-import netam.sequences as sequences
 from netam.sequences import (
     aa_subs_indicator_tensor_of,
     translate_sequences,
+    apply_aa_mask_to_nt_sequence,
+    nt_mutation_frequency,
 )
 
 
@@ -55,12 +57,6 @@ class DXSMDataset(Dataset, ABC):
         assert len(self.nt_parents) == len(self.nt_children)
         pcp_count = len(self.nt_parents)
 
-        for parent, child in zip(self.nt_parents, self.nt_children):
-            if parent == child:
-                raise ValueError(
-                    f"Found an identical parent and child sequence: {parent}"
-                )
-
         aa_parents = translate_sequences(self.nt_parents)
         aa_children = translate_sequences(self.nt_children)
         self.max_aa_seq_len = max(len(seq) for seq in aa_parents)
@@ -76,8 +72,14 @@ class DXSMDataset(Dataset, ABC):
         self.masks = torch.ones((pcp_count, self.max_aa_seq_len), dtype=torch.bool)
 
         for i, (aa_parent, aa_child) in enumerate(zip(aa_parents, aa_children)):
-            self.masks[i, :] = aa_mask_tensor_of(aa_parent, self.max_aa_seq_len)
+            self.masks[i, :] = codon_mask_tensor_of(
+                nt_parents[i], nt_children[i], aa_length=self.max_aa_seq_len
+            )
             aa_seq_len = len(aa_parent)
+            assert_pcp_valid(
+                nt_parents[i], nt_children[i], aa_mask=self.masks[i][:aa_seq_len]
+            )
+
             self.aa_parents_idxss[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(
                 aa_parent
             )
@@ -112,8 +114,7 @@ class DXSMDataset(Dataset, ABC):
         """
         initial_branch_lengths = np.array(
             [
-                sequences.nt_mutation_frequency(parent, child)
-                * branch_length_multiplier
+                nt_mutation_frequency(parent, child) * branch_length_multiplier
                 for parent, child in zip(nt_parents, nt_children)
             ]
         )
@@ -248,15 +249,20 @@ class DXSMBurrito(framework.Burrito, ABC):
         child,
         nt_rates,
         nt_csps,
+        aa_mask,
         starting_branch_length,
         multihit_model,
         **optimization_kwargs,
     ):
-        if parent == child:
-            return 0.0
         sel_matrix = self.build_selection_matrix_from_parent(parent)
+        trimmed_aa_mask = aa_mask[: len(sel_matrix)]
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
-            sel_matrix, parent, child, nt_rates, nt_csps, multihit_model
+            sel_matrix[trimmed_aa_mask],
+            apply_aa_mask_to_nt_sequence(parent, trimmed_aa_mask),
+            apply_aa_mask_to_nt_sequence(child, trimmed_aa_mask),
+            nt_rates[trimmed_aa_mask.repeat_interleave(3)],
+            nt_csps[trimmed_aa_mask.repeat_interleave(3)],
+            multihit_model,
         )
         if isinstance(starting_branch_length, torch.Tensor):
             starting_branch_length = starting_branch_length.detach().item()
@@ -268,12 +274,13 @@ class DXSMBurrito(framework.Burrito, ABC):
         optimal_lengths = []
         failed_count = 0
 
-        for parent, child, nt_rates, nt_csps, starting_length in tqdm(
+        for parent, child, nt_rates, nt_csps, aa_mask, starting_length in tqdm(
             zip(
                 dataset.nt_parents,
                 dataset.nt_children,
                 dataset.nt_ratess,
                 dataset.nt_cspss,
+                dataset.masks,
                 dataset.branch_lengths,
             ),
             total=len(dataset.nt_parents),
@@ -284,6 +291,7 @@ class DXSMBurrito(framework.Burrito, ABC):
                 child,
                 nt_rates[: len(parent)],
                 nt_csps[: len(parent), :],
+                aa_mask,
                 starting_length,
                 dataset.multihit_model,
                 **optimization_kwargs,

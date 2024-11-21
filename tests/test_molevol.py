@@ -2,7 +2,6 @@ import torch
 import pytest
 
 import netam.molevol as molevol
-from netam import framework
 from netam import pretrained
 
 from netam.sequences import (

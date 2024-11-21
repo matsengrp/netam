@@ -29,6 +29,10 @@ class DASMDataset(DXSMDataset):
             mask = mask.to("cpu")
             nt_rates = nt_rates.to("cpu")
             nt_csps = nt_csps.to("cpu")
+            if self.multihit_model is not None:
+                multihit_model = copy.deepcopy(self.multihit_model).to("cpu")
+            else:
+                multihit_model = None
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
             parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
@@ -36,12 +40,14 @@ class DASMDataset(DXSMDataset):
 
             mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
             nt_csps = nt_csps[:parent_len, :]
-            molevol.check_csps(parent_idxs, nt_csps)
+            nt_mask = mask.repeat_interleave(3)[: len(nt_parent)]
+            molevol.check_csps(parent_idxs[nt_mask], nt_csps[: len(nt_parent)][nt_mask])
 
             neutral_aa_probs = molevol.neutral_aa_probs(
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
                 nt_csps.reshape(-1, 3, 4),
+                multihit_model=multihit_model,
             )
 
             if not torch.isfinite(neutral_aa_probs).all():
@@ -196,11 +202,17 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
         return torch.stack([subs_pos_loss, csp_loss])
 
     def build_selection_matrix_from_parent(self, parent: str):
+        """Build a selection matrix from a parent amino acid sequence.
+
+        Values at ambiguous sites are meaningless.
+        """
         # This is simpler than the equivalent in dnsm.py because we get the selection
         # matrix directly. Note that selection_factors_of_aa_str does the exponentiation
         # so this indeed gives us the selection factors, not the log selection factors.
         parent = sequences.translate_sequence(parent)
         per_aa_selection_factors = self.model.selection_factors_of_aa_str(parent)
+
+        parent = parent.replace("X", "A")
         parent_idxs = sequences.aa_idx_array_of_str(parent)
         per_aa_selection_factors[torch.arange(len(parent_idxs)), parent_idxs] = 1.0
 
