@@ -222,7 +222,6 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         self._branch_lengths = new_branch_lengths
         self.update_neutral_probs()
 
-
     @abstractmethod
     def update_neutral_probs(self):
         pass

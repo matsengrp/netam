@@ -131,12 +131,22 @@ class PlaceholderEncoder:
     def parameters(self):
         return {}
 
+
 class BranchLengthDataset(Dataset):
     def __len__(self):
         return len(self.branch_lengths)
 
+    def export_branch_lengths(self, out_csv_path):
+        pd.DataFrame({"branch_length": self.branch_lengths}).to_csv(
+            out_csv_path, index=False
+        )
+
     def load_branch_lengths(self, in_csv_path):
         self.branch_lengths = pd.read_csv(in_csv_path)["branch_length"].values
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(Size: {len(self)}) on {self.branch_lengths.device}"
+
 
 class SHMoofDataset(BranchLengthDataset):
     def __init__(self, dataframe, kmer_length, site_count):
@@ -161,9 +171,6 @@ class SHMoofDataset(BranchLengthDataset):
             self.wt_base_modifier[idx],
             self.branch_lengths[idx],
         )
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(Size: {len(self)}) on {self.encoded_parents.device}"
 
     def to(self, device):
         self.encoded_parents = self.encoded_parents.to(device)
