@@ -32,7 +32,7 @@ from netam.sequences import (
 )
 
 
-class DXSMDataset(Dataset, ABC):
+class DXSMDataset(framework.BranchLengthDataset, ABC):
     prefix = "dxsm"
 
     def __init__(
@@ -222,18 +222,6 @@ class DXSMDataset(Dataset, ABC):
         self._branch_lengths = new_branch_lengths
         self.update_neutral_probs()
 
-    def __len__(self):
-        return len(self.aa_parents_idxss)
-
-    def export_branch_lengths(self, out_csv_path):
-        pd.DataFrame({"branch_length": self.branch_lengths}).to_csv(
-            out_csv_path, index=False
-        )
-
-    def load_branch_lengths(self, in_csv_path):
-        self.branch_lengths = torch.Tensor(
-            pd.read_csv(in_csv_path)["branch_length"].values
-        )
 
     @abstractmethod
     def update_neutral_probs(self):

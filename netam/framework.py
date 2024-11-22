@@ -131,8 +131,14 @@ class PlaceholderEncoder:
     def parameters(self):
         return {}
 
+class BranchLengthDataset(Dataset):
+    def __len__(self):
+        return len(self.branch_lengths)
 
-class SHMoofDataset(Dataset):
+    def load_branch_lengths(self, in_csv_path):
+        self.branch_lengths = pd.read_csv(in_csv_path)["branch_length"].values
+
+class SHMoofDataset(BranchLengthDataset):
     def __init__(self, dataframe, kmer_length, site_count):
         super().__init__()
         self.encoder = KmerSequenceEncoder(kmer_length, site_count)
@@ -145,9 +151,6 @@ class SHMoofDataset(Dataset):
             self.branch_lengths,
         ) = self.encode_pcps(dataframe)
         assert self.encoded_parents.shape[0] == self.branch_lengths.shape[0]
-
-    def __len__(self):
-        return len(self.encoded_parents)
 
     def __getitem__(self, idx):
         return (
@@ -223,9 +226,6 @@ class SHMoofDataset(Dataset):
                 ),
             }
         ).to_csv(out_csv_path, index=False)
-
-    def load_branch_lengths(self, in_csv_path):
-        self.branch_lengths = pd.read_csv(in_csv_path)["branch_length"].values
 
 
 class Crepe:
