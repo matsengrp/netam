@@ -16,6 +16,7 @@ from netam.common import (
     PositionalEncoding,
     generate_kmers,
     aa_mask_tensor_of,
+    encode_sequences,
 )
 
 warnings.filterwarnings(
@@ -58,6 +59,19 @@ class ModelBase(nn.Module):
         """Unfreeze all parameters in the model, enabling gradient computations."""
         for param in self.parameters():
             param.requires_grad = True
+
+    def selection_factors_of_sequences(self, sequences, encoder=None):
+        if encoder is None:
+            raise ValueError("An encoder must be provided.")
+        device = next(self.parameters()).device
+        encoded_parents, masks, wt_base_modifiers = encode_sequences(sequences, encoder)
+        encoded_parents = encoded_parents.to(device)
+        masks = masks.to(device)
+        wt_base_modifiers = wt_base_modifiers.to(device)
+        with torch.no_grad():
+            outputs = self(encoded_parents, masks, wt_base_modifiers)
+            return tuple(t.detach().cpu() for t in outputs)
+
 
 
 class KmerModel(ModelBase):
@@ -535,6 +549,9 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
 
     def __init__(self):
         super().__init__()
+
+    def selection_factors_of_sequences(self, sequences: list[str], **kwargs) -> Tensor:
+        return tuple(self.selection_factors_of_aa_str(seq) for seq in sequences)
 
     def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
         """Do the forward method then exponentiation without gradients from an amino

@@ -368,3 +368,17 @@ def linear_bump_lr(epoch, warmup_epochs, total_epochs, max_lr, min_lr):
             epoch - warmup_epochs
         )
     return lr
+
+def encode_sequences(sequences, encoder):
+    encoded_parents, wt_base_modifiers = zip(
+        *[encoder.encode_sequence(sequence) for sequence in sequences]
+    )
+    masks = [
+        nt_mask_tensor_of(sequence, encoder.site_count)
+        for sequence in sequences
+    ]
+    return (
+        torch.stack(encoded_parents),
+        torch.stack(masks),
+        torch.stack(wt_base_modifiers),
+    )

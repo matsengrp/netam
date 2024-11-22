@@ -25,6 +25,7 @@ from netam.common import (
     BASES_AND_N_TO_INDEX,
     BIG,
     VRC01_NT_SEQ,
+    encode_sequences,
 )
 from netam import models
 import netam.molevol as molevol
@@ -250,6 +251,9 @@ class Crepe:
         self.model = model
         self.training_hyperparameters = training_hyperparameters
 
+    def __call__(self, sequences):
+        return self.model.selection_factors_of_sequences(sequences, encoder=self.encoder)
+
     @property
     def device(self):
         return next(self.model.parameters()).device
@@ -258,27 +262,7 @@ class Crepe:
         self.model.to(device)
 
     def encode_sequences(self, sequences):
-        encoded_parents, wt_base_modifiers = zip(
-            *[self.encoder.encode_sequence(sequence) for sequence in sequences]
-        )
-        masks = [
-            nt_mask_tensor_of(sequence, self.encoder.site_count)
-            for sequence in sequences
-        ]
-        return (
-            torch.stack(encoded_parents),
-            torch.stack(masks),
-            torch.stack(wt_base_modifiers),
-        )
-
-    def __call__(self, sequences):
-        encoded_parents, masks, wt_base_modifiers = self.encode_sequences(sequences)
-        encoded_parents = encoded_parents.to(self.device)
-        masks = masks.to(self.device)
-        wt_base_modifiers = wt_base_modifiers.to(self.device)
-        with torch.no_grad():
-            outputs = self.model(encoded_parents, masks, wt_base_modifiers)
-            return tuple(t.detach().cpu() for t in outputs)
+        return encode_sequences(sequences, self.encoder)
 
     def save(self, prefix):
         torch.save(self.model.state_dict(), f"{prefix}.pth")
