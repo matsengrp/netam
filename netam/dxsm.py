@@ -4,7 +4,6 @@ import multiprocessing as mp
 from functools import partial
 
 import torch
-from torch.utils.data import Dataset
 
 # Amazingly, using one thread makes things 50x faster for branch length
 # optimization on our server.
