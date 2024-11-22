@@ -252,7 +252,9 @@ class Crepe:
         self.training_hyperparameters = training_hyperparameters
 
     def __call__(self, sequences):
-        return self.model.selection_factors_of_sequences(sequences, encoder=self.encoder)
+        return self.model.selection_factors_of_sequences(
+            sequences, encoder=self.encoder
+        )
 
     @property
     def device(self):

@@ -73,7 +73,6 @@ class ModelBase(nn.Module):
             return tuple(t.detach().cpu() for t in outputs)
 
 
-
 class KmerModel(ModelBase):
     def __init__(self, kmer_length):
         super().__init__()
