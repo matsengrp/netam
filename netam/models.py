@@ -16,6 +16,7 @@ from netam.common import (
     PositionalEncoding,
     generate_kmers,
     aa_mask_tensor_of,
+    encode_sequences,
 )
 
 warnings.filterwarnings(
@@ -49,6 +50,10 @@ class ModelBase(nn.Module):
             else:
                 raise ValueError(f"Unrecognized layer type: {type(layer)}")
 
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
     def freeze(self):
         """Freeze all parameters in the model, disabling gradient computations."""
         for param in self.parameters():
@@ -58,6 +63,17 @@ class ModelBase(nn.Module):
         """Unfreeze all parameters in the model, enabling gradient computations."""
         for param in self.parameters():
             param.requires_grad = True
+
+    def evaluate_sequences(self, sequences, encoder=None):
+        if encoder is None:
+            raise ValueError("An encoder must be provided.")
+        encoded_parents, masks, wt_base_modifiers = encode_sequences(sequences, encoder)
+        encoded_parents = encoded_parents.to(self.device)
+        masks = masks.to(self.device)
+        wt_base_modifiers = wt_base_modifiers.to(self.device)
+        with torch.no_grad():
+            outputs = self(encoded_parents, masks, wt_base_modifiers)
+            return tuple(t.detach().cpu() for t in outputs)
 
 
 class KmerModel(ModelBase):
@@ -536,6 +552,13 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
     def __init__(self):
         super().__init__()
 
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
+    def evaluate_sequences(self, sequences: list[str], **kwargs) -> Tensor:
+        return tuple(self.selection_factors_of_aa_str(seq) for seq in sequences)
+
     def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
         """Do the forward method then exponentiation without gradients from an amino
         acid string.
@@ -548,12 +571,10 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
             the level of selection for each amino acid at each site.
         """
 
-        model_device = next(self.parameters()).device
-
         aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
-        aa_idxs = aa_idxs.to(model_device)
+        aa_idxs = aa_idxs.to(self.device)
         mask = aa_mask_tensor_of(aa_str)
-        mask = mask.to(model_device)
+        mask = mask.to(self.device)
 
         with torch.no_grad():
             model_out = self(aa_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)

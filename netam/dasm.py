@@ -11,6 +11,7 @@ from netam.dxsm import DXSMDataset, DXSMBurrito
 import netam.framework as framework
 import netam.molevol as molevol
 import netam.sequences as sequences
+import copy
 
 
 class DASMDataset(DXSMDataset):

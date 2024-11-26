@@ -25,6 +25,7 @@ from netam.common import (
     BASES_AND_N_TO_INDEX,
     BIG,
     VRC01_NT_SEQ,
+    encode_sequences,
 )
 from netam import models
 import netam.molevol as molevol
@@ -132,7 +133,23 @@ class PlaceholderEncoder:
         return {}
 
 
-class SHMoofDataset(Dataset):
+class BranchLengthDataset(Dataset):
+    def __len__(self):
+        return len(self.branch_lengths)
+
+    def export_branch_lengths(self, out_csv_path):
+        pd.DataFrame({"branch_length": self.branch_lengths}).to_csv(
+            out_csv_path, index=False
+        )
+
+    def load_branch_lengths(self, in_csv_path):
+        self.branch_lengths = pd.read_csv(in_csv_path)["branch_length"].values
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(Size: {len(self)}) on {self.branch_lengths.device}"
+
+
+class SHMoofDataset(BranchLengthDataset):
     def __init__(self, dataframe, kmer_length, site_count):
         super().__init__()
         self.encoder = KmerSequenceEncoder(kmer_length, site_count)
@@ -146,9 +163,6 @@ class SHMoofDataset(Dataset):
         ) = self.encode_pcps(dataframe)
         assert self.encoded_parents.shape[0] == self.branch_lengths.shape[0]
 
-    def __len__(self):
-        return len(self.encoded_parents)
-
     def __getitem__(self, idx):
         return (
             self.encoded_parents[idx],
@@ -158,9 +172,6 @@ class SHMoofDataset(Dataset):
             self.wt_base_modifier[idx],
             self.branch_lengths[idx],
         )
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(Size: {len(self)}) on {self.encoded_parents.device}"
 
     def to(self, device):
         self.encoded_parents = self.encoded_parents.to(device)
@@ -224,9 +235,6 @@ class SHMoofDataset(Dataset):
             }
         ).to_csv(out_csv_path, index=False)
 
-    def load_branch_lengths(self, in_csv_path):
-        self.branch_lengths = pd.read_csv(in_csv_path)["branch_length"].values
-
 
 class Crepe:
     """A lightweight wrapper around a model that can be used for prediction but not
@@ -243,6 +251,9 @@ class Crepe:
         self.model = model
         self.training_hyperparameters = training_hyperparameters
 
+    def __call__(self, sequences):
+        return self.model.evaluate_sequences(sequences, encoder=self.encoder)
+
     @property
     def device(self):
         return next(self.model.parameters()).device
@@ -251,27 +262,7 @@ class Crepe:
         self.model.to(device)
 
     def encode_sequences(self, sequences):
-        encoded_parents, wt_base_modifiers = zip(
-            *[self.encoder.encode_sequence(sequence) for sequence in sequences]
-        )
-        masks = [
-            nt_mask_tensor_of(sequence, self.encoder.site_count)
-            for sequence in sequences
-        ]
-        return (
-            torch.stack(encoded_parents),
-            torch.stack(masks),
-            torch.stack(wt_base_modifiers),
-        )
-
-    def __call__(self, sequences):
-        encoded_parents, masks, wt_base_modifiers = self.encode_sequences(sequences)
-        encoded_parents = encoded_parents.to(self.device)
-        masks = masks.to(self.device)
-        wt_base_modifiers = wt_base_modifiers.to(self.device)
-        with torch.no_grad():
-            outputs = self.model(encoded_parents, masks, wt_base_modifiers)
-            return tuple(t.detach().cpu() for t in outputs)
+        return encode_sequences(sequences, self.encoder)
 
     def save(self, prefix):
         torch.save(self.model.state_dict(), f"{prefix}.pth")
