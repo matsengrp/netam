@@ -143,7 +143,9 @@ class BranchLengthDataset(Dataset):
         )
 
     def load_branch_lengths(self, in_csv_path):
-        self.branch_lengths = pd.read_csv(in_csv_path)["branch_length"].values
+        self.branch_lengths = torch.Tensor(
+            pd.read_csv(in_csv_path)["branch_length"].values
+        )
 
     def __repr__(self):
         return f"{self.__class__.__name__}(Size: {len(self)}) on {self.branch_lengths.device}"
