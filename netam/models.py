@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import math
 import warnings
+from itertools import islice
 
 import pandas as pd
 
@@ -23,6 +24,15 @@ warnings.filterwarnings(
     "ignore", category=UserWarning, module="torch.nn.modules.transformer"
 )
 
+def batched(iterable, n):
+    "Batch data into lists of length n. The last batch may be shorter."
+    # batched('ABCDEFG', 3) --> ABC DEF G
+    it = iter(iterable)
+    while True:
+        batch = list(islice(it, n))
+        if not batch:
+            return
+        yield batch
 
 class ModelBase(nn.Module):
     def reinitialize_weights(self):
@@ -64,16 +74,20 @@ class ModelBase(nn.Module):
         for param in self.parameters():
             param.requires_grad = True
 
-    def evaluate_sequences(self, sequences, encoder=None):
+    def evaluate_sequences(self, sequences, encoder=None, batch_size=1000):
         if encoder is None:
             raise ValueError("An encoder must be provided.")
-        encoded_parents, masks, wt_base_modifiers = encode_sequences(sequences, encoder)
-        encoded_parents = encoded_parents.to(self.device)
-        masks = masks.to(self.device)
-        wt_base_modifiers = wt_base_modifiers.to(self.device)
-        with torch.no_grad():
-            outputs = self(encoded_parents, masks, wt_base_modifiers)
-            return tuple(t.detach().cpu() for t in outputs)
+        results = []
+        for batch in batched(sequences, batch_size):
+            encoded_parents, masks, wt_base_modifiers = encode_sequences(batch, encoder)
+            encoded_parents = encoded_parents.to(self.device)
+            masks = masks.to(self.device)
+            wt_base_modifiers = wt_base_modifiers.to(self.device)
+            with torch.no_grad():
+                outputs = self(encoded_parents, masks, wt_base_modifiers)
+                results.append(tuple(t.detach().cpu() for t in outputs))
+            del encoded_parents, masks, wt_base_modifiers, outputs
+        return tuple(torch.cat(tensors) for tensors in zip(*results))
 
 
 class KmerModel(ModelBase):
