@@ -385,6 +385,8 @@ def encode_sequences(sequences, encoder):
     )
 
 
+# from https://docs.python.org/3.11/library/itertools.html#itertools-recipes
+# avoiding walrus:
 def batched(iterable, n):
     "Batch data into lists of length n. The last batch may be shorter."
     it = iter(iterable)
