@@ -254,6 +254,11 @@ class Crepe:
         self.training_hyperparameters = training_hyperparameters
 
     def __call__(self, sequences):
+        """Evaluate the model on a list of sequences."""
+        if isinstance(sequences, str):
+            raise ValueError(
+                "Expected a list of sequences for call on crepe, but got a single string instead."
+            )
         return self.model.evaluate_sequences(sequences, encoder=self.encoder)
 
     @property
