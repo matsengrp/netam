@@ -3,6 +3,9 @@ import inspect
 import itertools
 import resource
 import subprocess
+from tqdm import tqdm
+from functools import wraps
+from itertools import islice
 
 import numpy as np
 import torch
@@ -380,3 +383,57 @@ def encode_sequences(sequences, encoder):
         torch.stack(masks),
         torch.stack(wt_base_modifiers),
     )
+
+
+def batched(iterable, n):
+    "Batch data into lists of length n. The last batch may be shorter."
+    # batched('ABCDEFG', 3) --> ABC DEF G
+    it = iter(iterable)
+    while True:
+        batch = list(islice(it, n))
+        if not batch:
+            return
+        yield batch
+
+
+def batch_method(default_batch_size=2048, progress_bar_name=None):
+    """Decorator to batch the input to a method.
+
+    Expects that all positional arguments are iterables of the same length,
+    and that outputs are tuples of tensors whose first dimension
+    corresponds to the first dimension of the input iterables.
+
+    If method returns just one item, it must not be a tuple.
+
+    Batching is done along the first dimension of all inputs.
+
+    Args:
+        default_batch_size: The default batch size. The decorated method can
+            also automatically accept a `default_batch_size` keyword argument.
+        progress_bar_name: The name of the progress bar. If None, no progress bar is shown.
+    """
+
+    def decorator(method):
+        @wraps(method)
+        def wrapper(self, *args, **kwargs):
+            if "batch_size" in kwargs:
+                batch_size = kwargs.pop("batch_size")
+            else:
+                batch_size = default_batch_size
+            results = []
+            if progress_bar_name is None:
+                progargs = {"disable": True}
+            else:
+                progargs = {"desc": progress_bar_name}
+            bar = tqdm(total=len(args[0]), delay=2.0, **progargs)
+            for batched_args in zip(*(batched(arg, batch_size) for arg in args)):
+                bar.update(len(batched_args[0]))
+                results.append(method(self, *batched_args, **kwargs))
+            if isinstance(results[0], tuple):
+                return tuple(torch.cat(tensors) for tensors in zip(*results))
+            else:
+                return torch.cat(results)
+
+        return wrapper
+
+    return decorator

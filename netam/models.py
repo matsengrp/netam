@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
 import math
 import warnings
-from itertools import islice
-from functools import wraps
 
 import pandas as pd
 
@@ -19,51 +17,12 @@ from netam.common import (
     generate_kmers,
     aa_mask_tensor_of,
     encode_sequences,
+    batch_method,
 )
 
 warnings.filterwarnings(
     "ignore", category=UserWarning, module="torch.nn.modules.transformer"
 )
-
-
-def batched(iterable, n):
-    "Batch data into lists of length n. The last batch may be shorter."
-    # batched('ABCDEFG', 3) --> ABC DEF G
-    it = iter(iterable)
-    while True:
-        batch = list(islice(it, n))
-        if not batch:
-            return
-        yield batch
-
-
-def batch_method(default_batch_size=2048):
-    """Decorator to batch the input to a method.
-
-    Expects that all positional arguments are iterables of the same length,
-    and that outputs are tuples of tensors whose first dimension
-    corresponds to the first dimension of the input iterables.
-
-    If method returns just one item, it must not be a tuple.
-
-    Batching is done along the first dimension of all inputs."""
-    def decorator(method):
-        @wraps(method)
-        def wrapper(self, *args, **kwargs):
-            if "batch_size" in kwargs:
-                batch_size = kwargs.pop("batch_size")
-            else:
-                batch_size = default_batch_size
-            print(f"running {method.__name__} with batch size: {batch_size}")
-            results = []
-            for batched_args in zip(*(batched(arg, batch_size) for arg in args)):
-                results.append(method(self, *batched_args, **kwargs))
-            if isinstance(results[0], tuple):
-                return tuple(torch.cat(tensors) for tensors in zip(*results))
-            else:
-                return torch.cat(results)
-        return wrapper
-    return decorator
 
 
 class ModelBase(nn.Module):
@@ -106,7 +65,7 @@ class ModelBase(nn.Module):
         for param in self.parameters():
             param.requires_grad = True
 
-    @batch_method()
+    @batch_method(progress_bar_name="Evaluating neutral model")
     def evaluate_sequences(self, sequences, encoder=None, batch_size=2048):
         if encoder is None:
             raise ValueError("An encoder must be provided.")
