@@ -65,7 +65,7 @@ class ModelBase(nn.Module):
         for param in self.parameters():
             param.requires_grad = True
 
-    @batch_method(progress_bar_name="Evaluating neutral model")
+    @batch_method(progress_bar_name="Evaluating model")
     def evaluate_sequences(self, sequences, encoder=None, batch_size=2048):
         if encoder is None:
             raise ValueError("An encoder must be provided.")
