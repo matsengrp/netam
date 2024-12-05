@@ -240,21 +240,23 @@ class DXSMBurrito(framework.Burrito, ABC):
         multihit_model,
         **optimization_kwargs,
     ):
-        sel_matrix = self.build_selection_matrix_from_parent(parent)
-        trimmed_aa_mask = aa_mask[: len(sel_matrix)]
-        log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
-            sel_matrix[trimmed_aa_mask],
-            apply_aa_mask_to_nt_sequence(parent, trimmed_aa_mask),
-            apply_aa_mask_to_nt_sequence(child, trimmed_aa_mask),
-            nt_rates[trimmed_aa_mask.repeat_interleave(3)],
-            nt_csps[trimmed_aa_mask.repeat_interleave(3)],
-            multihit_model,
-        )
-        if isinstance(starting_branch_length, torch.Tensor):
-            starting_branch_length = starting_branch_length.detach().item()
-        return molevol.optimize_branch_length(
-            log_pcp_probability, starting_branch_length, **optimization_kwargs
-        )
+        # sel_matrix = self.build_selection_matrix_from_parent(parent)
+        # trimmed_aa_mask = aa_mask[: len(sel_matrix)]
+        # log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
+        #     sel_matrix[trimmed_aa_mask],
+        #     apply_aa_mask_to_nt_sequence(parent, trimmed_aa_mask),
+        #     apply_aa_mask_to_nt_sequence(child, trimmed_aa_mask),
+        #     nt_rates[trimmed_aa_mask.repeat_interleave(3)],
+        #     nt_csps[trimmed_aa_mask.repeat_interleave(3)],
+        #     multihit_model,
+        # )
+        # if isinstance(starting_branch_length, torch.Tensor):
+        #     starting_branch_length = starting_branch_length.detach().item()
+        # return molevol.optimize_branch_length(
+        #     log_pcp_probability, starting_branch_length, **optimization_kwargs
+        # )
+        # TODO for debugging
+        return 0.026, False
 
     def serial_find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         optimal_lengths = []
@@ -295,9 +297,10 @@ class DXSMBurrito(framework.Burrito, ABC):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         worker_count = min(mp.cpu_count() // 2, 10)
-        # # The following can be used when one wants a better traceback.
-        # burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
-        # return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
+        # The following can be used when one wants a better traceback.
+        burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
+        return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
+        # TODO comment that^
         our_optimize_branch_length = partial(
             worker_optimize_branch_length,
             self.__class__,
