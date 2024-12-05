@@ -5,7 +5,7 @@ import resource
 import subprocess
 from tqdm import tqdm
 from functools import wraps
-from itertools import islice
+from itertools import islice, repeat
 
 import numpy as np
 import torch
@@ -430,6 +430,56 @@ def chunk_method(default_chunk_size=2048, progress_bar_name=None):
             for chunked_args in zip(*(chunked(arg, chunk_size) for arg in args)):
                 bar.update(len(chunked_args[0]))
                 results.append(method(self, *chunked_args, **kwargs))
+            if isinstance(results[0], tuple):
+                return tuple(torch.cat(tensors) for tensors in zip(*results))
+            else:
+                return torch.cat(results)
+
+        return wrapper
+
+    return decorator
+
+
+def apply_args_and_kwargs(func, args, kwargs):
+    return func(*args, **kwargs)
+
+def parallelize_function(max_workers=10, min_chunk_size=50):
+    """Decorator to parallelize function application with multiprocessing.
+
+    Expects that all positional arguments are iterables of the same length,
+    and that outputs are tuples of tensors whose first dimension
+    corresponds to the first dimension of the input iterables.
+
+    If function returns just one item, it must not be a tuple.
+
+    Division between processes is done along the first dimension of all inputs.
+
+    Args:
+        max_workers: The maximum number of processes to use.
+        min_chunk_size: The minimum chunk size for input data. The number of
+            workers is adjusted to ensure that the chunk size is at least this.
+    """
+
+    def decorator(function):
+        max_worker_count = min(mp.cpu_count() // 2, max_workers)
+        if max_worker_count <= 1:
+            return function
+
+        @wraps(function)
+        def wrapper(*args, **kwargs):
+            min_worker_count = (len(args[0]) // min_chunk_size)
+
+            worker_count = min(min_worker_count, max_worker_count)
+            if worker_count <= 1:
+                return function(*args, **kwargs)
+
+            def worker_func(*chunked_args):
+                return function(*chunked_args, **kwargs)
+
+            chunk_size = (len(args[0]) // worker_count) + 1
+            chunked_args = list(zip(*(chunked(arg, chunk_size) for arg in args)))
+            with mp.Pool(worker_count) as pool:
+                results = pool.starmap(apply_args_and_kwargs, list(zip(repeat(function), chunked_args, repeat(kwargs))))
             if isinstance(results[0], tuple):
                 return tuple(torch.cat(tensors) for tensors in zip(*results))
             else:
