@@ -17,7 +17,7 @@ from netam.common import (
     generate_kmers,
     aa_mask_tensor_of,
     encode_sequences,
-    chunk_method,
+    chunk_function,
 )
 
 warnings.filterwarnings(
@@ -65,7 +65,7 @@ class ModelBase(nn.Module):
         for param in self.parameters():
             param.requires_grad = True
 
-    @chunk_method(progress_bar_name="Evaluating model")
+    @chunk_function(first_chunkable_idx=1, progress_bar_name="Evaluating model")
     def evaluate_sequences(self, sequences, encoder=None, chunk_size=2048):
         if encoder is None:
             raise ValueError("An encoder must be provided.")

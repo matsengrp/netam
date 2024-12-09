@@ -397,39 +397,47 @@ def chunked(iterable, n):
         yield chunk
 
 
-def chunk_method(default_chunk_size=2048, progress_bar_name=None):
-    """Decorator to chunk the input to a method.
+def chunk_function(
+        first_chunkable_idx=0,
+        default_chunk_size=2048,
+        progress_bar_name=None
+):
+    """Decorator to chunk the input to a function.
 
     Expects that all positional arguments are iterables of the same length,
     and that outputs are tuples of tensors whose first dimension
     corresponds to the first dimension of the input iterables.
 
-    If method returns just one item, it must not be a tuple.
+    If function returns just one item, it must not be a tuple.
 
     Chunking is done along the first dimension of all inputs.
 
     Args:
-        default_chunk_size: The default chunk size. The decorated method can
+        default_chunk_size: The default chunk size. The decorated function can
             also automatically accept a `default_chunk_size` keyword argument.
         progress_bar_name: The name of the progress bar. If None, no progress bar is shown.
     """
 
-    def decorator(method):
-        @wraps(method)
-        def wrapper(self, *args, **kwargs):
+    def decorator(function):
+        @wraps(function)
+        def wrapper(*args, **kwargs):
             if "chunk_size" in kwargs:
                 chunk_size = kwargs.pop("chunk_size")
             else:
                 chunk_size = default_chunk_size
+            pre_chunk_args = args[:first_chunkable_idx]
+            chunkable_args = args[first_chunkable_idx:]
+            print("chunk got args len ", len(chunkable_args[0]))
+
             results = []
             if progress_bar_name is None:
                 progargs = {"disable": True}
             else:
                 progargs = {"desc": progress_bar_name}
-            bar = tqdm(total=len(args[0]), delay=2.0, **progargs)
-            for chunked_args in zip(*(chunked(arg, chunk_size) for arg in args)):
+            bar = tqdm(total=len(chunkable_args[0]), delay=2.0, **progargs)
+            for chunked_args in zip(*(chunked(arg, chunk_size) for arg in chunkable_args)):
                 bar.update(len(chunked_args[0]))
-                results.append(method(self, *chunked_args, **kwargs))
+                results.append(function(*pre_chunk_args, *chunked_args, **kwargs))
             if isinstance(results[0], tuple):
                 return tuple(torch.cat(tensors) for tensors in zip(*results))
             else:
@@ -440,10 +448,17 @@ def chunk_method(default_chunk_size=2048, progress_bar_name=None):
     return decorator
 
 
-def apply_args_and_kwargs(func, args, kwargs):
-    return func(*args, **kwargs)
+def _apply_args_and_kwargs(func, pre_chunk_args, chunked_args, kwargs):
+    return func(*pre_chunk_args, *chunked_args, **kwargs)
 
-def parallelize_function(max_workers=10, min_chunk_size=50):
+
+def parallelize_function(
+    function,
+    first_chunkable_idx=0,
+    default_parallelize=True,
+    max_workers=10,
+    min_chunk_size=1000,
+):
     """Decorator to parallelize function application with multiprocessing.
 
     Expects that all positional arguments are iterables of the same length,
@@ -453,38 +468,50 @@ def parallelize_function(max_workers=10, min_chunk_size=50):
     If function returns just one item, it must not be a tuple.
 
     Division between processes is done along the first dimension of all inputs.
+    The wrapped function will be endowed with the parallelize keyword
+    argument, so that parallelization can be turned on or off at each invocation.
 
     Args:
+        first_chunkable_idx: The index of the first argument to be chunked. All positional arguments after this index will be chunked.
+        default_parallelize: Whether to parallelize function calls by default, or require passing `parallelize=True` in invocation to parallelize.
         max_workers: The maximum number of processes to use.
         min_chunk_size: The minimum chunk size for input data. The number of
             workers is adjusted to ensure that the chunk size is at least this.
     """
 
-    def decorator(function):
-        max_worker_count = min(mp.cpu_count() // 2, max_workers)
-        if max_worker_count <= 1:
-            return function
+    max_worker_count = min(mp.cpu_count() // 2, max_workers)
+    if max_worker_count <= 1:
+        return function
 
-        @wraps(function)
-        def wrapper(*args, **kwargs):
-            min_worker_count = (len(args[0]) // min_chunk_size)
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        if "parallelize" in kwargs:
+            parallelize = kwargs.pop("parallelize")
+        else:
+            parallelize = default_parallelize
+        if parallelize:
+            if len(args) <= first_chunkable_idx:
+                raise ValueError(
+                    f"Function {function.__name__} cannot be parallelized without chunkable arguments"
+                )
+            pre_chunk_args = args[:first_chunkable_idx]
+            chunkable_args = args[first_chunkable_idx:]
+            print("parallelize got args len ", len(chunkable_args[0]))
+            min_worker_count = (len(chunkable_args[0]) // min_chunk_size)
 
             worker_count = min(min_worker_count, max_worker_count)
             if worker_count <= 1:
                 return function(*args, **kwargs)
 
-            def worker_func(*chunked_args):
-                return function(*chunked_args, **kwargs)
-
-            chunk_size = (len(args[0]) // worker_count) + 1
-            chunked_args = list(zip(*(chunked(arg, chunk_size) for arg in args)))
+            chunk_size = (len(chunkable_args[0]) // worker_count) + 1
+            chunked_args = list(zip(*(chunked(arg, chunk_size) for arg in chunkable_args)))
             with mp.Pool(worker_count) as pool:
-                results = pool.starmap(apply_args_and_kwargs, list(zip(repeat(function), chunked_args, repeat(kwargs))))
+                results = pool.starmap(_apply_args_and_kwargs, list(zip(repeat(function), repeat(pre_chunk_args), chunked_args, repeat(kwargs))))
             if isinstance(results[0], tuple):
                 return tuple(torch.cat(tensors) for tensors in zip(*results))
             else:
                 return torch.cat(results)
+        else:
+            return function(*args, **kwargs)
 
-        return wrapper
-
-    return decorator
+    return wrapper
