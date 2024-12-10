@@ -346,7 +346,26 @@ def trimmed_shm_model_outputs_of_crepe(crepe, parents):
     return trimmed_rates, trimmed_csps
 
 
-def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
+def join_chains(pcp_df):
+    """Join the parent and child chains in the pcp_df.
+    
+    Make a parent column that is the parent_h + "^^^" + parent_l, and same for child.
+
+    TODO update for case of just parent and child
+    """
+    if "parent_h" in pcp_df.columns and "parent_l" in pcp_df.columns and "child_h" in pcp_df.columns and "child_l" in pcp_df.columns:
+        pcp_df["parent"] = pcp_df["parent_h"] + "^^^" + pcp_df["parent_l"]
+        pcp_df["child"] = pcp_df["child_h"] + "^^^" + pcp_df["child_l"]
+        pcp_df.drop(columns=["parent_h", "parent_l", "child_h", "child_l"], inplace=True)
+    else:
+        # TODO but there is a chance we'll have some data sets that are just light chain, in which case we'll want to pad on the left. 
+        # I suggest in that case that we just ask for the light chain column to be named parent_l and child_l, and that you can ask for that column name here.
+        # Let's allow that for the parent_h case too, just in case.
+        pcp_df["parent"] += "^^^"
+        pcp_df["child"] += "^^^"
+    return pcp_df
+
+def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None, joined_mode=False):
     """Load a PCP dataframe from a gzipped CSV file.
 
     `orig_pcp_idx` is the index column from the original file, even if we subset by
@@ -357,6 +376,9 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
         .reset_index()
         .rename(columns={"index": "orig_pcp_idx"})
     )
+    if joined_mode:
+        pcp_df = join_chains(pcp_df)
+    # TODO assert that we have parent and child columns
     pcp_df["v_family"] = pcp_df["v_gene"].str.split("-").str[0]
     if chosen_v_families is not None:
         chosen_v_families = set(chosen_v_families)
