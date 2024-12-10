@@ -5,6 +5,7 @@ from Bio.Seq import Seq
 from Bio.Data import CodonTable
 from netam.sequences import (
     AA_STR_SORTED,
+    TOKEN_STR_SORTED,
     CODONS,
     CODON_AA_INDICATOR_MATRIX,
     aa_onehot_tensor_of_str,
@@ -12,6 +13,21 @@ from netam.sequences import (
     nt_subs_indicator_tensor_of,
     translate_sequences,
 )
+
+
+def test_token_order():
+    # If we always add additional tokens to the end, then converting to indices
+    # will not be affected when we have a proper aa string.
+    assert TOKEN_STR_SORTED[:len(AA_STR_SORTED)] == AA_STR_SORTED
+
+
+# TODO implement these tests
+def test_token_replace():
+    assert False
+
+
+def test_token_mask():
+    assert False
 
 
 def test_nucleotide_indices_of_codon():
