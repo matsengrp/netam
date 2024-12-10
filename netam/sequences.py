@@ -9,6 +9,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 
 AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
+TOKEN_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY^"
 NT_STR_SORTED = "ACGT"
 CODONS = [
     "".join(codon_list)
