@@ -398,9 +398,7 @@ def chunked(iterable, n):
 
 
 def chunk_function(
-        first_chunkable_idx=0,
-        default_chunk_size=2048,
-        progress_bar_name=None
+    first_chunkable_idx=0, default_chunk_size=2048, progress_bar_name=None
 ):
     """Decorator to chunk the input to a function.
 
@@ -434,7 +432,9 @@ def chunk_function(
             else:
                 progargs = {"desc": progress_bar_name}
             bar = tqdm(total=len(chunkable_args[0]), delay=2.0, **progargs)
-            for chunked_args in zip(*(chunked(arg, chunk_size) for arg in chunkable_args)):
+            for chunked_args in zip(
+                *(chunked(arg, chunk_size) for arg in chunkable_args)
+            ):
                 bar.update(len(chunked_args[0]))
                 results.append(function(*pre_chunk_args, *chunked_args, **kwargs))
             if isinstance(results[0], tuple):
@@ -493,7 +493,7 @@ def parallelize_function(
             )
         pre_chunk_args = args[:first_chunkable_idx]
         chunkable_args = args[first_chunkable_idx:]
-        min_worker_count = (len(chunkable_args[0]) // min_chunk_size)
+        min_worker_count = len(chunkable_args[0]) // min_chunk_size
 
         worker_count = min(min_worker_count, max_worker_count)
         if worker_count <= 1:
@@ -502,7 +502,17 @@ def parallelize_function(
         chunk_size = (len(chunkable_args[0]) // worker_count) + 1
         chunked_args = list(zip(*(chunked(arg, chunk_size) for arg in chunkable_args)))
         with mp.Pool(worker_count) as pool:
-            results = pool.starmap(_apply_args_and_kwargs, list(zip(repeat(function), repeat(pre_chunk_args), chunked_args, repeat(kwargs))))
+            results = pool.starmap(
+                _apply_args_and_kwargs,
+                list(
+                    zip(
+                        repeat(function),
+                        repeat(pre_chunk_args),
+                        chunked_args,
+                        repeat(kwargs),
+                    )
+                ),
+            )
         if isinstance(results[0], tuple):
             return tuple(torch.cat(tensors) for tensors in zip(*results))
         else:
