@@ -26,6 +26,7 @@ from netam.common import (
     BIG,
     VRC01_NT_SEQ,
     encode_sequences,
+    parallelize_function,
 )
 from netam import models
 import netam.molevol as molevol

@@ -427,7 +427,6 @@ def chunk_function(
                 chunk_size = default_chunk_size
             pre_chunk_args = args[:first_chunkable_idx]
             chunkable_args = args[first_chunkable_idx:]
-            print("chunk got args len ", len(chunkable_args[0]))
 
             results = []
             if progress_bar_name is None:
@@ -496,7 +495,6 @@ def parallelize_function(
                 )
             pre_chunk_args = args[:first_chunkable_idx]
             chunkable_args = args[first_chunkable_idx:]
-            print("parallelize got args len ", len(chunkable_args[0]))
             min_worker_count = (len(chunkable_args[0]) // min_chunk_size)
 
             worker_count = min(min_worker_count, max_worker_count)
