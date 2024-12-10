@@ -454,11 +454,13 @@ def _apply_args_and_kwargs(func, pre_chunk_args, chunked_args, kwargs):
 def parallelize_function(
     function,
     first_chunkable_idx=0,
-    default_parallelize=True,
     max_workers=10,
     min_chunk_size=1000,
 ):
-    """Decorator to parallelize function application with multiprocessing.
+    """Function to parallelize another function's application with multiprocessing.
+
+    This is intentionally not designed to be used with decorator syntax because it should only
+    be used when the function it is applied to will be run on the CPU.
 
     Expects that all positional arguments are iterables of the same length,
     and that outputs are tuples of tensors whose first dimension
@@ -471,8 +473,9 @@ def parallelize_function(
     argument, so that parallelization can be turned on or off at each invocation.
 
     Args:
-        first_chunkable_idx: The index of the first argument to be chunked. All positional arguments after this index will be chunked.
-        default_parallelize: Whether to parallelize function calls by default, or require passing `parallelize=True` in invocation to parallelize.
+        function: The function to be parallelized.
+        first_chunkable_idx: The index of the first argument to be chunked.
+            All positional arguments after this index will be chunked.
         max_workers: The maximum number of processes to use.
         min_chunk_size: The minimum chunk size for input data. The number of
             workers is adjusted to ensure that the chunk size is at least this.
@@ -484,32 +487,25 @@ def parallelize_function(
 
     @wraps(function)
     def wrapper(*args, **kwargs):
-        if "parallelize" in kwargs:
-            parallelize = kwargs.pop("parallelize")
-        else:
-            parallelize = default_parallelize
-        if parallelize:
-            if len(args) <= first_chunkable_idx:
-                raise ValueError(
-                    f"Function {function.__name__} cannot be parallelized without chunkable arguments"
-                )
-            pre_chunk_args = args[:first_chunkable_idx]
-            chunkable_args = args[first_chunkable_idx:]
-            min_worker_count = (len(chunkable_args[0]) // min_chunk_size)
+        if len(args) <= first_chunkable_idx:
+            raise ValueError(
+                f"Function {function.__name__} cannot be parallelized without chunkable arguments"
+            )
+        pre_chunk_args = args[:first_chunkable_idx]
+        chunkable_args = args[first_chunkable_idx:]
+        min_worker_count = (len(chunkable_args[0]) // min_chunk_size)
 
-            worker_count = min(min_worker_count, max_worker_count)
-            if worker_count <= 1:
-                return function(*args, **kwargs)
-
-            chunk_size = (len(chunkable_args[0]) // worker_count) + 1
-            chunked_args = list(zip(*(chunked(arg, chunk_size) for arg in chunkable_args)))
-            with mp.Pool(worker_count) as pool:
-                results = pool.starmap(_apply_args_and_kwargs, list(zip(repeat(function), repeat(pre_chunk_args), chunked_args, repeat(kwargs))))
-            if isinstance(results[0], tuple):
-                return tuple(torch.cat(tensors) for tensors in zip(*results))
-            else:
-                return torch.cat(results)
-        else:
+        worker_count = min(min_worker_count, max_worker_count)
+        if worker_count <= 1:
             return function(*args, **kwargs)
+
+        chunk_size = (len(chunkable_args[0]) // worker_count) + 1
+        chunked_args = list(zip(*(chunked(arg, chunk_size) for arg in chunkable_args)))
+        with mp.Pool(worker_count) as pool:
+            results = pool.starmap(_apply_args_and_kwargs, list(zip(repeat(function), repeat(pre_chunk_args), chunked_args, repeat(kwargs))))
+        if isinstance(results[0], tuple):
+            return tuple(torch.cat(tensors) for tensors in zip(*results))
+        else:
+            return torch.cat(results)
 
     return wrapper
