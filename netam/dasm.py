@@ -180,6 +180,7 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
         # mut_pos_loss, and we mask out sites with no substitution for the CSP
         # loss. The latter class of sites also eliminates sites that have Xs in
         # the parent or child (see sequences.aa_subs_indicator_tensor_of).
+
         predictions = zap_predictions_along_diagonal(predictions, aa_parents_idxs)
 
         # After zapping out the diagonal, we can effectively sum over the
@@ -195,11 +196,10 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
         # logit space, so we are set up for using the cross entropy loss.
         # However we have to mask out the sites that are not substituted, i.e.
         # the sites for which aa_subs_indicator is 0.
-        subs_mask = aa_subs_indicator == 1
+        subs_mask = (aa_subs_indicator == 1) & mask
         csp_pred = predictions[subs_mask]
         csp_targets = aa_children_idxs[subs_mask]
         csp_loss = self.xent_loss(csp_pred, csp_targets)
-
         return torch.stack([subs_pos_loss, csp_loss])
 
     def build_selection_matrix_from_parent(self, parent: str):
