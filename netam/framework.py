@@ -26,6 +26,7 @@ from netam.common import (
     BIG,
     VRC01_NT_SEQ,
     encode_sequences,
+    parallelize_function,
 )
 from netam import models
 import netam.molevol as molevol
@@ -253,13 +254,13 @@ class Crepe:
         self.model = model
         self.training_hyperparameters = training_hyperparameters
 
-    def __call__(self, sequences):
+    def __call__(self, sequences, **kwargs):
         """Evaluate the model on a list of sequences."""
         if isinstance(sequences, str):
             raise ValueError(
                 "Expected a list of sequences for call on crepe, but got a single string instead."
             )
-        return self.model.evaluate_sequences(sequences, encoder=self.encoder)
+        return self.model.evaluate_sequences(sequences, encoder=self.encoder, **kwargs)
 
     @property
     def device(self):
@@ -338,7 +339,7 @@ def crepe_exists(prefix):
 
 def trimmed_shm_model_outputs_of_crepe(crepe, parents):
     """Model outputs trimmed to the length of the parent sequences."""
-    rates, csp_logits = crepe(parents)
+    rates, csp_logits = parallelize_function(crepe)(parents)
     rates = rates.cpu().detach()
     csps = torch.softmax(csp_logits, dim=-1).cpu().detach()
     trimmed_rates = [rates[i, : len(parent)] for i, parent in enumerate(parents)]
