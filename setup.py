@@ -14,6 +14,7 @@ setup(
     python_requires=">=3.9,<3.12",
     install_requires=[
         "biopython",
+        "fair-esm",
         "natsort",
         "optuna",
         "pandas",
