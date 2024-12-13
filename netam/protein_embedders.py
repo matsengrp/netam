@@ -34,17 +34,19 @@ def pad_embeddings(embeddings, desired_length):
 
 
 class ESMEmbedder:
-    def __init__(self, model_name: str, device: str = "cpu"):
+    def __init__(self, model_name: str):
         """Initializes the ESMEmbedder object.
 
         Args:
             model_name (str): Name of the pretrained ESM model (e.g., "esm2_t6_8M_UR50D").
             device (str): Device to run the model on.
         """
-        self.device = device
         self.model, self.alphabet = pretrained.load_model_and_alphabet(model_name)
-        self.model = self.model.to(device)
         self.batch_converter = self.alphabet.get_batch_converter()
+
+    @property
+    def device(self):
+        return next(self.model.parameters()).device
 
     @property
     def num_heads(self):
