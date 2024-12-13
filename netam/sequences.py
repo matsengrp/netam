@@ -8,9 +8,12 @@ import numpy as np
 from Bio import SeqIO
 from Bio.Seq import Seq
 
+BASES = ["A", "C", "G", "T"]
+BASES_AND_N_TO_INDEX = {"A": 0, "C": 1, "G": 2, "T": 3, "N": 4}
 AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
-TOKEN_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY^"
+TOKEN_STR_SORTED = AA_STR_SORTED + "X^"
 NT_STR_SORTED = "ACGT"
+MAX_AA_TOKEN_IDX = len(TOKEN_STR_SORTED) - 1
 CODONS = [
     "".join(codon_list)
     for codon_list in itertools.product(["A", "C", "G", "T"], repeat=3)

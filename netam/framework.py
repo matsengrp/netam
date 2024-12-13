@@ -394,6 +394,7 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None, joine
     sequence starting with the heavy chain, using a `^^^` separator. If only heavy or light chain
     sequence is present, this separator will be added to the appropriate side of the available sequence.
     """
+    assert joined_mode
     pcp_df = (
         pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0)
         .reset_index()
@@ -412,10 +413,11 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None, joine
                 "Perhaps you want to use joined_mode=True?"
             )
 
-    if chosen_v_families is not None:
+    if not joined_mode:
         pcp_df["v_family"] = pcp_df["v_gene"].str.split("-").str[0]
-        chosen_v_families = set(chosen_v_families)
-        pcp_df = pcp_df[pcp_df["v_family"].isin(chosen_v_families)]
+        if chosen_v_families is not None:
+            chosen_v_families = set(chosen_v_families)
+            pcp_df = pcp_df[pcp_df["v_family"].isin(chosen_v_families)]
     if sample_count is not None:
         pcp_df = pcp_df.sample(sample_count)
     pcp_df.reset_index(drop=True, inplace=True)
