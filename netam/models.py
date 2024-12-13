@@ -737,6 +737,7 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
         dropout_prob: float = 0.5,
         output_dim: int = 1,
     ):
+        self.esm_model_name = esm_model_name
         self.pie = ESMEmbedder(model_name=esm_model_name)
         super().__init__(
             nhead=self.pie.num_heads,
@@ -747,6 +748,15 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
             dropout_prob=dropout_prob,
             output_dim=output_dim,
         )
+
+    @property
+    def hyperparameters(self):
+        return {
+            "esm_model_name": self.esm_model_name,
+            "layer_count": self.encoder.num_layers,
+            "dropout_prob": self.pos_encoder.dropout.p,
+            "output_dim": self.linear.out_features,
+        }
 
     def to(self, device):
         super().to(device)
