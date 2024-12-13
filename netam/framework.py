@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import copy
 import os
 from time import time
+from warnings import warn
 
 import pandas as pd
 import numpy as np
@@ -349,28 +350,49 @@ def trimmed_shm_model_outputs_of_crepe(crepe, parents):
 
 def join_chains(pcp_df):
     """Join the parent and child chains in the pcp_df.
-    
+
     Make a parent column that is the parent_h + "^^^" + parent_l, and same for child.
 
-    TODO update for case of just parent and child
+    If parent_h and parent_l are not present, then we assume that the parent is the heavy chain.
+    If only one of parent_h or parent_l is present, then we place the ^^^ padding to the right of
+    heavy, or to the left of light.
     """
-    if "parent_h" in pcp_df.columns and "parent_l" in pcp_df.columns and "child_h" in pcp_df.columns and "child_l" in pcp_df.columns:
+    cols = pcp_df.columns
+    if "parent_h" in cols and "parent_l" in cols:
+        assert "child_h" in cols and "child_l" in cols, "child_h or child_l columns missing!"
         pcp_df["parent"] = pcp_df["parent_h"] + "^^^" + pcp_df["parent_l"]
         pcp_df["child"] = pcp_df["child_h"] + "^^^" + pcp_df["child_l"]
-        pcp_df.drop(columns=["parent_h", "parent_l", "child_h", "child_l"], inplace=True)
-    else:
-        # TODO but there is a chance we'll have some data sets that are just light chain, in which case we'll want to pad on the left. 
-        # I suggest in that case that we just ask for the light chain column to be named parent_l and child_l, and that you can ask for that column name here.
-        # Let's allow that for the parent_h case too, just in case.
+    elif "parent_h" in cols and "parent_l" not in cols:
+        assert "child_h" in cols, "child_h column missing!"
+        pcp_df["parent"] = pcp_df["parent_h"] + "^^^"
+        pcp_df["child"] = pcp_df["child_h"] + "^^^"
+    elif "parent_h" not in cols and "parent_l" in cols:
+        if "parent" in cols:
+            warn("Both parent and parent_l columns found. Using only parent_l. "
+                 "To use parent as heavy chain, rename to parent_h.")
+        assert "child_l" in cols, "child_l column missing!"
+        pcp_df["parent"] = "^^^" + pcp_df["parent_l"]
+        pcp_df["child"] = "^^^" + pcp_df["child_l"]
+    elif "parent" in cols:
+        assert "child" in cols, "child column missing!"
+        # We assume that this is the heavy chain.
         pcp_df["parent"] += "^^^"
         pcp_df["child"] += "^^^"
+    else:
+        raise ValueError("Could not find parent and child columns.")
+    pcp_df.drop(columns=["parent_h", "parent_l", "child_h", "child_l"], inplace=True, errors="ignore")
     return pcp_df
+
 
 def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None, joined_mode=False):
     """Load a PCP dataframe from a gzipped CSV file.
 
     `orig_pcp_idx` is the index column from the original file, even if we subset by
     sampling or by choosing V families.
+
+    If `joined_mode` is True, then we will join the heavy and light chain sequences into a single
+    sequence starting with the heavy chain, using a `^^^` separator. If only heavy or light chain
+    sequence is present, this separator will be added to the appropriate side of the available sequence.
     """
     pcp_df = (
         pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0)
@@ -379,9 +401,19 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None, joine
     )
     if joined_mode:
         pcp_df = join_chains(pcp_df)
-    # TODO assert that we have parent and child columns
-    pcp_df["v_family"] = pcp_df["v_gene"].str.split("-").str[0]
+    if not ("parent" in pcp_df.columns and "child" in pcp_df.columns):
+        if "parent_h" in pcp_df.columns and "parent_l" in pcp_df.columns:
+            pcp_df["parent"] = pcp_df["parent_h"]
+            pcp_df["child"] = pcp_df["child_h"]
+            pcp_df.drop(columns=["parent_h", "parent_l", "child_h", "child_l"], inplace=True, errors="ignore")
+        else:
+            raise ValueError(
+                "Could not find parent and child columns. "
+                "Perhaps you want to use joined_mode=True?"
+            )
+
     if chosen_v_families is not None:
+        pcp_df["v_family"] = pcp_df["v_gene"].str.split("-").str[0]
         chosen_v_families = set(chosen_v_families)
         pcp_df = pcp_df[pcp_df["v_family"].isin(chosen_v_families)]
     if sample_count is not None:
@@ -391,9 +423,23 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None, joine
 
 
 def add_shm_model_outputs_to_pcp_df(pcp_df, crepe):
-    rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent"])
+    rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent"].str.replace("^", "N"))
     pcp_df["nt_rates"] = rates
     pcp_df["nt_csps"] = csps
+    return pcp_df
+
+# TODO we'll need to do something like this:
+def _add_shm_model_outputs_to_pcp_df(pcp_df, crepe):
+    # TODO I can't think of a better generic way to do this..
+    split_parents = pcp_df["parent"].str.split("^^^", expand=True)
+    h_parents = split_parents[0]
+    l_parents = split_parents[1]
+
+    h_rates, h_csps = trimmed_shm_model_outputs_of_crepe(crepe, h_parents)
+    l_rates, l_csps = trimmed_shm_model_outputs_of_crepe(crepe, l_parents)
+    # TODO this is bogus
+    pcp_df["nt_rates"] = h_rates + [0.0, 0.0, 0.0] + l_rates
+    pcp_df["nt_csps"] = h_csps + [0.0, 0.0, 0.0] + l_csps
     return pcp_df
 
 

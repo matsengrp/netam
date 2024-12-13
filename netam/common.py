@@ -13,7 +13,7 @@ import torch.optim as optim
 from torch import nn, Tensor
 import multiprocessing as mp
 
-from netam.sequences import iter_codons, apply_aa_mask_to_nt_sequence
+from netam.sequences import iter_codons, apply_aa_mask_to_nt_sequence, TOKEN_TRANSLATIONS
 
 BIG = 1e9
 SMALL_PROB = 1e-6
@@ -88,17 +88,28 @@ def generic_mask_tensor_of(ambig_symb, seq_str, length=None):
     return mask
 
 
+def _consider_codon(codon):
+    """Return False if codon should be masked, True otherwise."""
+    if "N" in codon:
+        return False
+    elif codon in TOKEN_TRANSLATIONS:
+        return False
+    else:
+        return True
+
+
 def codon_mask_tensor_of(nt_parent, *other_nt_seqs, aa_length=None):
     """Return a mask tensor indicating codons which contain at least one N.
 
     Codons beyond the length of the sequence are masked. If other_nt_seqs are provided,
-    the "and" mask will be computed for all sequences
+    the "and" mask will be computed for all sequences.
+    Codons containing marker tokens are also masked.
     """
     if aa_length is None:
         aa_length = len(nt_parent) // 3
     sequences = (nt_parent,) + other_nt_seqs
     mask = [
-        all("N" not in codon for codon in codons)
+        all(_consider_codon(codon) for codon in codons)
         for codons in zip(*(iter_codons(sequence) for sequence in sequences))
     ]
     if len(mask) < aa_length:
