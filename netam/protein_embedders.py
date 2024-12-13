@@ -6,8 +6,7 @@ from netam.common import aa_strs_from_idx_tensor
 
 
 def pad_embeddings(embeddings, desired_length):
-    """
-    Pads a batch of embeddings to a specified sequence length with zeros.
+    """Pads a batch of embeddings to a specified sequence length with zeros.
 
     Args:
         embeddings (torch.Tensor): Input tensor of shape (batch_size, seq_len, embedding_dim).
@@ -36,8 +35,7 @@ def pad_embeddings(embeddings, desired_length):
 
 class ESMEmbedder:
     def __init__(self, model_name: str, device: str = "cpu"):
-        """
-        Initializes the ESMEmbedder object.
+        """Initializes the ESMEmbedder object.
 
         Args:
             model_name (str): Name of the pretrained ESM model (e.g., "esm2_t6_8M_UR50D").
@@ -65,8 +63,7 @@ class ESMEmbedder:
         return self.model.num_layers
 
     def embed_sequence_list(self, sequences: list[str]) -> torch.Tensor:
-        """
-        Embeds a batch of sequences.
+        """Embeds a batch of sequences.
 
         Args:
             sequences (list[str]): List of amino acid sequences.
@@ -84,8 +81,7 @@ class ESMEmbedder:
         return embeddings
 
     def embed_batch(self, amino_acid_indices: torch.Tensor) -> torch.Tensor:
-        """
-        Embeds a batch of netam amino acid indices.
+        """Embeds a batch of netam amino acid indices.
 
         For now, we detokenize the amino acid indices and then use embed_sequence_list.
 

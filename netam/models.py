@@ -730,23 +730,23 @@ class TransformerBinarySelectionModelTrainableWiggleAct(
 class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAct):
     """Here the beta parameter is fixed at 0.3."""
 
-    def __init__(self, 
-                 esm_model_name: str, 
-                 layer_count: int,
-                 dropout_prob: float = 0.5,
-                 output_dim: int = 1,
-                 ):
+    def __init__(
+        self,
+        esm_model_name: str,
+        layer_count: int,
+        dropout_prob: float = 0.5,
+        output_dim: int = 1,
+    ):
         self.pie = ESMEmbedder(model_name=esm_model_name)
         super().__init__(
             nhead=self.pie.num_heads,
             d_model_per_head=self.pie.d_model_per_head,
             # TODO this is hard coded as per Antoine.
-            dim_feedforward=self.pie.d_model*4,
+            dim_feedforward=self.pie.d_model * 4,
             layer_count=layer_count,
             dropout_prob=dropout_prob,
             output_dim=output_dim,
         )
-            
 
     def to(self, device):
         super().to(device)
@@ -767,9 +767,9 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
             where E is the dimensionality of the embedding space.
         """
         # Multiply by sqrt(d_model) to match the transformer paper.
-        embedded_amino_acids = self.pie.embed_batch(
-            amino_acid_indices
-        ) * math.sqrt(self.d_model)
+        embedded_amino_acids = self.pie.embed_batch(amino_acid_indices) * math.sqrt(
+            self.d_model
+        )
         # Have to do the permutation because the positional encoding expects the
         # sequence length to be the first dimension.
         embedded_amino_acids = self.pos_encoder(
