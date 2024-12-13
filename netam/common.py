@@ -109,6 +109,27 @@ def codon_mask_tensor_of(nt_parent, *other_nt_seqs, aa_length=None):
     return torch.tensor(mask, dtype=torch.bool)
 
 
+def aa_strs_from_idx_tensor(idx_tensor):
+    """
+    Convert a tensor of amino acid indices back to a list of amino acid strings.
+    
+    Args:
+        idx_tensor (Tensor): A 2D tensor of shape (batch_size, seq_len) containing 
+                             indices into AA_STR_SORTED_AMBIG.
+
+    Returns:
+        List[str]: A list of amino acid strings with trailing 'X's removed.
+    """
+    idx_tensor = idx_tensor.cpu()
+
+    aa_str_list = []
+    for row in idx_tensor:
+        aa_str = "".join(AA_STR_SORTED_AMBIG[idx] for idx in row.tolist())
+        aa_str_list.append(aa_str.rstrip("X"))
+    
+    return aa_str_list
+
+
 def assert_pcp_valid(parent, child, aa_mask=None):
     """Check that the parent-child pairs are valid.
 
