@@ -728,7 +728,12 @@ class TransformerBinarySelectionModelTrainableWiggleAct(
 
 
 class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAct):
-    """Here the beta parameter is fixed at 0.3."""
+    """
+    This version of the model uses an ESM model to embed the amino acid
+    sequences as an input to the model rather than training an embedding.
+
+    PIE stands for Protein Input Embedding.
+    """
 
     def __init__(
         self,
@@ -742,7 +747,7 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
         super().__init__(
             nhead=self.pie.num_heads,
             d_model_per_head=self.pie.d_model_per_head,
-            # TODO this is hard coded as per Antoine.
+            # The transformer paper uses 4 * d_model for the feedforward layer.
             dim_feedforward=self.pie.d_model * 4,
             layer_count=layer_count,
             dropout_prob=dropout_prob,
@@ -760,7 +765,7 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
 
     def to(self, device):
         super().to(device)
-        self.pie.model = self.pie.model.to(device)
+        self.pie = self.pie.to(device)
         return self
 
     def represent(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:

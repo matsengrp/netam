@@ -39,7 +39,6 @@ class ESMEmbedder:
 
         Args:
             model_name (str): Name of the pretrained ESM model (e.g., "esm2_t6_8M_UR50D").
-            device (str): Device to run the model on.
         """
         self.model, self.alphabet = pretrained.load_model_and_alphabet(model_name)
         self.batch_converter = self.alphabet.get_batch_converter()
@@ -63,6 +62,10 @@ class ESMEmbedder:
     @property
     def num_layers(self):
         return self.model.num_layers
+
+    def to(self, device):
+        self.model.to(device)
+        return self
 
     def embed_sequence_list(self, sequences: list[str]) -> torch.Tensor:
         """Embeds a batch of sequences.
