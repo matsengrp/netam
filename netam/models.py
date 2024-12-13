@@ -728,9 +728,8 @@ class TransformerBinarySelectionModelTrainableWiggleAct(
 
 
 class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAct):
-    """
-    This version of the model uses an ESM model to embed the amino acid
-    sequences as an input to the model rather than training an embedding.
+    """This version of the model uses an ESM model to embed the amino acid sequences as
+    an input to the model rather than training an embedding.
 
     PIE stands for Protein Input Embedding.
     """
