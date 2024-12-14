@@ -8,13 +8,20 @@ import numpy as np
 from Bio import SeqIO
 from Bio.Seq import Seq
 
+BASES = ["A", "C", "G", "T"]
+BASES_AND_N_TO_INDEX = {"A": 0, "C": 1, "G": 2, "T": 3, "N": 4}
 AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
+TOKEN_STR_SORTED = AA_STR_SORTED + "X^"
 NT_STR_SORTED = "ACGT"
+MAX_AA_TOKEN_IDX = len(TOKEN_STR_SORTED) - 1
 CODONS = [
     "".join(codon_list)
     for codon_list in itertools.product(["A", "C", "G", "T"], repeat=3)
 ]
 STOP_CODONS = ["TAA", "TAG", "TGA"]
+TOKEN_TRANSLATIONS = {
+    "^^^": "^",
+}
 
 
 def nt_idx_array_of_str(nt_str):
@@ -25,11 +32,18 @@ def nt_idx_array_of_str(nt_str):
         print(f"Found an invalid nucleotide in the string: {nt_str}")
         raise
 
+def aa_idx_array_of_str(aa_str):
+    """Return the indices of the amino acids in a string."""
+    try:
+        return np.array([TOKEN_STR_SORTED.index(aa) for aa in aa_str])
+    except ValueError:
+        print(f"Found an invalid amino acid in the string: {aa_str}")
+        raise
 
 def aa_idx_array_of_str(aa_str):
     """Return the indices of the amino acids in a string."""
     try:
-        return np.array([AA_STR_SORTED.index(aa) for aa in aa_str])
+        return np.array([TOKEN_STR_SORTED.index(aa) for aa in aa_str])
     except ValueError:
         print(f"Found an invalid amino acid in the string: {aa_str}")
         raise
@@ -47,7 +61,7 @@ def nt_idx_tensor_of_str(nt_str):
 def aa_idx_tensor_of_str(aa_str):
     """Return the indices of the amino acids in a string."""
     try:
-        return torch.tensor([AA_STR_SORTED.index(aa) for aa in aa_str])
+        return torch.tensor([TOKEN_STR_SORTED.index(aa) for aa in aa_str])
     except ValueError:
         print(f"Found an invalid amino acid in the string: {aa_str}")
         raise
@@ -90,26 +104,31 @@ def read_fasta_sequences(file_path):
     return sequences
 
 
-def translate_sequences(nt_sequences):
-    aa_sequences = []
-    for seq in nt_sequences:
-        if len(seq) % 3 != 0:
-            raise ValueError(f"The sequence '{seq}' is not a multiple of 3.")
-        aa_seq = str(Seq(seq).translate())
-        if "*" in aa_seq:
-            raise ValueError(f"The sequence '{seq}' contains a stop codon.")
-        aa_sequences.append(aa_seq)
-    return aa_sequences
+def translate_codon(codon):
+    """Translate a codon to an amino acid."""
+    if codon in TOKEN_TRANSLATIONS:
+        return TOKEN_TRANSLATIONS[codon]
+    else:
+        return str(Seq(codon).translate())
 
 
 def translate_sequence(nt_sequence):
-    return translate_sequences([nt_sequence])[0]
+    if len(nt_sequence) % 3 != 0:
+        raise ValueError(f"The sequence '{nt_sequence}' is not a multiple of 3.")
+    aa_seq = "".join(translate_codon(nt_sequence[i: i + 3]) for i in range(0, len(nt_sequence), 3))
+    if "*" in aa_seq:
+        raise ValueError(f"The sequence '{nt_sequence}' contains a stop codon.")
+    return aa_seq
+
+
+def translate_sequences(nt_sequences):
+    return [translate_sequence(seq) for seq in nt_sequences]
 
 
 def aa_index_of_codon(codon):
     """Return the index of the amino acid encoded by a codon."""
     aa = translate_sequence(codon)
-    return AA_STR_SORTED.index(aa)
+    return TOKEN_STR_SORTED.index(aa)
 
 
 def generic_mutation_frequency(ambig_symb, parent, child):
@@ -159,12 +178,12 @@ def pcp_criteria_check(parent, child, max_mut_freq=0.3):
 def generate_codon_aa_indicator_matrix():
     """Generate a matrix that maps codons (rows) to amino acids (columns)."""
 
-    matrix = np.zeros((len(CODONS), len(AA_STR_SORTED)))
+    matrix = np.zeros((len(CODONS), len(TOKEN_STR_SORTED)))
 
     for i, codon in enumerate(CODONS):
         try:
             aa = translate_sequences([codon])[0]
-            aa_idx = AA_STR_SORTED.index(aa)
+            aa_idx = TOKEN_STR_SORTED.index(aa)
             matrix[i, aa_idx] = 1
         except ValueError:  # Handle STOP codon
             pass
