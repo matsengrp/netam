@@ -425,23 +425,15 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None, joine
 
 
 def add_shm_model_outputs_to_pcp_df(pcp_df, crepe):
-    rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent"].str.replace("^", "N"))
-    pcp_df["nt_rates"] = rates
-    pcp_df["nt_csps"] = csps
-    return pcp_df
-
-# TODO we'll need to do something like this:
-def _add_shm_model_outputs_to_pcp_df(pcp_df, crepe):
-    # TODO I can't think of a better generic way to do this..
-    split_parents = pcp_df["parent"].str.split("^^^", expand=True)
-    h_parents = split_parents[0]
+    # TODO what happens when one of these is empty? or if there's no split?
+    split_parents = pcp_df["parent"].copy().str.split(pat="^^^", expand=True, regex=False)
+    h_parents = split_parents[0] + "NNN"
     l_parents = split_parents[1]
 
     h_rates, h_csps = trimmed_shm_model_outputs_of_crepe(crepe, h_parents)
     l_rates, l_csps = trimmed_shm_model_outputs_of_crepe(crepe, l_parents)
-    # TODO this is bogus
-    pcp_df["nt_rates"] = h_rates + [0.0, 0.0, 0.0] + l_rates
-    pcp_df["nt_csps"] = h_csps + [0.0, 0.0, 0.0] + l_csps
+    pcp_df["nt_rates"] = [torch.cat([h_rate, l_rate], dim=0) for h_rate, l_rate in zip(h_rates, l_rates)]
+    pcp_df["nt_csps"] = [torch.cat([h_csp, l_csp], dim=0) for h_csp, l_csp in zip(h_csps, l_csps)]
     return pcp_df
 
 
