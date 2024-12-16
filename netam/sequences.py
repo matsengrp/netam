@@ -198,7 +198,7 @@ def iter_codons(nt_seq):
         yield nt_seq[i : i + 3]
 
 
-def zap_wt_predictions(predictions: torch.Tensor, aa_sequence: str) -> torch.Tensor:
+def set_wt_to_nan(predictions: torch.Tensor, aa_sequence: str) -> torch.Tensor:
     """Set the wild-type predictions to NaN.
 
     Modifies the supplied predictions tensor in-place and returns it.

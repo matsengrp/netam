@@ -20,7 +20,7 @@ from netam.common import (
     chunk_function,
 )
 
-from netam.sequences import zap_wt_predictions
+from netam.sequences import set_wt_to_nan
 
 warnings.filterwarnings(
     "ignore", category=UserWarning, module="torch.nn.modules.transformer"
@@ -573,7 +573,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         """
         res = self.evaluate_sequences(sequences, **kwargs)
         if self.hyperparameters["output_dim"] >= 20:
-            return [zap_wt_predictions(pred, seq) for pred, seq in zip(res, sequences)]
+            return [set_wt_to_nan(pred, seq) for pred, seq in zip(res, sequences)]
         else:
             return res
 
