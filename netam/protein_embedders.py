@@ -67,6 +67,34 @@ class ESMEmbedder:
         self.model.to(device)
         return self
 
+    def tokenize_sequences(self, sequences: list[str]) -> torch.Tensor:
+        """Tokenizes a batch of sequences.
+
+        Args:
+            sequences (list[str]): List of amino acid sequences.
+
+        Returns:
+            torch.Tensor: A tensor of shape (batch_size, max_aa_seq_len).
+        """
+        named_sequences = [(f"seq_{i}", seq) for i, seq in enumerate(sequences)]
+        _, _, batch_tokens = self.batch_converter(named_sequences)
+        return batch_tokens
+
+    def embed_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
+        """Embeds a batch of tokens.
+
+        Args:
+            tokens (torch.Tensor): A tensor of shape (batch_size, seq_len).
+
+        Returns:
+            torch.Tensor: A tensor of shape (batch_size, seq_len, embedding_dim).
+        """
+        tokens = tokens.to(self.device)
+        with torch.no_grad():
+            results = self.model(tokens, repr_layers=[self.num_layers])
+        embeddings = results["representations"][self.num_layers]
+        return embeddings
+
     def embed_sequence_list(self, sequences: list[str]) -> torch.Tensor:
         """Embeds a batch of sequences.
 
@@ -76,14 +104,7 @@ class ESMEmbedder:
         Returns:
             torch.Tensor: A tensor of shape (batch_size, max_aa_seq_len, embedding_dim).
         """
-        named_sequences = [(f"seq_{i}", seq) for i, seq in enumerate(sequences)]
-        batch_labels, batch_strs, batch_tokens = self.batch_converter(named_sequences)
-        batch_tokens = batch_tokens.to(self.device)
-        with torch.no_grad():
-            results = self.model(batch_tokens, repr_layers=[self.num_layers])
-        embeddings = results["representations"][self.num_layers]
-
-        return embeddings
+        return self.embed_tokens(self.tokenize_sequences(sequences))
 
     def embed_batch(self, amino_acid_indices: torch.Tensor) -> torch.Tensor:
         """Embeds a batch of netam amino acid indices.

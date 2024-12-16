@@ -767,12 +767,12 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
         self.pie = self.pie.to(device)
         return self
 
-    def represent(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+    def represent(self, pie_tokens: Tensor, mask: Tensor) -> Tensor:
         """Represent an index-encoded parent sequence in the model's embedding space.
 
         Args:
-            amino_acid_indices: A tensor of shape (B, L) containing the
-                indices of parent AA sequences.
+            pie_tokens: A tensor of shape (B, L) containing the
+                tokens of parent AA sequences.
             mask: A tensor of shape (B, L) representing the mask of valid
                 amino acid sites.
 
@@ -781,7 +781,7 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
             where E is the dimensionality of the embedding space.
         """
         # Multiply by sqrt(d_model) to match the transformer paper.
-        embedded_amino_acids = self.pie.embed_batch(amino_acid_indices) * math.sqrt(
+        embedded_amino_acids = self.pie.embed_tokens(pie_tokens) * math.sqrt(
             self.d_model
         )
         # Have to do the permutation because the positional encoding expects the
@@ -792,6 +792,29 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
 
         # To learn about src_key_padding_mask, see https://stackoverflow.com/q/62170439
         return self.encoder(embedded_amino_acids, src_key_padding_mask=~mask)
+
+    def selection_factors_of_aa_str(self, aa_str):
+        """Do the forward method then exponentiation without gradients from an amino
+        acid string.
+
+        Args:
+            aa_str: A string of amino acids.
+
+        Returns:
+            A numpy array of the same length as the input string representing
+            the level of selection for each amino acid at each site.
+        """
+        tokens = self.pie.tokenize_sequences([aa_str])
+        tokens = tokens.to(self.device)
+        mask = aa_mask_tensor_of(aa_str)
+        mask = mask.to(self.device)
+
+        with torch.no_grad():
+            # TODO note that I removed unsqueeze(0) from tokens
+            model_out = self(tokens, mask.unsqueeze(0)).squeeze(0)
+            final_out = torch.exp(model_out)
+
+        return final_out[: len(aa_str)]
 
 
 class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
