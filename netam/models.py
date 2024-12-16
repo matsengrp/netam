@@ -563,18 +563,15 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
     def device(self):
         return next(self.parameters()).device
 
-    def predictions_of_sequences(self, sequences, encoder=None, **kwargs):
+    def predictions_of_sequences(self, sequences, **kwargs):
         """Predict the selection factors for a list of amino acid sequences.
 
         For models which output a prediction for each possible target amino acid,
-        wildtype amino acids are set to NaN, reflecting the fact that the model's predictions
-        for wildtype amino acids are unconstrained in training and therefore meaningless.
-
-        Args:
-            sequences: A list of amino acid sequences.
-            encoder: An encoder object that can encode amino acid sequences.
+        wildtype amino acids are set to NaN, reflecting the fact that the model's
+        predictions for wildtype amino acids are unconstrained in training and therefore
+        meaningless.
         """
-        res = self.evaluate_sequences(sequences, encoder=encoder, **kwargs)
+        res = self.evaluate_sequences(sequences, **kwargs)
         if self.hyperparameters["output_dim"] >= 20:
             return [zap_wt_predictions(pred, seq) for pred, seq in zip(res, sequences)]
         else:
