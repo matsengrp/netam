@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from netam.hit_class import apply_multihit_correction
+from netam.protein_embedders import ESMEmbedder
 from netam.common import (
     MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
@@ -724,6 +725,73 @@ class TransformerBinarySelectionModelTrainableWiggleAct(
         # Apply sigmoid to transform logit_beta back to the range (0, 1)
         beta = torch.sigmoid(self.logit_beta)
         return wiggle(super().predict(representation), beta)
+
+
+class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAct):
+    """This version of the model uses an ESM model to embed the amino acid sequences as
+    an input to the model rather than training an embedding.
+
+    PIE stands for Protein Input Embedding.
+    """
+
+    def __init__(
+        self,
+        esm_model_name: str,
+        layer_count: int,
+        dropout_prob: float = 0.5,
+        output_dim: int = 1,
+    ):
+        self.esm_model_name = esm_model_name
+        self.pie = ESMEmbedder(model_name=esm_model_name)
+        super().__init__(
+            nhead=self.pie.num_heads,
+            d_model_per_head=self.pie.d_model_per_head,
+            # The transformer paper uses 4 * d_model for the feedforward layer.
+            dim_feedforward=self.pie.d_model * 4,
+            layer_count=layer_count,
+            dropout_prob=dropout_prob,
+            output_dim=output_dim,
+        )
+
+    @property
+    def hyperparameters(self):
+        return {
+            "esm_model_name": self.esm_model_name,
+            "layer_count": self.encoder.num_layers,
+            "dropout_prob": self.pos_encoder.dropout.p,
+            "output_dim": self.linear.out_features,
+        }
+
+    def to(self, device):
+        super().to(device)
+        self.pie = self.pie.to(device)
+        return self
+
+    def represent(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        """Represent an index-encoded parent sequence in the model's embedding space.
+
+        Args:
+            amino_acid_indices: A tensor of shape (B, L) containing the
+                indices of parent AA sequences.
+            mask: A tensor of shape (B, L) representing the mask of valid
+                amino acid sites.
+
+        Returns:
+            The embedded parent sequences, in a tensor of shape (B, L, E),
+            where E is the dimensionality of the embedding space.
+        """
+        # Multiply by sqrt(d_model) to match the transformer paper.
+        embedded_amino_acids = self.pie.embed_batch(amino_acid_indices) * math.sqrt(
+            self.d_model
+        )
+        # Have to do the permutation because the positional encoding expects the
+        # sequence length to be the first dimension.
+        embedded_amino_acids = self.pos_encoder(
+            embedded_amino_acids.permute(1, 0, 2)
+        ).permute(1, 0, 2)
+
+        # To learn about src_key_padding_mask, see https://stackoverflow.com/q/62170439
+        return self.encoder(embedded_amino_acids, src_key_padding_mask=~mask)
 
 
 class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
