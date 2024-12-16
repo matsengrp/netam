@@ -70,6 +70,9 @@ class ESMEmbedder:
     def tokenize_sequences(self, sequences: list[str]) -> torch.Tensor:
         """Tokenizes a batch of sequences.
 
+        This tokenization includes adding special tokens for the beginning and
+        end of each sequence; see test_protein_embedders.py for an example.
+
         Args:
             sequences (list[str]): List of amino acid sequences.
 
@@ -93,6 +96,9 @@ class ESMEmbedder:
         with torch.no_grad():
             results = self.model(tokens, repr_layers=[self.num_layers])
         embeddings = results["representations"][self.num_layers]
+        # Remove the first and the last entry in the embedded sequences
+        # because they correspond to the special tokens [CLS] and [SEP].
+        embeddings = embeddings[:, 1:-1, :]
         return embeddings
 
     def embed_sequence_list(self, sequences: list[str]) -> torch.Tensor:
