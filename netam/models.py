@@ -566,16 +566,13 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
     def predictions_of_sequences(self, sequences, encoder=None, **kwargs):
         """Predict the selection factors for a list of amino acid sequences.
 
+        For models which output a prediction for each possible target amino acid,
+        wildtype amino acids are set to NaN, reflecting the fact that the model's predictions
+        for wildtype amino acids are unconstrained in training and therefore meaningless.
+
         Args:
             sequences: A list of amino acid sequences.
             encoder: An encoder object that can encode amino acid sequences.
-
-        Returns:
-            A list of tensors representing the selection factors for each amino acid
-            at each site in the input sequences.
-            For models which output a prediction for each possible target amino acid,
-            wildtype amino acids are set to NaN, reflecting the fact that the model's predictions
-            for wildtype amino acids are unconstrained in training and therefore meaningless.
         """
         res = self.evaluate_sequences(sequences, encoder=encoder, **kwargs)
         if self.hyperparameters["output_dim"] >= 20:
