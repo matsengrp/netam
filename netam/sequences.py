@@ -196,3 +196,12 @@ def iter_codons(nt_seq):
     """Iterate over the codons in a nucleotide sequence."""
     for i in range(0, (len(nt_seq) // 3) * 3, 3):
         yield nt_seq[i : i + 3]
+
+
+def zap_wt_predictions(predictions: torch.Tensor, aa_sequence: str) -> torch.Tensor:
+    """Set the wild-type predictions to NaN.
+    Modifies the supplied predictions tensor in-place and returns it.
+    """
+    wt_idxs = aa_idx_tensor_of_str(aa_sequence)
+    predictions[torch.arange(len(aa_sequence)), wt_idxs] = float("nan")
+    return predictions
