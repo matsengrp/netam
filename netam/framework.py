@@ -256,12 +256,16 @@ class Crepe:
 
     def __call__(self, sequences, **kwargs):
         """Evaluate the model on a list of sequences.
-        If predictions are per-aa, wildtype predictions will be NaN"""
+
+        If predictions are per-aa, wildtype predictions will be NaN
+        """
         if isinstance(sequences, str):
             raise ValueError(
                 "Expected a list of sequences for call on crepe, but got a single string instead."
             )
-        return self.model.predictions_of_sequences(sequences, encoder=self.encoder, **kwargs)
+        return self.model.predictions_of_sequences(
+            sequences, encoder=self.encoder, **kwargs
+        )
 
     @property
     def device(self):
