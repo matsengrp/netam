@@ -101,7 +101,7 @@ class ESMEmbedder:
         embeddings = embeddings[:, 1:-1, :]
         return embeddings
 
-    def embed_sequence_list(self, sequences: list[str]) -> torch.Tensor:
+    def embed_sequences(self, sequences: list[str]) -> torch.Tensor:
         """Embeds a batch of sequences.
 
         Args:
@@ -128,3 +128,14 @@ class ESMEmbedder:
         desired_length = amino_acid_indices.size(1)
         padded_embedding = pad_embeddings(embedding, desired_length)
         return padded_embedding
+
+    def logit_layer(self, embeddings: torch.Tensor) -> torch.Tensor:
+        """Applies a linear layer to the embeddings.
+
+        Args:
+            embeddings (torch.Tensor): A tensor of shape (batch_size, seq_len, embedding_dim).
+
+        Returns:
+            torch.Tensor: A tensor of shape (batch_size, seq_len, 20).
+        """
+        return self.model.lm_head(embeddings)
