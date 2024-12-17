@@ -21,6 +21,8 @@ from netam.common import (
     chunk_function,
 )
 
+from netam.sequences import set_wt_to_nan
+
 warnings.filterwarnings(
     "ignore", category=UserWarning, module="torch.nn.modules.transformer"
 )
@@ -65,6 +67,9 @@ class ModelBase(nn.Module):
         """Unfreeze all parameters in the model, enabling gradient computations."""
         for param in self.parameters():
             param.requires_grad = True
+
+    def predictions_of_sequences(self, sequences, encoder=None, **kwargs):
+        return self.evaluate_sequences(sequences, encoder=encoder, **kwargs)
 
     @chunk_function(first_chunkable_idx=1, progress_bar_name="Evaluating model")
     def evaluate_sequences(self, sequences, encoder=None, chunk_size=2048):
@@ -558,6 +563,20 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
     @property
     def device(self):
         return next(self.parameters()).device
+
+    def predictions_of_sequences(self, sequences, **kwargs):
+        """Predict the selection factors for a list of amino acid sequences.
+
+        For models which output a prediction for each possible target amino acid,
+        wildtype amino acids are set to NaN, reflecting the fact that the model's
+        predictions for wildtype amino acids are unconstrained in training and therefore
+        meaningless.
+        """
+        res = self.evaluate_sequences(sequences, **kwargs)
+        if self.hyperparameters["output_dim"] >= 20:
+            return [set_wt_to_nan(pred, seq) for pred, seq in zip(res, sequences)]
+        else:
+            return res
 
     def evaluate_sequences(self, sequences: list[str], **kwargs) -> Tensor:
         return tuple(self.selection_factors_of_aa_str(seq) for seq in sequences)
