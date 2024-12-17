@@ -742,12 +742,12 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
         output_dim: int = 1,
     ):
         self.esm_model_name = esm_model_name
-        self.pie = ESMEmbedder(model_name=esm_model_name)
+        self.embedder = ESMEmbedder(model_name=esm_model_name)
         super().__init__(
-            nhead=self.pie.num_heads,
-            d_model_per_head=self.pie.d_model_per_head,
+            nhead=self.embedder.num_heads,
+            d_model_per_head=self.embedder.d_model_per_head,
             # The transformer paper uses 4 * d_model for the feedforward layer.
-            dim_feedforward=self.pie.d_model * 4,
+            dim_feedforward=self.embedder.d_model * 4,
             layer_count=layer_count,
             dropout_prob=dropout_prob,
             output_dim=output_dim,
@@ -764,7 +764,7 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
 
     def to(self, device):
         super().to(device)
-        self.pie = self.pie.to(device)
+        self.embedder = self.embedder.to(device)
         return self
 
     def represent(self, pie_tokens: Tensor, mask: Tensor) -> Tensor:
@@ -781,7 +781,7 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
             where E is the dimensionality of the embedding space.
         """
         # Multiply by sqrt(d_model) to match the transformer paper.
-        embedded_amino_acids = self.pie.embed_tokens(pie_tokens) * math.sqrt(
+        embedded_amino_acids = self.embedder.embed_tokens(pie_tokens) * math.sqrt(
             self.d_model
         )
         # Have to do the permutation because the positional encoding expects the
@@ -804,7 +804,7 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
             A numpy array of the same length as the input string representing
             the level of selection for each amino acid at each site.
         """
-        tokens = self.pie.tokenize_sequences([aa_str])
+        tokens = self.embedder.tokenize_sequences([aa_str])
         tokens = tokens.to(self.device)
         mask = aa_mask_tensor_of(aa_str)
         mask = mask.to(self.device)
@@ -814,6 +814,32 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
             final_out = torch.exp(model_out)
 
         return final_out[: len(aa_str)]
+
+
+class TransformerBinarySelectionModelWich(TransformerBinarySelectionModelPIE):
+    """This version of the model is a "sandwich": like the PIE model it uses an
+    ESM model to embed the amino acid sequences as an input to the model rather
+    than training an embedding, and then it uses the ESM model at the end for
+    logits.
+
+    "Wich" is short for "Sandwich".
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        del self.linear
+
+    @property
+    def hyperparameters(self):
+        return {
+            "esm_model_name": self.esm_model_name,
+            "layer_count": self.encoder.num_layers,
+            "dropout_prob": self.pos_encoder.dropout.p,
+            "output_dim": 20,
+        }
+
+    def predict(self, representation: Tensor):
+        return self.embedder.logit_layer_our_idxs(representation)
 
 
 class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):

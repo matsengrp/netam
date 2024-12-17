@@ -141,3 +141,14 @@ class ESMEmbedder:
             torch.Tensor: A tensor of shape (batch_size, seq_len, alphabet_size).
         """
         return self.model.lm_head(embeddings)
+
+    def logit_layer_our_idxs(self, embeddings: torch.Tensor) -> torch.Tensor:
+        """Applies a linear layer to the embeddings, but using our indexing scheme.
+
+        Args:
+            embeddings (torch.Tensor): A tensor of shape (batch_size, seq_len, embedding_dim).
+
+        Returns:
+            torch.Tensor: A tensor of shape (batch_size, seq_len, 20).
+        """
+        return self.model.lm_head(embeddings)[:, :, self.tok_to_aa_idxs]
