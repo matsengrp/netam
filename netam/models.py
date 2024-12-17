@@ -817,10 +817,9 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
 
 
 class TransformerBinarySelectionModelWich(TransformerBinarySelectionModelPIE):
-    """This version of the model is a "sandwich": like the PIE model it uses an
-    ESM model to embed the amino acid sequences as an input to the model rather
-    than training an embedding, and then it uses the ESM model at the end for
-    logits.
+    """This version of the model is a "sandwich": like the PIE model it uses an ESM
+    model to embed the amino acid sequences as an input to the model rather than
+    training an embedding, and then it uses the ESM model at the end for logits.
 
     "Wich" is short for "Sandwich".
     """
