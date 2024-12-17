@@ -42,6 +42,9 @@ class ESMEmbedder:
             model_name (str): Name of the pretrained ESM model (e.g., "esm2_t6_8M_UR50D").
         """
         self.model, self.alphabet = pretrained.load_model_and_alphabet(model_name)
+        # Freeze the parameters of the ESM logit layer.
+        for param in self.model.lm_head.parameters():
+            param.requires_grad = False
         self.batch_converter = self.alphabet.get_batch_converter()
         self.tok_to_aa_idxs = self.tokenize_sequences([AA_STR_SORTED])[0, 1:-1]
 
