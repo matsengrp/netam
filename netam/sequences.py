@@ -48,7 +48,6 @@ def aa_idx_array_of_str(aa_str):
         print(f"Found an invalid amino acid in the string: {aa_str}")
         raise
 
-
 def nt_idx_tensor_of_str(nt_str):
     """Return the indices of the nucleotides in a string."""
     try:
@@ -215,3 +214,7 @@ def iter_codons(nt_seq):
     """Iterate over the codons in a nucleotide sequence."""
     for i in range(0, (len(nt_seq) // 3) * 3, 3):
         yield nt_seq[i : i + 3]
+
+def token_codon_mask_of_nt_str(nt_str):
+    """Return a mask indicating which positions in a nucleotide sequence are non-nt tokens."""
+    return torch.tensor([codon not in TOKEN_TRANSLATIONS for codon in iter_codons(nt_str)], dtype=torch.bool)

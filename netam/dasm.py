@@ -36,17 +36,19 @@ class DASMDataset(DXSMDataset):
                 multihit_model = None
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
-            parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
+            token_nt_mask = sequences.token_codon_mask_of_nt_str(nt_parent).repeat_interleave(3)
+            # TODO: change this replace statement to be more general on tokens
+            parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A").replace("^", "A"))
             parent_len = len(nt_parent)
 
             mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
             nt_csps = nt_csps[:parent_len, :]
-            nt_mask = mask.repeat_interleave(3)[: len(nt_parent)]
+            nt_mask = mask.repeat_interleave(3)[: len(nt_parent)] & token_nt_mask
             # TODO: uncomment this:
-            # molevol.check_csps(
-            #     parent_idxs[nt_mask],
-            #     nt_csps[: len(nt_parent)][nt_mask]
-            # )
+            molevol.check_csps(
+                parent_idxs[nt_mask],
+                nt_csps[: len(nt_parent)][nt_mask]
+            )
 
             neutral_aa_probs = molevol.neutral_aa_probs(
                 parent_idxs.reshape(-1, 3),

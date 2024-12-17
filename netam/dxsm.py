@@ -27,7 +27,8 @@ from netam.sequences import (
     translate_sequences,
     apply_aa_mask_to_nt_sequence,
     nt_mutation_frequency,
-    MAX_AA_TOKEN_IDX
+    MAX_AA_TOKEN_IDX,
+    token_codon_mask_of_nt_str,
 )
 
 
@@ -44,8 +45,10 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         multihit_model=None,
     ):
         # TODO Not sure about this replacement...
-        self.nt_parents = nt_parents.str.replace("^", "N")
-        self.nt_children = nt_children.str.replace("^", "N")
+        # self.nt_parents = nt_parents.str.replace("^", "N")
+        # self.nt_children = nt_children.str.replace("^", "N")
+        self.nt_parents = nt_parents
+        self.nt_children = nt_children
         self.nt_ratess = nt_ratess
         self.nt_cspss = nt_cspss
         self.multihit_model = copy.deepcopy(multihit_model)
@@ -242,7 +245,8 @@ class DXSMBurrito(framework.Burrito, ABC):
         **optimization_kwargs,
     ):
         sel_matrix = self.build_selection_matrix_from_parent(parent)
-        trimmed_aa_mask = aa_mask[: len(sel_matrix)]
+        token_codon_mask = token_codon_mask_of_nt_str(parent)
+        trimmed_aa_mask = aa_mask[: len(sel_matrix)] & token_codon_mask
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
             sel_matrix[trimmed_aa_mask],
             apply_aa_mask_to_nt_sequence(parent, trimmed_aa_mask),
