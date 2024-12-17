@@ -384,24 +384,22 @@ def join_chains(pcp_df):
     return pcp_df
 
 
-def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None, joined_mode=False):
+def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
     """Load a PCP dataframe from a gzipped CSV file.
 
     `orig_pcp_idx` is the index column from the original file, even if we subset by
     sampling or by choosing V families.
 
-    If `joined_mode` is True, then we will join the heavy and light chain sequences into a single
+    If we will join the heavy and light chain sequences into a single
     sequence starting with the heavy chain, using a `^^^` separator. If only heavy or light chain
     sequence is present, this separator will be added to the appropriate side of the available sequence.
     """
-    print("JOINED_MODE", joined_mode)
     pcp_df = (
         pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0)
         .reset_index()
         .rename(columns={"index": "orig_pcp_idx"})
     )
-    if joined_mode:
-        pcp_df = join_chains(pcp_df)
+    pcp_df = join_chains(pcp_df)
     if not ("parent" in pcp_df.columns and "child" in pcp_df.columns):
         if "parent_h" in pcp_df.columns and "parent_l" in pcp_df.columns:
             pcp_df["parent"] = pcp_df["parent_h"]
@@ -410,9 +408,10 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None, joine
         else:
             raise ValueError(
                 "Could not find parent and child columns. "
-                "Perhaps you want to use joined_mode=True?"
             )
 
+    # figure out what to do here: TODO
+    joined_mode=False
     if not joined_mode:
         pcp_df["v_family"] = pcp_df["v_gene"].str.split("-").str[0]
         if chosen_v_families is not None:
@@ -424,25 +423,17 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None, joine
     return pcp_df
 
 
-def add_shm_model_outputs_to_pcp_df(pcp_df, crepe, joined_mode=False):
-    # TODO we could detect joined_mode by looking at the first sequence, which
-    # could be better...
-    if joined_mode:
-        # TODO what happens when one of these is empty? or if there's no split?
-        split_parents = pcp_df["parent"].copy().str.split(pat="^^^", expand=True, regex=False)
-        h_parents = split_parents[0] + "NNN"
-        l_parents = split_parents[1]
+def add_shm_model_outputs_to_pcp_df(pcp_df, crepe):
+    # TODO what happens when one of these is empty? or if there's no split?
+    split_parents = pcp_df["parent"].copy().str.split(pat="^^^", expand=True, regex=False)
+    h_parents = split_parents[0] + "NNN"
+    l_parents = split_parents[1]
 
-        h_rates, h_csps = trimmed_shm_model_outputs_of_crepe(crepe, h_parents)
-        l_rates, l_csps = trimmed_shm_model_outputs_of_crepe(crepe, l_parents)
-        pcp_df["nt_rates"] = [torch.cat([h_rate, l_rate], dim=0) for h_rate, l_rate in zip(h_rates, l_rates)]
-        pcp_df["nt_csps"] = [torch.cat([h_csp, l_csp], dim=0) for h_csp, l_csp in zip(h_csps, l_csps)]
-        return pcp_df
-    else:
-        rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent"])
-        pcp_df["nt_rates"] = rates
-        pcp_df["nt_csps"] = csps
-        return pcp_df
+    h_rates, h_csps = trimmed_shm_model_outputs_of_crepe(crepe, h_parents)
+    l_rates, l_csps = trimmed_shm_model_outputs_of_crepe(crepe, l_parents)
+    pcp_df["nt_rates"] = [torch.cat([h_rate, l_rate], dim=0) for h_rate, l_rate in zip(h_rates, l_rates)]
+    pcp_df["nt_csps"] = [torch.cat([h_csp, l_csp], dim=0) for h_csp, l_csp in zip(h_csps, l_csps)]
+    return pcp_df
 
 
 class Burrito(ABC):

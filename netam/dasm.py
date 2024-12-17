@@ -37,8 +37,10 @@ class DASMDataset(DXSMDataset):
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
             token_nt_mask = sequences.token_codon_mask_of_nt_str(nt_parent).repeat_interleave(3)
+            token_nt_mask = torch.tensor([aa != "^" for aa in parent], dtype=torch.bool).repeat_interleave(3)
             # TODO: change this replace statement to be more general on tokens
-            parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A").replace("^", "A"))
+            parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("^", "N"))
+            # parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A").replace("^", "A"))
             parent_len = len(nt_parent)
 
             mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
