@@ -60,6 +60,8 @@ class DASMPIEDataset(DASMDataset):
 
 class DASMPIEBurrito(DASMBurrito):
 
+    model_type = "dasmpie"
+
     def prediction_pair_of_batch(self, batch):
         """Get log neutral AA probabilities and log selection factors for a batch of
         data."""

@@ -112,6 +112,8 @@ class DNSMDataset(DXSMDataset):
 
 class DNSMBurrito(DXSMBurrito):
 
+    model_type = "dnsm"
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
