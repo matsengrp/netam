@@ -12,8 +12,6 @@ from netam.sequences import (
 
 
 class DASMPIEDataset(DASMDataset):
-    # TODO does this do anything?
-    prefix = "dasm"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -52,8 +50,6 @@ class DASMPIEDataset(DASMDataset):
 
 
 class DASMPIEBurrito(DASMBurrito):
-    # TODO does this do anything?
-    prefix = "dasmpie"
 
     def prediction_pair_of_batch(self, batch):
         """Get log neutral AA probabilities and log selection factors for a batch of
