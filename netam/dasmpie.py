@@ -2,6 +2,8 @@
 protein model embedding as input.
 
 PIE stands for Protein Input Embedding.
+
+Right now it's specialized to ESM2 (see below).
 """
 
 import torch
@@ -19,6 +21,9 @@ class DASMPIEDataset(DASMDataset):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # We are specifically using ESM models here. Ideally we'd pass an
+        # Embedder object and use that to do the tokenization, but we only have
+        # one model here and I don't want to break the interface.
         # Note that all ESM2 models use the ESM-1b alphabet
         # https://github.com/facebookresearch/esm/blob/main/esm/pretrained.py#L175
         alphabet = esm.data.Alphabet.from_architecture("ESM-1b")
