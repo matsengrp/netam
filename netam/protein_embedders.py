@@ -136,6 +136,6 @@ class ESMEmbedder:
             embeddings (torch.Tensor): A tensor of shape (batch_size, seq_len, embedding_dim).
 
         Returns:
-            torch.Tensor: A tensor of shape (batch_size, seq_len, 20).
+            torch.Tensor: A tensor of shape (batch_size, seq_len, alphabet_size).
         """
         return self.model.lm_head(embeddings)
