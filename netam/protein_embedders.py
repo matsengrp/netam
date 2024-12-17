@@ -3,6 +3,7 @@ import torch
 from esm import pretrained
 
 from netam.common import aa_strs_from_idx_tensor
+from netam.sequences import AA_STR_SORTED
 
 
 def pad_embeddings(embeddings, desired_length):
@@ -42,6 +43,7 @@ class ESMEmbedder:
         """
         self.model, self.alphabet = pretrained.load_model_and_alphabet(model_name)
         self.batch_converter = self.alphabet.get_batch_converter()
+        self.tok_to_aa_idxs = self.tokenize_sequences([AA_STR_SORTED])[0, 1:-1]
 
     @property
     def device(self):
