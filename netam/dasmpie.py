@@ -1,4 +1,5 @@
-"""Here we define a model that outputs a vector of 20 amino acid preferences, using a protein model embedding as input."""
+"""Here we define a model that outputs a vector of 20 amino acid preferences, using a
+protein model embedding as input."""
 
 import torch
 import torch.nn.functional as F

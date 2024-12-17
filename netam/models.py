@@ -810,7 +810,6 @@ class TransformerBinarySelectionModelPIE(TransformerBinarySelectionModelWiggleAc
         mask = mask.to(self.device)
 
         with torch.no_grad():
-            # TODO note that I removed unsqueeze(0) from tokens
             model_out = self(tokens, mask.unsqueeze(0)).squeeze(0)
             final_out = torch.exp(model_out)
 
