@@ -11,7 +11,7 @@ setup(
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     packages=find_packages(),
-    python_requires=">=3.9,<3.12",
+    python_requires=">=3.9,<3.13",
     install_requires=[
         "biopython",
         "fair-esm",
