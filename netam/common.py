@@ -94,8 +94,8 @@ def _consider_codon(codon):
     """Return False if codon should be masked, True otherwise."""
     if "N" in codon:
         return False
-    # elif codon in TOKEN_TRANSLATIONS:
-    #     return False
+    elif codon in TOKEN_TRANSLATIONS:
+        return False
     else:
         return True
 

@@ -13,6 +13,10 @@ BASES_AND_N_TO_INDEX = {"A": 0, "C": 1, "G": 2, "T": 3, "N": 4}
 AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
 # ambiguous must remain last
 TOKEN_STR_SORTED = AA_STR_SORTED + "^X"
+RESERVED_TOKENS = ("^", )
+
+RESERVED_TOKEN_AA_BOUNDS = (min(TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS), max(TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS))
+
 NT_STR_SORTED = "ACGT"
 MAX_AA_TOKEN_IDX = len(TOKEN_STR_SORTED) - 1
 CODONS = [
@@ -223,5 +227,6 @@ def ambig_mask_of_nt_string(nt_str):
 
 
 def token_mask_of_aa_idxs(aa_idxs: torch.Tensor) -> torch.Tensor:
-    """Return a mask indicating which positions in an amino acid sequence are not ambiguous."""
-    return aa_idxs < len(AA_STR_SORTED)
+    """Return a mask indicating which positions in an amino acid sequence contain special indicator tokens"""
+    min_idx, max_idx = RESERVED_TOKEN_AA_BOUNDS
+    return (aa_idxs <= max_idx) & (aa_idxs >= min_idx)
