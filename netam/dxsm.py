@@ -28,7 +28,7 @@ from netam.sequences import (
     apply_aa_mask_to_nt_sequence,
     nt_mutation_frequency,
     MAX_AA_TOKEN_IDX,
-    token_codon_mask_of_nt_str,
+    ambig_mask_of_nt_string,
 )
 
 
@@ -45,10 +45,8 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         multihit_model=None,
     ):
         # TODO Not sure about this replacement...
-        # self.nt_parents = nt_parents.str.replace("^", "N")
-        # self.nt_children = nt_children.str.replace("^", "N")
-        self.nt_parents = nt_parents
-        self.nt_children = nt_children
+        self.nt_parents = nt_parents.str.replace("^", "N")
+        self.nt_children = nt_children.str.replace("^", "N")
         self.nt_ratess = nt_ratess
         self.nt_cspss = nt_cspss
         self.multihit_model = copy.deepcopy(multihit_model)
@@ -60,6 +58,8 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         assert len(self.nt_parents) == len(self.nt_children)
         pcp_count = len(self.nt_parents)
 
+        # Important to use the unmodified versions of nt_parents and
+        # nt_children so they still contain special tokens.
         aa_parents = translate_sequences(nt_parents)
         aa_children = translate_sequences(nt_children)
         self.max_aa_seq_len = max(len(seq) for seq in aa_parents)
@@ -245,7 +245,7 @@ class DXSMBurrito(framework.Burrito, ABC):
         **optimization_kwargs,
     ):
         sel_matrix = self.build_selection_matrix_from_parent(parent)
-        token_codon_mask = token_codon_mask_of_nt_str(parent)
+        token_codon_mask = ambig_mask_of_nt_string(parent).view(-1, 3).all(dim=1)
         trimmed_aa_mask = aa_mask[: len(sel_matrix)] & token_codon_mask
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
             sel_matrix[trimmed_aa_mask],

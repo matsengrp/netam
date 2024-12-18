@@ -11,7 +11,8 @@ from Bio.Seq import Seq
 BASES = ["A", "C", "G", "T"]
 BASES_AND_N_TO_INDEX = {"A": 0, "C": 1, "G": 2, "T": 3, "N": 4}
 AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
-TOKEN_STR_SORTED = AA_STR_SORTED + "X^"
+# ambiguous must remain last
+TOKEN_STR_SORTED = AA_STR_SORTED + "^X"
 NT_STR_SORTED = "ACGT"
 MAX_AA_TOKEN_IDX = len(TOKEN_STR_SORTED) - 1
 CODONS = [
@@ -215,6 +216,12 @@ def iter_codons(nt_seq):
     for i in range(0, (len(nt_seq) // 3) * 3, 3):
         yield nt_seq[i : i + 3]
 
-def token_codon_mask_of_nt_str(nt_str):
-    """Return a mask indicating which positions in a nucleotide sequence are non-nt tokens."""
-    return torch.tensor([codon not in TOKEN_TRANSLATIONS for codon in iter_codons(nt_str)], dtype=torch.bool)
+
+def ambig_mask_of_nt_string(nt_str):
+    """Return a mask indicating which positions in a nucleotide sequence are not N."""
+    return torch.tensor([nt != "N" for nt in nt_str], dtype=torch.bool)
+
+
+def token_mask_of_aa_idxs(aa_idxs: torch.Tensor) -> torch.Tensor:
+    """Return a mask indicating which positions in an amino acid sequence are not ambiguous."""
+    return aa_idxs < len(AA_STR_SORTED)

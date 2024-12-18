@@ -410,9 +410,9 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
                 "Could not find parent and child columns. "
             )
 
-    # figure out what to do here: TODO
-    joined_mode=False
-    if not joined_mode:
+    # figure out what to do here: TODO this is only needed for oe plotting, but
+    # the way its set up will fail without a helpful message.
+    if "v_gene" in pcp_df.columns:
         pcp_df["v_family"] = pcp_df["v_gene"].str.split("-").str[0]
         if chosen_v_families is not None:
             chosen_v_families = set(chosen_v_families)
