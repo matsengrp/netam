@@ -28,7 +28,6 @@ from netam.sequences import (
     apply_aa_mask_to_nt_sequence,
     nt_mutation_frequency,
     MAX_AA_TOKEN_IDX,
-    ambig_mask_of_nt_string,
 )
 
 
@@ -245,8 +244,7 @@ class DXSMBurrito(framework.Burrito, ABC):
         **optimization_kwargs,
     ):
         sel_matrix = self.build_selection_matrix_from_parent(parent)
-        token_codon_mask = ambig_mask_of_nt_string(parent).view(-1, 3).all(dim=1)
-        trimmed_aa_mask = aa_mask[: len(sel_matrix)] & token_codon_mask
+        trimmed_aa_mask = aa_mask[: len(sel_matrix)]
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
             sel_matrix[trimmed_aa_mask],
             apply_aa_mask_to_nt_sequence(parent, trimmed_aa_mask),

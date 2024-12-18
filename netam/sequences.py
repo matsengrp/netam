@@ -221,9 +221,9 @@ def iter_codons(nt_seq):
         yield nt_seq[i : i + 3]
 
 
-def ambig_mask_of_nt_string(nt_str):
-    """Return a mask indicating which positions in a nucleotide sequence are not N."""
-    return torch.tensor([nt != "N" for nt in nt_str], dtype=torch.bool)
+# def ambig_mask_of_nt_string(nt_str):
+#     """Return a mask indicating which positions in a nucleotide sequence are not N."""
+#     return torch.tensor([nt != "N" for nt in nt_str], dtype=torch.bool)
 
 
 def token_mask_of_aa_idxs(aa_idxs: torch.Tensor) -> torch.Tensor:
