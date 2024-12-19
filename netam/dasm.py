@@ -15,7 +15,6 @@ import copy
 
 
 class DASMDataset(DXSMDataset):
-    prefix = "dasm"
 
     def update_neutral_probs(self):
         neutral_aa_probs_l = []
@@ -123,7 +122,7 @@ def zap_predictions_along_diagonal(predictions, aa_parents_idxs):
 
 
 class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
-    prefix = "dasm"
+    model_type = "dasm"
 
     def __init__(self, *args, loss_weights: list = [1.0, 0.01], **kwargs):
         super().__init__(*args, **kwargs)

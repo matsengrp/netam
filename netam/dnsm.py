@@ -15,7 +15,6 @@ import netam.sequences as sequences
 
 
 class DNSMDataset(DXSMDataset):
-    prefix = "dnsm"
 
     def update_neutral_probs(self):
         """Update the neutral mutation probabilities for the dataset.
@@ -112,7 +111,8 @@ class DNSMDataset(DXSMDataset):
 
 
 class DNSMBurrito(DXSMBurrito):
-    prefix = "dnsm"
+
+    model_type = "dnsm"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
