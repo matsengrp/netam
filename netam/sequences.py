@@ -1,6 +1,7 @@
 """Code for handling sequences and sequence files."""
 
 import itertools
+import re
 
 import torch
 import numpy as np
@@ -8,26 +9,30 @@ import numpy as np
 from Bio import SeqIO
 from Bio.Seq import Seq
 
-BASES = ["A", "C", "G", "T"]
-BASES_AND_N_TO_INDEX = {"A": 0, "C": 1, "G": 2, "T": 3, "N": 4}
+BASES = ("A", "C", "G", "T")
 AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
+# Add additional tokens to this string:
+RESERVED_TOKENS = "^"
+
+
+NT_STR_SORTED = "".join(BASES)
+BASES_AND_N_TO_INDEX = {base: idx for idx, base in enumerate(NT_STR_SORTED + "N")}
 # ambiguous must remain last
-TOKEN_STR_SORTED = AA_STR_SORTED + "^X"
-RESERVED_TOKENS = ("^", )
-
+TOKEN_STR_SORTED = AA_STR_SORTED + RESERVED_TOKENS + "X"
+# TODO add tests for functions that use this:
 RESERVED_TOKEN_AA_BOUNDS = (min(TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS), max(TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS))
-
-NT_STR_SORTED = "ACGT"
 MAX_AA_TOKEN_IDX = len(TOKEN_STR_SORTED) - 1
 CODONS = [
     "".join(codon_list)
-    for codon_list in itertools.product(["A", "C", "G", "T"], repeat=3)
+    for codon_list in itertools.product(BASES, repeat=3)
 ]
 STOP_CODONS = ["TAA", "TAG", "TGA"]
-TOKEN_TRANSLATIONS = {
-    "^^^": "^",
-}
+# Each token in RESERVED_TOKENS will appear once in aa strings, and three times
+# in nt strings.
+TOKEN_TRANSLATIONS = {token * 3: token for token in RESERVED_TOKENS}
 
+# Create a regex pattern
+TOKEN_REGEX = f"[{''.join(map(re.escape, list(RESERVED_TOKENS)))}]"
 
 def nt_idx_array_of_str(nt_str):
     """Return the indices of the nucleotides in a string."""
