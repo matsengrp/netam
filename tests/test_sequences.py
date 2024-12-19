@@ -21,6 +21,15 @@ def test_token_order():
     assert TOKEN_STR_SORTED[:len(AA_STR_SORTED)] == AA_STR_SORTED
 
 
+# TODO implement these tests
+def test_token_replace():
+    assert False
+
+
+def test_token_mask():
+    assert False
+
+
 def test_nucleotide_indices_of_codon():
     assert nt_idx_array_of_str("AAA").tolist() == [0, 0, 0]
     assert nt_idx_array_of_str("TAC").tolist() == [3, 0, 1]
