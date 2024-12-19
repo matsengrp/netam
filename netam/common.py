@@ -19,7 +19,7 @@ from netam.sequences import (
     TOKEN_TRANSLATIONS,
     BASES,
     BASES_AND_N_TO_INDEX,
-    TOKEN_STR_SORTED
+    AA_TOKEN_STR_SORTED
 )
 
 BIG = 1e9
@@ -67,7 +67,7 @@ def aa_idx_tensor_of_str_ambig(aa_str):
     character."""
     try:
         return torch.tensor(
-            [TOKEN_STR_SORTED.index(aa) for aa in aa_str], dtype=torch.int
+            [AA_TOKEN_STR_SORTED.index(aa) for aa in aa_str], dtype=torch.int
         )
     except ValueError:
         print(f"Found an invalid amino acid in the string: {aa_str}")
@@ -127,7 +127,7 @@ def aa_strs_from_idx_tensor(idx_tensor):
 
     Args:
         idx_tensor (Tensor): A 2D tensor of shape (batch_size, seq_len) containing
-                             indices into AA_STR_SORTED_AMBIG.
+                             indices into AA_TOKEN_STR_SORTED.
 
     Returns:
         List[str]: A list of amino acid strings with trailing 'X's removed.
@@ -136,7 +136,7 @@ def aa_strs_from_idx_tensor(idx_tensor):
 
     aa_str_list = []
     for row in idx_tensor:
-        aa_str = "".join(AA_STR_SORTED_AMBIG[idx] for idx in row.tolist())
+        aa_str = "".join(AA_TOKEN_STR_SORTED[idx] for idx in row.tolist())
         aa_str_list.append(aa_str.rstrip("X"))
 
     return aa_str_list

@@ -18,10 +18,10 @@ RESERVED_TOKENS = "^"
 NT_STR_SORTED = "".join(BASES)
 BASES_AND_N_TO_INDEX = {base: idx for idx, base in enumerate(NT_STR_SORTED + "N")}
 # ambiguous must remain last
-TOKEN_STR_SORTED = AA_STR_SORTED + RESERVED_TOKENS + "X"
+AA_TOKEN_STR_SORTED = AA_STR_SORTED + RESERVED_TOKENS + "X"
 # TODO add tests for functions that use this:
-RESERVED_TOKEN_AA_BOUNDS = (min(TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS), max(TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS))
-MAX_AA_TOKEN_IDX = len(TOKEN_STR_SORTED) - 1
+RESERVED_TOKEN_AA_BOUNDS = (min(AA_TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS), max(AA_TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS))
+MAX_AA_TOKEN_IDX = len(AA_TOKEN_STR_SORTED) - 1
 CODONS = [
     "".join(codon_list)
     for codon_list in itertools.product(BASES, repeat=3)
@@ -45,7 +45,7 @@ def nt_idx_array_of_str(nt_str):
 def aa_idx_array_of_str(aa_str):
     """Return the indices of the amino acids in a string."""
     try:
-        return np.array([TOKEN_STR_SORTED.index(aa) for aa in aa_str])
+        return np.array([AA_TOKEN_STR_SORTED.index(aa) for aa in aa_str])
     except ValueError:
         print(f"Found an invalid amino acid in the string: {aa_str}")
         raise
@@ -53,7 +53,7 @@ def aa_idx_array_of_str(aa_str):
 def aa_idx_array_of_str(aa_str):
     """Return the indices of the amino acids in a string."""
     try:
-        return np.array([TOKEN_STR_SORTED.index(aa) for aa in aa_str])
+        return np.array([AA_TOKEN_STR_SORTED.index(aa) for aa in aa_str])
     except ValueError:
         print(f"Found an invalid amino acid in the string: {aa_str}")
         raise
@@ -70,7 +70,7 @@ def nt_idx_tensor_of_str(nt_str):
 def aa_idx_tensor_of_str(aa_str):
     """Return the indices of the amino acids in a string."""
     try:
-        return torch.tensor([TOKEN_STR_SORTED.index(aa) for aa in aa_str])
+        return torch.tensor([AA_TOKEN_STR_SORTED.index(aa) for aa in aa_str])
     except ValueError:
         print(f"Found an invalid amino acid in the string: {aa_str}")
         raise
@@ -137,7 +137,7 @@ def translate_sequences(nt_sequences):
 def aa_index_of_codon(codon):
     """Return the index of the amino acid encoded by a codon."""
     aa = translate_sequence(codon)
-    return TOKEN_STR_SORTED.index(aa)
+    return AA_TOKEN_STR_SORTED.index(aa)
 
 
 def generic_mutation_frequency(ambig_symb, parent, child):
@@ -187,12 +187,12 @@ def pcp_criteria_check(parent, child, max_mut_freq=0.3):
 def generate_codon_aa_indicator_matrix():
     """Generate a matrix that maps codons (rows) to amino acids (columns)."""
 
-    matrix = np.zeros((len(CODONS), len(TOKEN_STR_SORTED)))
+    matrix = np.zeros((len(CODONS), len(AA_TOKEN_STR_SORTED)))
 
     for i, codon in enumerate(CODONS):
         try:
             aa = translate_sequences([codon])[0]
-            aa_idx = TOKEN_STR_SORTED.index(aa)
+            aa_idx = AA_TOKEN_STR_SORTED.index(aa)
             matrix[i, aa_idx] = 1
         except ValueError:  # Handle STOP codon
             pass

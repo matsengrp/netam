@@ -1,11 +1,14 @@
 import pytest
+import pandas as pd
 import numpy as np
 import torch
 from Bio.Seq import Seq
 from Bio.Data import CodonTable
 from netam.sequences import (
+    RESERVED_TOKENS,
     AA_STR_SORTED,
-    TOKEN_STR_SORTED,
+    TOKEN_REGEX,
+    AA_TOKEN_STR_SORTED,
     CODONS,
     CODON_AA_INDICATOR_MATRIX,
     aa_onehot_tensor_of_str,
@@ -18,14 +21,18 @@ from netam.sequences import (
 def test_token_order():
     # If we always add additional tokens to the end, then converting to indices
     # will not be affected when we have a proper aa string.
-    assert TOKEN_STR_SORTED[:len(AA_STR_SORTED)] == AA_STR_SORTED
+    assert AA_TOKEN_STR_SORTED[:len(AA_STR_SORTED)] == AA_STR_SORTED
 
+
+def test_token_replace():
+    df = pd.DataFrame({"seq": ["AGCGTC" + token for token in AA_TOKEN_STR_SORTED]})
+    newseqs = df["seq"].str.replace(TOKEN_REGEX, "N", regex=True)
+    for seq, nseq in zip(df["seq"], newseqs):
+        for token in RESERVED_TOKENS:
+            nseq = nseq.replace(token, "N")
+        assert nseq == seq
 
 # TODO implement these tests
-def test_token_replace():
-    assert False
-
-
 def test_token_mask():
     assert False
 
