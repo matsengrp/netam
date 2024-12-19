@@ -227,7 +227,8 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
 
 
 class DXSMBurrito(framework.Burrito, ABC):
-    prefix = "dxsm"
+    # Not defining model_type here; instead defining it in subclasses.
+    # This will raise an error if we aren't using a subclass.
 
     def _find_optimal_branch_length(
         self,
