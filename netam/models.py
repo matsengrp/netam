@@ -10,7 +10,6 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from netam.hit_class import apply_multihit_correction
-from netam.protein_embedders import ESMEmbedder
 from netam.common import (
     MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
