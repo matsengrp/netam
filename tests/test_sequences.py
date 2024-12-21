@@ -15,6 +15,8 @@ from netam.sequences import (
     nt_idx_array_of_str,
     nt_subs_indicator_tensor_of,
     translate_sequences,
+    token_mask_of_aa_idxs,
+    aa_idx_tensor_of_str,
 )
 
 
@@ -32,9 +34,15 @@ def test_token_replace():
             nseq = nseq.replace(token, "N")
         assert nseq == seq
 
-# TODO implement these tests
+
 def test_token_mask():
-    assert False
+    sample_aa_seq = "QYX^QC"
+    mask = token_mask_of_aa_idxs(aa_idx_tensor_of_str(sample_aa_seq))
+    for aa, mval in zip(sample_aa_seq, mask):
+        if aa in RESERVED_TOKENS:
+            assert mval
+        else:
+            assert not mval
 
 
 def test_nucleotide_indices_of_codon():
