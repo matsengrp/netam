@@ -10,8 +10,8 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from netam.hit_class import apply_multihit_correction
+from netam.sequences import MAX_AA_TOKEN_IDX
 from netam.common import (
-    MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
     PositionalEncoding,
     generate_kmers,
@@ -622,7 +622,7 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
         self.nhead = nhead
         self.dim_feedforward = dim_feedforward
         self.pos_encoder = PositionalEncoding(self.d_model, dropout_prob)
-        self.amino_acid_embedding = nn.Embedding(MAX_AMBIG_AA_IDX + 1, self.d_model)
+        self.amino_acid_embedding = nn.Embedding(MAX_AA_TOKEN_IDX + 1, self.d_model)
         self.encoder_layer = nn.TransformerEncoderLayer(
             d_model=self.d_model,
             nhead=nhead,

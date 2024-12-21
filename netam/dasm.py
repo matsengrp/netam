@@ -35,13 +35,17 @@ class DASMDataset(DXSMDataset):
                 multihit_model = None
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
+            # TODO handle this some other way
             parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
             parent_len = len(nt_parent)
 
             mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
             nt_csps = nt_csps[:parent_len, :]
             nt_mask = mask.repeat_interleave(3)[: len(nt_parent)]
-            molevol.check_csps(parent_idxs[nt_mask], nt_csps[: len(nt_parent)][nt_mask])
+            molevol.check_csps(
+                parent_idxs[nt_mask],
+                nt_csps[: len(nt_parent)][nt_mask]
+            )
 
             neutral_aa_probs = molevol.neutral_aa_probs(
                 parent_idxs.reshape(-1, 3),
@@ -139,7 +143,8 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
             raise ValueError(
                 f"log_neutral_aa_probs has non-finite values at relevant positions: {log_neutral_aa_probs[mask]}"
             )
-        log_selection_factors = self.model(aa_parents_idxs, mask)
+        keep_token_mask = mask | sequences.token_mask_of_aa_idxs(aa_parents_idxs)
+        log_selection_factors = self.model(aa_parents_idxs, keep_token_mask)
         return log_neutral_aa_probs, log_selection_factors
 
     def predictions_of_pair(self, log_neutral_aa_probs, log_selection_factors):
