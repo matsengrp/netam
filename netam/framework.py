@@ -363,29 +363,36 @@ def join_chains(pcp_df):
     heavy, or to the left of light.
     """
     cols = pcp_df.columns
-    if "parent_h" in cols and "parent_l" in cols:
-        assert "child_h" in cols and "child_l" in cols, "child_h or child_l columns missing!"
-        pcp_df["parent"] = pcp_df["parent_h"] + "^^^" + pcp_df["parent_l"]
-        pcp_df["child"] = pcp_df["child_h"] + "^^^" + pcp_df["child_l"]
-    elif "parent_h" in cols and "parent_l" not in cols:
+    # Look for heavy chain
+    if "parent_h" in cols:
         assert "child_h" in cols, "child_h column missing!"
-        pcp_df["parent"] = pcp_df["parent_h"] + "^^^"
-        pcp_df["child"] = pcp_df["child_h"] + "^^^"
-    elif "parent_h" not in cols and "parent_l" in cols:
-        if "parent" in cols:
-            warn("Both parent and parent_l columns found. Using only parent_l. "
-                 "To use parent as heavy chain, rename to parent_h.")
-        assert "child_l" in cols, "child_l column missing!"
-        pcp_df["parent"] = "^^^" + pcp_df["parent_l"]
-        pcp_df["child"] = "^^^" + pcp_df["child_l"]
+        assert "v_gene_h" in cols, "v_gene_h column missing!"
     elif "parent" in cols:
         assert "child" in cols, "child column missing!"
-        # We assume that this is the heavy chain.
-        pcp_df["parent"] += "^^^"
-        pcp_df["child"] += "^^^"
+        assert "v_gene" in cols, "v_gene column missing!"
+        pcp_df["parent_h"] = pcp_df["parent"]
+        pcp_df["child_h"] = pcp_df["child"]
+        pcp_df["v_gene_h"] = pcp_df["v_gene"]
     else:
-        raise ValueError("Could not find parent and child columns.")
-    pcp_df.drop(columns=["parent_h", "parent_l", "child_h", "child_l"], inplace=True, errors="ignore")
+        pcp_df["parent_h"] = ""
+        pcp_df["child_h"] = ""
+        pcp_df["v_gene_h"] = "N/A"
+    # Look for light chain
+    if "parent_l" in cols:
+        assert "child_l" in cols, "child_l column missing!"
+        assert "v_gene_l" in cols, "v_gene_l column missing!"
+    else:
+        pcp_df["parent_l"] = ""
+        pcp_df["child_l"] = ""
+        pcp_df["v_gene_l"] = "N/A"
+
+    if (pcp_df["parent_h"].str.len() + pcp_df["parent_l"].str.len()).min() < 3:
+        raise ValueError("At least one PCP has fewer than three nucleotides.")
+
+    pcp_df["parent"] = pcp_df["parent_h"] + "^^^" + pcp_df["parent_l"]
+    pcp_df["child"] = pcp_df["child_h"] + "^^^" + pcp_df["child_l"]
+
+    pcp_df.drop(columns=["parent_h", "parent_l", "child_h", "child_l", "v_gene"], inplace=True, errors="ignore")
     return pcp_df
 
 
@@ -405,23 +412,15 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
         .rename(columns={"index": "orig_pcp_idx"})
     )
     pcp_df = join_chains(pcp_df)
-    if not ("parent" in pcp_df.columns and "child" in pcp_df.columns):
-        if "parent_h" in pcp_df.columns and "parent_l" in pcp_df.columns:
-            pcp_df["parent"] = pcp_df["parent_h"]
-            pcp_df["child"] = pcp_df["child_h"]
-            pcp_df.drop(columns=["parent_h", "parent_l", "child_h", "child_l"], inplace=True, errors="ignore")
-        else:
-            raise ValueError(
-                "Could not find parent and child columns. "
-            )
 
-    # figure out what to do here: TODO this is only needed for oe plotting, but
-    # the way its set up will fail without a helpful message.
-    if "v_gene" in pcp_df.columns:
-        pcp_df["v_family"] = pcp_df["v_gene"].str.split("-").str[0]
-        if chosen_v_families is not None:
-            chosen_v_families = set(chosen_v_families)
-            pcp_df = pcp_df[pcp_df["v_family"].isin(chosen_v_families)]
+    pcp_df["v_family_h"] = pcp_df["v_gene_h"].str.split("-").str[0]
+    pcp_df["v_family_l"] = pcp_df["v_gene_l"].str.split("-").str[0]
+    if chosen_v_families is not None:
+        chosen_v_families = set(chosen_v_families)
+        # TODO Does this seem like the right thing to do?
+        pcp_df = pcp_df[
+            pcp_df["v_family_h"].isin(chosen_v_families) | pcp_df["v_family_l"].isin(chosen_v_families)
+        ]
     if sample_count is not None:
         pcp_df = pcp_df.sample(sample_count)
     pcp_df.reset_index(drop=True, inplace=True)
@@ -429,8 +428,7 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
 
 
 def add_shm_model_outputs_to_pcp_df(pcp_df, crepe):
-    # TODO what happens when one of these is empty? or if there's no split?
-    split_parents = pcp_df["parent"].copy().str.split(pat="^^^", expand=True, regex=False)
+    split_parents = pcp_df["parent"].str.split(pat="^^^", expand=True, regex=False)
     h_parents = split_parents[0] + "NNN"
     l_parents = split_parents[1]
 
