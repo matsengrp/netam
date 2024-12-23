@@ -19,7 +19,7 @@ from netam.sequences import (
     TOKEN_TRANSLATIONS,
     BASES,
     BASES_AND_N_TO_INDEX,
-    AA_TOKEN_STR_SORTED
+    AA_TOKEN_STR_SORTED,
 )
 
 BIG = 1e9
@@ -104,8 +104,8 @@ def codon_mask_tensor_of(nt_parent, *other_nt_seqs, aa_length=None):
     """Return a mask tensor indicating codons which contain at least one N.
 
     Codons beyond the length of the sequence are masked. If other_nt_seqs are provided,
-    the "and" mask will be computed for all sequences.
-    Codons containing marker tokens are also masked.
+    the "and" mask will be computed for all sequences. Codons containing marker tokens
+    are also masked.
     """
     if aa_length is None:
         aa_length = len(nt_parent) // 3

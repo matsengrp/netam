@@ -358,9 +358,9 @@ def join_chains(pcp_df):
 
     Make a parent column that is the parent_h + "^^^" + parent_l, and same for child.
 
-    If parent_h and parent_l are not present, then we assume that the parent is the heavy chain.
-    If only one of parent_h or parent_l is present, then we place the ^^^ padding to the right of
-    heavy, or to the left of light.
+    If parent_h and parent_l are not present, then we assume that the parent is the
+    heavy chain. If only one of parent_h or parent_l is present, then we place the ^^^
+    padding to the right of heavy, or to the left of light.
     """
     cols = pcp_df.columns
     # Look for heavy chain
@@ -392,7 +392,11 @@ def join_chains(pcp_df):
     pcp_df["parent"] = pcp_df["parent_h"] + "^^^" + pcp_df["parent_l"]
     pcp_df["child"] = pcp_df["child_h"] + "^^^" + pcp_df["child_l"]
 
-    pcp_df.drop(columns=["parent_h", "parent_l", "child_h", "child_l", "v_gene"], inplace=True, errors="ignore")
+    pcp_df.drop(
+        columns=["parent_h", "parent_l", "child_h", "child_l", "v_gene"],
+        inplace=True,
+        errors="ignore",
+    )
     return pcp_df
 
 
@@ -419,7 +423,8 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
         chosen_v_families = set(chosen_v_families)
         # TODO Does this seem like the right thing to do?
         pcp_df = pcp_df[
-            pcp_df["v_family_h"].isin(chosen_v_families) | pcp_df["v_family_l"].isin(chosen_v_families)
+            pcp_df["v_family_h"].isin(chosen_v_families)
+            | pcp_df["v_family_l"].isin(chosen_v_families)
         ]
     if sample_count is not None:
         pcp_df = pcp_df.sample(sample_count)
@@ -434,8 +439,12 @@ def add_shm_model_outputs_to_pcp_df(pcp_df, crepe):
 
     h_rates, h_csps = trimmed_shm_model_outputs_of_crepe(crepe, h_parents)
     l_rates, l_csps = trimmed_shm_model_outputs_of_crepe(crepe, l_parents)
-    pcp_df["nt_rates"] = [torch.cat([h_rate, l_rate], dim=0) for h_rate, l_rate in zip(h_rates, l_rates)]
-    pcp_df["nt_csps"] = [torch.cat([h_csp, l_csp], dim=0) for h_csp, l_csp in zip(h_csps, l_csps)]
+    pcp_df["nt_rates"] = [
+        torch.cat([h_rate, l_rate], dim=0) for h_rate, l_rate in zip(h_rates, l_rates)
+    ]
+    pcp_df["nt_csps"] = [
+        torch.cat([h_csp, l_csp], dim=0) for h_csp, l_csp in zip(h_csps, l_csps)
+    ]
     return pcp_df
 
 

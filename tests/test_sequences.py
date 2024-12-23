@@ -23,7 +23,7 @@ from netam.sequences import (
 def test_token_order():
     # If we always add additional tokens to the end, then converting to indices
     # will not be affected when we have a proper aa string.
-    assert AA_TOKEN_STR_SORTED[:len(AA_STR_SORTED)] == AA_STR_SORTED
+    assert AA_TOKEN_STR_SORTED[: len(AA_STR_SORTED)] == AA_STR_SORTED
 
 
 def test_token_replace():

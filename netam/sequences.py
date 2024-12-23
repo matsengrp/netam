@@ -20,12 +20,12 @@ BASES_AND_N_TO_INDEX = {base: idx for idx, base in enumerate(NT_STR_SORTED + "N"
 # ambiguous must remain last
 AA_TOKEN_STR_SORTED = AA_STR_SORTED + RESERVED_TOKENS + "X"
 
-RESERVED_TOKEN_AA_BOUNDS = (min(AA_TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS), max(AA_TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS))
+RESERVED_TOKEN_AA_BOUNDS = (
+    min(AA_TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS),
+    max(AA_TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS),
+)
 MAX_AA_TOKEN_IDX = len(AA_TOKEN_STR_SORTED) - 1
-CODONS = [
-    "".join(codon_list)
-    for codon_list in itertools.product(BASES, repeat=3)
-]
+CODONS = ["".join(codon_list) for codon_list in itertools.product(BASES, repeat=3)]
 STOP_CODONS = ["TAA", "TAG", "TGA"]
 # Each token in RESERVED_TOKENS will appear once in aa strings, and three times
 # in nt strings.
@@ -33,6 +33,7 @@ TOKEN_TRANSLATIONS = {token * 3: token for token in RESERVED_TOKENS}
 
 # Create a regex pattern
 TOKEN_REGEX = f"[{''.join(map(re.escape, list(RESERVED_TOKENS)))}]"
+
 
 def nt_idx_array_of_str(nt_str):
     """Return the indices of the nucleotides in a string."""
@@ -42,13 +43,6 @@ def nt_idx_array_of_str(nt_str):
         print(f"Found an invalid nucleotide in the string: {nt_str}")
         raise
 
-def aa_idx_array_of_str(aa_str):
-    """Return the indices of the amino acids in a string."""
-    try:
-        return np.array([AA_TOKEN_STR_SORTED.index(aa) for aa in aa_str])
-    except ValueError:
-        print(f"Found an invalid amino acid in the string: {aa_str}")
-        raise
 
 def aa_idx_array_of_str(aa_str):
     """Return the indices of the amino acids in a string."""
@@ -57,6 +51,16 @@ def aa_idx_array_of_str(aa_str):
     except ValueError:
         print(f"Found an invalid amino acid in the string: {aa_str}")
         raise
+
+
+def aa_idx_array_of_str(aa_str):
+    """Return the indices of the amino acids in a string."""
+    try:
+        return np.array([AA_TOKEN_STR_SORTED.index(aa) for aa in aa_str])
+    except ValueError:
+        print(f"Found an invalid amino acid in the string: {aa_str}")
+        raise
+
 
 def nt_idx_tensor_of_str(nt_str):
     """Return the indices of the nucleotides in a string."""
@@ -124,7 +128,9 @@ def translate_codon(codon):
 def translate_sequence(nt_sequence):
     if len(nt_sequence) % 3 != 0:
         raise ValueError(f"The sequence '{nt_sequence}' is not a multiple of 3.")
-    aa_seq = "".join(translate_codon(nt_sequence[i: i + 3]) for i in range(0, len(nt_sequence), 3))
+    aa_seq = "".join(
+        translate_codon(nt_sequence[i : i + 3]) for i in range(0, len(nt_sequence), 3)
+    )
     if "*" in aa_seq:
         raise ValueError(f"The sequence '{nt_sequence}' contains a stop codon.")
     return aa_seq
@@ -237,6 +243,7 @@ def set_wt_to_nan(predictions: torch.Tensor, aa_sequence: str) -> torch.Tensor:
 
 
 def token_mask_of_aa_idxs(aa_idxs: torch.Tensor) -> torch.Tensor:
-    """Return a mask indicating which positions in an amino acid sequence contain special indicator tokens"""
+    """Return a mask indicating which positions in an amino acid sequence contain
+    special indicator tokens."""
     min_idx, max_idx = RESERVED_TOKEN_AA_BOUNDS
     return (aa_idxs <= max_idx) & (aa_idxs >= min_idx)
