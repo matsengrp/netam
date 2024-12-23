@@ -44,7 +44,6 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         branch_lengths: torch.Tensor,
         multihit_model=None,
     ):
-        # TODO test this replacement
         self.nt_parents = nt_parents.str.replace(TOKEN_REGEX, "N", regex=True)
         self.nt_children = nt_children.str.replace(TOKEN_REGEX, "N", regex=True)
         self.nt_ratess = nt_ratess
@@ -300,10 +299,9 @@ class DXSMBurrito(framework.Burrito, ABC):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         worker_count = min(mp.cpu_count() // 2, 10)
-        # TODO
-        # The following can be used when one wants a better traceback.
-        burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
-        return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
+        # # The following can be used when one wants a better traceback.
+        # burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
+        # return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
         our_optimize_branch_length = partial(
             worker_optimize_branch_length,
             self.__class__,

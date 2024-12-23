@@ -35,7 +35,6 @@ class DASMDataset(DXSMDataset):
                 multihit_model = None
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
-            # TODO handle this some other way
             parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
             parent_len = len(nt_parent)
 

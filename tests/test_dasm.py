@@ -17,9 +17,10 @@ from netam.dasm import (
 
 
 @pytest.fixture(scope="module")
-def dasm_burrito(pcp_df):
+def dasm_burrito(pcp_df_paired):
     force_spawn()
     """Fixture that returns the DNSM Burrito object."""
+    pcp_df = pcp_df_paired
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
     train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(pcp_df)
