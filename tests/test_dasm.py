@@ -8,6 +8,7 @@ from netam.framework import (
     crepe_exists,
     load_crepe,
 )
+from netam.sequences import MAX_AA_TOKEN_IDX
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dasm import (
     DASMBurrito,
@@ -17,10 +18,9 @@ from netam.dasm import (
 
 
 @pytest.fixture(scope="module")
-def dasm_burrito(pcp_df_paired):
+def dasm_burrito(pcp_df):
     force_spawn()
     """Fixture that returns the DNSM Burrito object."""
-    pcp_df = pcp_df_paired
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
     train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(pcp_df)
@@ -30,7 +30,7 @@ def dasm_burrito(pcp_df_paired):
         d_model_per_head=4,
         dim_feedforward=256,
         layer_count=2,
-        output_dim=20,
+        output_dim=MAX_AA_TOKEN_IDX + 1,
     )
 
     burrito = DASMBurrito(

@@ -33,6 +33,6 @@ def test_codon_mask_tensor_of():
 
 
 def test_aa_strs_from_idx_tensor():
-    aa_idx_tensor = torch.tensor([[0, 1, 2, 3, 20], [4, 5, 19, 20, 20]])
+    aa_idx_tensor = torch.tensor([[0, 1, 2, 3, 20, 21], [4, 5, 19, 21, 21, 21]])
     aa_strings = aa_strs_from_idx_tensor(aa_idx_tensor)
-    assert aa_strings == ["ACDE", "FGY"]
+    assert aa_strings == ["ACDE^", "FGY"]

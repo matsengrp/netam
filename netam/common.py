@@ -20,6 +20,7 @@ from netam.sequences import (
     BASES,
     BASES_AND_N_TO_INDEX,
     AA_TOKEN_STR_SORTED,
+    AA_STR_SORTED,
 )
 
 BIG = 1e9

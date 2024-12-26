@@ -31,7 +31,7 @@ def test_token_replace():
     newseqs = df["seq"].str.replace(TOKEN_REGEX, "N", regex=True)
     for seq, nseq in zip(df["seq"], newseqs):
         for token in RESERVED_TOKENS:
-            nseq = nseq.replace(token, "N")
+            seq = seq.replace(token, "N")
         assert nseq == seq
 
 
