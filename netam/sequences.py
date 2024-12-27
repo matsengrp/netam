@@ -17,7 +17,8 @@ RESERVED_TOKENS = "^"
 
 NT_STR_SORTED = "".join(BASES)
 BASES_AND_N_TO_INDEX = {base: idx for idx, base in enumerate(NT_STR_SORTED + "N")}
-# ambiguous must remain last
+# ambiguous must remain last. It is assumed elsewhere that the max index
+# denotes the ambiguous base
 AA_TOKEN_STR_SORTED = AA_STR_SORTED + RESERVED_TOKENS + "X"
 
 RESERVED_TOKEN_AA_BOUNDS = (
@@ -29,10 +30,10 @@ CODONS = ["".join(codon_list) for codon_list in itertools.product(BASES, repeat=
 STOP_CODONS = ["TAA", "TAG", "TGA"]
 # Each token in RESERVED_TOKENS will appear once in aa strings, and three times
 # in nt strings.
-TOKEN_TRANSLATIONS = {token * 3: token for token in RESERVED_TOKENS}
+RESERVED_TOKEN_TRANSLATIONS = {token * 3: token for token in RESERVED_TOKENS}
 
 # Create a regex pattern
-TOKEN_REGEX = f"[{''.join(map(re.escape, list(RESERVED_TOKENS)))}]"
+RESERVED_TOKEN_REGEX = f"[{''.join(map(re.escape, list(RESERVED_TOKENS)))}]"
 
 
 def nt_idx_array_of_str(nt_str):
@@ -119,8 +120,8 @@ def read_fasta_sequences(file_path):
 
 def translate_codon(codon):
     """Translate a codon to an amino acid."""
-    if codon in TOKEN_TRANSLATIONS:
-        return TOKEN_TRANSLATIONS[codon]
+    if codon in RESERVED_TOKEN_TRANSLATIONS:
+        return RESERVED_TOKEN_TRANSLATIONS[codon]
     else:
         return str(Seq(codon).translate())
 

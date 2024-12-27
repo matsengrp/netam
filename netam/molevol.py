@@ -444,7 +444,6 @@ def mutsel_log_pcp_probability_of(
     """
 
     assert len(parent) % 3 == 0
-    print(sel_matrix.shape)
     assert sel_matrix.shape == (len(parent) // 3, MAX_AA_TOKEN_IDX + 1)
 
     parent_idxs = sequences.nt_idx_tensor_of_str(parent)

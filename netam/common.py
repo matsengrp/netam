@@ -16,7 +16,7 @@ import multiprocessing as mp
 from netam.sequences import (
     iter_codons,
     apply_aa_mask_to_nt_sequence,
-    TOKEN_TRANSLATIONS,
+    RESERVED_TOKEN_TRANSLATIONS,
     BASES,
     BASES_AND_N_TO_INDEX,
     AA_TOKEN_STR_SORTED,
@@ -95,7 +95,7 @@ def _consider_codon(codon):
     """Return False if codon should be masked, True otherwise."""
     if "N" in codon:
         return False
-    elif codon in TOKEN_TRANSLATIONS:
+    elif codon in RESERVED_TOKEN_TRANSLATIONS:
         return False
     else:
         return True

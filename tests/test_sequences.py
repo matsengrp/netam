@@ -7,7 +7,7 @@ from Bio.Data import CodonTable
 from netam.sequences import (
     RESERVED_TOKENS,
     AA_STR_SORTED,
-    TOKEN_REGEX,
+    RESERVED_TOKEN_REGEX,
     AA_TOKEN_STR_SORTED,
     CODONS,
     CODON_AA_INDICATOR_MATRIX,
@@ -28,7 +28,7 @@ def test_token_order():
 
 def test_token_replace():
     df = pd.DataFrame({"seq": ["AGCGTC" + token for token in AA_TOKEN_STR_SORTED]})
-    newseqs = df["seq"].str.replace(TOKEN_REGEX, "N", regex=True)
+    newseqs = df["seq"].str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
     for seq, nseq in zip(df["seq"], newseqs):
         for token in RESERVED_TOKENS:
             seq = seq.replace(token, "N")

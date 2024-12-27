@@ -433,12 +433,15 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
 
 
 def add_shm_model_outputs_to_pcp_df(pcp_df, crepe):
+    # Split parent heavy and light chains to apply neutral model separately
     split_parents = pcp_df["parent"].str.split(pat="^^^", expand=True, regex=False)
+    # To keep prediction aligned to joined h/l sequence, pad parent
     h_parents = split_parents[0] + "NNN"
     l_parents = split_parents[1]
 
     h_rates, h_csps = trimmed_shm_model_outputs_of_crepe(crepe, h_parents)
     l_rates, l_csps = trimmed_shm_model_outputs_of_crepe(crepe, l_parents)
+    # Join predictions
     pcp_df["nt_rates"] = [
         torch.cat([h_rate, l_rate], dim=0) for h_rate, l_rate in zip(h_rates, l_rates)
     ]

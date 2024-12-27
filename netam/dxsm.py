@@ -28,7 +28,7 @@ from netam.sequences import (
     apply_aa_mask_to_nt_sequence,
     nt_mutation_frequency,
     MAX_AA_TOKEN_IDX,
-    TOKEN_REGEX,
+    RESERVED_TOKEN_REGEX,
 )
 
 
@@ -44,8 +44,8 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         branch_lengths: torch.Tensor,
         multihit_model=None,
     ):
-        self.nt_parents = nt_parents.str.replace(TOKEN_REGEX, "N", regex=True)
-        self.nt_children = nt_children.str.replace(TOKEN_REGEX, "N", regex=True)
+        self.nt_parents = nt_parents.str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
+        self.nt_children = nt_children.str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
         self.nt_ratess = nt_ratess
         self.nt_cspss = nt_cspss
         self.multihit_model = copy.deepcopy(multihit_model)
