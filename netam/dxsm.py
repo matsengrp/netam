@@ -45,7 +45,9 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         multihit_model=None,
     ):
         self.nt_parents = nt_parents.str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
-        self.nt_children = nt_children.str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
+        self.nt_children = nt_children.str.replace(
+            RESERVED_TOKEN_REGEX, "N", regex=True
+        )
         self.nt_ratess = nt_ratess
         self.nt_cspss = nt_cspss
         self.multihit_model = copy.deepcopy(multihit_model)
