@@ -54,15 +54,6 @@ def aa_idx_array_of_str(aa_str):
         raise
 
 
-def aa_idx_array_of_str(aa_str):
-    """Return the indices of the amino acids in a string."""
-    try:
-        return np.array([AA_TOKEN_STR_SORTED.index(aa) for aa in aa_str])
-    except ValueError:
-        print(f"Found an invalid amino acid in the string: {aa_str}")
-        raise
-
-
 def nt_idx_tensor_of_str(nt_str):
     """Return the indices of the nucleotides in a string."""
     try:

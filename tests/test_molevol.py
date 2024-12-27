@@ -7,7 +7,6 @@ from netam import pretrained
 from netam.sequences import (
     nt_idx_tensor_of_str,
     translate_sequence,
-    AA_STR_SORTED,
     AA_TOKEN_STR_SORTED,
     CODONS,
     NT_STR_SORTED,
