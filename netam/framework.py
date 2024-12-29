@@ -22,12 +22,12 @@ from netam.common import (
     optimizer_of_name,
     tensor_to_np_if_needed,
     BASES,
-    BASES_AND_N_TO_INDEX,
     BIG,
     VRC01_NT_SEQ,
     encode_sequences,
     parallelize_function,
 )
+from netam.sequences import BASES_AND_N_TO_INDEX
 from netam import models
 import netam.molevol as molevol
 
