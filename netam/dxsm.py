@@ -45,6 +45,8 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         multihit_model=None,
     ):
         self.nt_parents = nt_parents.str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
+        # We will replace reserved tokens with Ns but use the unmodified
+        # originals for translation and mask creation.
         self.nt_children = nt_children.str.replace(
             RESERVED_TOKEN_REGEX, "N", regex=True
         )

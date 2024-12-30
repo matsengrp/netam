@@ -420,10 +420,9 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
     pcp_df["v_family_l"] = pcp_df["v_gene_l"].str.split("-").str[0]
     if chosen_v_families is not None:
         chosen_v_families = set(chosen_v_families)
-        # TODO Does this seem like the right thing to do?
         pcp_df = pcp_df[
             pcp_df["v_family_h"].isin(chosen_v_families)
-            | pcp_df["v_family_l"].isin(chosen_v_families)
+            & pcp_df["v_family_l"].isin(chosen_v_families)
         ]
     if sample_count is not None:
         pcp_df = pcp_df.sample(sample_count)
