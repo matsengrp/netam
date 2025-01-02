@@ -1,17 +1,48 @@
 import pytest
+import pandas as pd
 import numpy as np
 import torch
 from Bio.Seq import Seq
 from Bio.Data import CodonTable
 from netam.sequences import (
+    RESERVED_TOKENS,
     AA_STR_SORTED,
+    RESERVED_TOKEN_REGEX,
+    AA_TOKEN_STR_SORTED,
     CODONS,
     CODON_AA_INDICATOR_MATRIX,
     aa_onehot_tensor_of_str,
     nt_idx_array_of_str,
     nt_subs_indicator_tensor_of,
     translate_sequences,
+    token_mask_of_aa_idxs,
+    aa_idx_tensor_of_str,
 )
+
+
+def test_token_order():
+    # If we always add additional tokens to the end, then converting to indices
+    # will not be affected when we have a proper aa string.
+    assert AA_TOKEN_STR_SORTED[: len(AA_STR_SORTED)] == AA_STR_SORTED
+
+
+def test_token_replace():
+    df = pd.DataFrame({"seq": ["AGCGTC" + token for token in AA_TOKEN_STR_SORTED]})
+    newseqs = df["seq"].str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
+    for seq, nseq in zip(df["seq"], newseqs):
+        for token in RESERVED_TOKENS:
+            seq = seq.replace(token, "N")
+        assert nseq == seq
+
+
+def test_token_mask():
+    sample_aa_seq = "QYX^QC"
+    mask = token_mask_of_aa_idxs(aa_idx_tensor_of_str(sample_aa_seq))
+    for aa, mval in zip(sample_aa_seq, mask):
+        if aa in RESERVED_TOKENS:
+            assert mval
+        else:
+            assert not mval
 
 
 def test_nucleotide_indices_of_codon():

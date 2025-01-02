@@ -7,7 +7,7 @@ from netam import pretrained
 from netam.sequences import (
     nt_idx_tensor_of_str,
     translate_sequence,
-    AA_STR_SORTED,
+    AA_TOKEN_STR_SORTED,
     CODONS,
     NT_STR_SORTED,
 )
@@ -114,7 +114,7 @@ def test_check_csps():
 def iterative_aaprob_of_mut_and_sub(parent_codon, mut_probs, csps):
     """Original version of codon_to_aa_probabilities, used for testing."""
     aa_probs = {}
-    for aa in AA_STR_SORTED:
+    for aa in AA_TOKEN_STR_SORTED:
         aa_probs[aa] = 0.0
 
     # iterate through all possible child codons
@@ -139,7 +139,7 @@ def iterative_aaprob_of_mut_and_sub(parent_codon, mut_probs, csps):
     # since probabilities to STOP codon are dropped
     psum = sum(aa_probs.values())
 
-    return torch.tensor([aa_probs[aa] / psum for aa in AA_STR_SORTED])
+    return torch.tensor([aa_probs[aa] / psum for aa in AA_TOKEN_STR_SORTED])
 
 
 def test_aaprob_of_mut_and_sub():

@@ -139,7 +139,10 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
             raise ValueError(
                 f"log_neutral_aa_probs has non-finite values at relevant positions: {log_neutral_aa_probs[mask]}"
             )
-        log_selection_factors = self.model(aa_parents_idxs, mask)
+        # We need the model to see special tokens here. For every other purpose
+        # they are masked out.
+        keep_token_mask = mask | sequences.token_mask_of_aa_idxs(aa_parents_idxs)
+        log_selection_factors = self.model(aa_parents_idxs, keep_token_mask)
         return log_neutral_aa_probs, log_selection_factors
 
     def predictions_of_pair(self, log_neutral_aa_probs, log_selection_factors):

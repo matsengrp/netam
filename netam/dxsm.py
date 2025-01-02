@@ -15,7 +15,6 @@ import pandas as pd
 from tqdm import tqdm
 
 from netam.common import (
-    MAX_AMBIG_AA_IDX,
     aa_idx_tensor_of_str_ambig,
     stack_heterogeneous,
     codon_mask_tensor_of,
@@ -28,6 +27,8 @@ from netam.sequences import (
     translate_sequences,
     apply_aa_mask_to_nt_sequence,
     nt_mutation_frequency,
+    MAX_AA_TOKEN_IDX,
+    RESERVED_TOKEN_REGEX,
 )
 
 
@@ -43,8 +44,12 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         branch_lengths: torch.Tensor,
         multihit_model=None,
     ):
-        self.nt_parents = nt_parents
-        self.nt_children = nt_children
+        self.nt_parents = nt_parents.str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
+        # We will replace reserved tokens with Ns but use the unmodified
+        # originals for translation and mask creation.
+        self.nt_children = nt_children.str.replace(
+            RESERVED_TOKEN_REGEX, "N", regex=True
+        )
         self.nt_ratess = nt_ratess
         self.nt_cspss = nt_cspss
         self.multihit_model = copy.deepcopy(multihit_model)
@@ -56,14 +61,16 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         assert len(self.nt_parents) == len(self.nt_children)
         pcp_count = len(self.nt_parents)
 
-        aa_parents = translate_sequences(self.nt_parents)
-        aa_children = translate_sequences(self.nt_children)
+        # Important to use the unmodified versions of nt_parents and
+        # nt_children so they still contain special tokens.
+        aa_parents = translate_sequences(nt_parents)
+        aa_children = translate_sequences(nt_children)
         self.max_aa_seq_len = max(len(seq) for seq in aa_parents)
         # We have sequences of varying length, so we start with all tensors set
         # to the ambiguous amino acid, and then will fill in the actual values
         # below.
         self.aa_parents_idxss = torch.full(
-            (pcp_count, self.max_aa_seq_len), MAX_AMBIG_AA_IDX
+            (pcp_count, self.max_aa_seq_len), MAX_AA_TOKEN_IDX
         )
         self.aa_children_idxss = self.aa_parents_idxss.clone()
         self.aa_subs_indicators = torch.zeros((pcp_count, self.max_aa_seq_len))
@@ -90,7 +97,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             )
 
         assert torch.all(self.masks.sum(dim=1) > 0)
-        assert torch.max(self.aa_parents_idxss) <= MAX_AMBIG_AA_IDX
+        assert torch.max(self.aa_parents_idxss) <= MAX_AA_TOKEN_IDX
 
         self._branch_lengths = branch_lengths
         self.update_neutral_probs()
@@ -296,9 +303,11 @@ class DXSMBurrito(framework.Burrito, ABC):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         worker_count = min(mp.cpu_count() // 2, 10)
-        # # The following can be used when one wants a better traceback.
+        # The following can be used when one wants a better traceback.
         # burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
-        # return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
+        # return burrito.serial_find_optimal_branch_lengths(
+        #     dataset, **optimization_kwargs
+        # )
         our_optimize_branch_length = partial(
             worker_optimize_branch_length,
             self.__class__,

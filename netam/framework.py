@@ -22,12 +22,12 @@ from netam.common import (
     optimizer_of_name,
     tensor_to_np_if_needed,
     BASES,
-    BASES_AND_N_TO_INDEX,
     BIG,
     VRC01_NT_SEQ,
     encode_sequences,
     parallelize_function,
 )
+from netam.sequences import BASES_AND_N_TO_INDEX
 from netam import models
 import netam.molevol as molevol
 
@@ -352,21 +352,78 @@ def trimmed_shm_model_outputs_of_crepe(crepe, parents):
     return trimmed_rates, trimmed_csps
 
 
+def join_chains(pcp_df):
+    """Join the parent and child chains in the pcp_df.
+
+    Make a parent column that is the parent_h + "^^^" + parent_l, and same for child.
+
+    If parent_h and parent_l are not present, then we assume that the parent is the
+    heavy chain. If only one of parent_h or parent_l is present, then we place the ^^^
+    padding to the right of heavy, or to the left of light.
+    """
+    cols = pcp_df.columns
+    # Look for heavy chain
+    if "parent_h" in cols:
+        assert "child_h" in cols, "child_h column missing!"
+        assert "v_gene_h" in cols, "v_gene_h column missing!"
+    elif "parent" in cols:
+        assert "child" in cols, "child column missing!"
+        assert "v_gene" in cols, "v_gene column missing!"
+        pcp_df["parent_h"] = pcp_df["parent"]
+        pcp_df["child_h"] = pcp_df["child"]
+        pcp_df["v_gene_h"] = pcp_df["v_gene"]
+    else:
+        pcp_df["parent_h"] = ""
+        pcp_df["child_h"] = ""
+        pcp_df["v_gene_h"] = "N/A"
+    # Look for light chain
+    if "parent_l" in cols:
+        assert "child_l" in cols, "child_l column missing!"
+        assert "v_gene_l" in cols, "v_gene_l column missing!"
+    else:
+        pcp_df["parent_l"] = ""
+        pcp_df["child_l"] = ""
+        pcp_df["v_gene_l"] = "N/A"
+
+    if (pcp_df["parent_h"].str.len() + pcp_df["parent_l"].str.len()).min() < 3:
+        raise ValueError("At least one PCP has fewer than three nucleotides.")
+
+    pcp_df["parent"] = pcp_df["parent_h"] + "^^^" + pcp_df["parent_l"]
+    pcp_df["child"] = pcp_df["child_h"] + "^^^" + pcp_df["child_l"]
+
+    pcp_df.drop(
+        columns=["parent_h", "parent_l", "child_h", "child_l", "v_gene"],
+        inplace=True,
+        errors="ignore",
+    )
+    return pcp_df
+
+
 def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
     """Load a PCP dataframe from a gzipped CSV file.
 
     `orig_pcp_idx` is the index column from the original file, even if we subset by
     sampling or by choosing V families.
+
+    If we will join the heavy and light chain sequences into a single
+    sequence starting with the heavy chain, using a `^^^` separator. If only heavy or light chain
+    sequence is present, this separator will be added to the appropriate side of the available sequence.
     """
     pcp_df = (
         pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0)
         .reset_index()
         .rename(columns={"index": "orig_pcp_idx"})
     )
-    pcp_df["v_family"] = pcp_df["v_gene"].str.split("-").str[0]
+    pcp_df = join_chains(pcp_df)
+
+    pcp_df["v_family_h"] = pcp_df["v_gene_h"].str.split("-").str[0]
+    pcp_df["v_family_l"] = pcp_df["v_gene_l"].str.split("-").str[0]
     if chosen_v_families is not None:
         chosen_v_families = set(chosen_v_families)
-        pcp_df = pcp_df[pcp_df["v_family"].isin(chosen_v_families)]
+        pcp_df = pcp_df[
+            pcp_df["v_family_h"].isin(chosen_v_families)
+            & pcp_df["v_family_l"].isin(chosen_v_families)
+        ]
     if sample_count is not None:
         pcp_df = pcp_df.sample(sample_count)
     pcp_df.reset_index(drop=True, inplace=True)
@@ -374,9 +431,21 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
 
 
 def add_shm_model_outputs_to_pcp_df(pcp_df, crepe):
-    rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent"])
-    pcp_df["nt_rates"] = rates
-    pcp_df["nt_csps"] = csps
+    # Split parent heavy and light chains to apply neutral model separately
+    split_parents = pcp_df["parent"].str.split(pat="^^^", expand=True, regex=False)
+    # To keep prediction aligned to joined h/l sequence, pad parent
+    h_parents = split_parents[0] + "NNN"
+    l_parents = split_parents[1]
+
+    h_rates, h_csps = trimmed_shm_model_outputs_of_crepe(crepe, h_parents)
+    l_rates, l_csps = trimmed_shm_model_outputs_of_crepe(crepe, l_parents)
+    # Join predictions
+    pcp_df["nt_rates"] = [
+        torch.cat([h_rate, l_rate], dim=0) for h_rate, l_rate in zip(h_rates, l_rates)
+    ]
+    pcp_df["nt_csps"] = [
+        torch.cat([h_csp, l_csp], dim=0) for h_csp, l_csp in zip(h_csps, l_csps)
+    ]
     return pcp_df
 
 

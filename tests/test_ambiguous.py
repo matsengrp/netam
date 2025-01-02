@@ -11,6 +11,7 @@ from netam.framework import (
     load_pcp_df,
     add_shm_model_outputs_to_pcp_df,
 )
+from netam.sequences import MAX_AA_TOKEN_IDX
 from netam import pretrained
 import random
 
@@ -122,7 +123,10 @@ def ambig_pcp_df():
     )
     # Apply the random N adding function to each row
     df[["parent", "child"]] = df.apply(
-        lambda row: randomize_with_ns(row["parent"], row["child"]),
+        lambda row: tuple(
+            seq + "^^^"
+            for seq in randomize_with_ns(row["parent"][:-3], row["child"][:-3])
+        ),
         axis=1,
         result_type="expand",
     )
@@ -166,7 +170,7 @@ def dasm_model():
         d_model_per_head=4,
         dim_feedforward=256,
         layer_count=2,
-        output_dim=20,
+        output_dim=MAX_AA_TOKEN_IDX + 1,
     )
 
 

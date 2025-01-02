@@ -8,6 +8,7 @@ from netam.framework import (
     crepe_exists,
     load_crepe,
 )
+from netam.sequences import MAX_AA_TOKEN_IDX
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dasm import (
     DASMBurrito,
@@ -29,7 +30,7 @@ def dasm_burrito(pcp_df):
         d_model_per_head=4,
         dim_feedforward=256,
         layer_count=2,
-        output_dim=20,
+        output_dim=MAX_AA_TOKEN_IDX + 1,
     )
 
     burrito = DASMBurrito(

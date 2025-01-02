@@ -13,15 +13,16 @@ import torch.optim as optim
 from torch import nn, Tensor
 import multiprocessing as mp
 
-from netam.sequences import iter_codons, apply_aa_mask_to_nt_sequence
+from netam.sequences import (
+    iter_codons,
+    apply_aa_mask_to_nt_sequence,
+    RESERVED_TOKEN_TRANSLATIONS,
+    BASES,
+    AA_TOKEN_STR_SORTED,
+)
 
 BIG = 1e9
 SMALL_PROB = 1e-6
-BASES = ["A", "C", "G", "T"]
-BASES_AND_N_TO_INDEX = {"A": 0, "C": 1, "G": 2, "T": 3, "N": 4}
-AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
-AA_STR_SORTED_AMBIG = AA_STR_SORTED + "X"
-MAX_AMBIG_AA_IDX = len(AA_STR_SORTED_AMBIG) - 1
 
 # I needed some sequence to use to normalize the rate of mutation in the SHM model.
 # So, I chose perhaps the most famous antibody sequence, VRC01:
@@ -65,7 +66,7 @@ def aa_idx_tensor_of_str_ambig(aa_str):
     character."""
     try:
         return torch.tensor(
-            [AA_STR_SORTED_AMBIG.index(aa) for aa in aa_str], dtype=torch.int
+            [AA_TOKEN_STR_SORTED.index(aa) for aa in aa_str], dtype=torch.int
         )
     except ValueError:
         print(f"Found an invalid amino acid in the string: {aa_str}")
@@ -88,17 +89,28 @@ def generic_mask_tensor_of(ambig_symb, seq_str, length=None):
     return mask
 
 
+def _consider_codon(codon):
+    """Return False if codon should be masked, True otherwise."""
+    if "N" in codon:
+        return False
+    elif codon in RESERVED_TOKEN_TRANSLATIONS:
+        return False
+    else:
+        return True
+
+
 def codon_mask_tensor_of(nt_parent, *other_nt_seqs, aa_length=None):
     """Return a mask tensor indicating codons which contain at least one N.
 
     Codons beyond the length of the sequence are masked. If other_nt_seqs are provided,
-    the "and" mask will be computed for all sequences
+    the "and" mask will be computed for all sequences. Codons containing marker tokens
+    are also masked.
     """
     if aa_length is None:
         aa_length = len(nt_parent) // 3
     sequences = (nt_parent,) + other_nt_seqs
     mask = [
-        all("N" not in codon for codon in codons)
+        all(_consider_codon(codon) for codon in codons)
         for codons in zip(*(iter_codons(sequence) for sequence in sequences))
     ]
     if len(mask) < aa_length:
@@ -114,7 +126,7 @@ def aa_strs_from_idx_tensor(idx_tensor):
 
     Args:
         idx_tensor (Tensor): A 2D tensor of shape (batch_size, seq_len) containing
-                             indices into AA_STR_SORTED_AMBIG.
+                             indices into AA_TOKEN_STR_SORTED.
 
     Returns:
         List[str]: A list of amino acid strings with trailing 'X's removed.
@@ -123,7 +135,7 @@ def aa_strs_from_idx_tensor(idx_tensor):
 
     aa_str_list = []
     for row in idx_tensor:
-        aa_str = "".join(AA_STR_SORTED_AMBIG[idx] for idx in row.tolist())
+        aa_str = "".join(AA_TOKEN_STR_SORTED[idx] for idx in row.tolist())
         aa_str_list.append(aa_str.rstrip("X"))
 
     return aa_str_list
