@@ -613,6 +613,7 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
         layer_count: int,
         dropout_prob: float = 0.5,
         output_dim: int = 1,
+        embedding_dim: int = MAX_AA_TOKEN_IDX + 1,
     ):
         super().__init__()
         # Note that d_model has to be divisible by nhead, so we make that
@@ -620,9 +621,10 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
         self.d_model_per_head = d_model_per_head
         self.d_model = d_model_per_head * nhead
         self.nhead = nhead
+        self.embedding_dim = embedding_dim
         self.dim_feedforward = dim_feedforward
         self.pos_encoder = PositionalEncoding(self.d_model, dropout_prob)
-        self.amino_acid_embedding = nn.Embedding(MAX_AA_TOKEN_IDX + 1, self.d_model)
+        self.amino_acid_embedding = nn.Embedding(self.embedding_dim, self.d_model)
         self.encoder_layer = nn.TransformerEncoderLayer(
             d_model=self.d_model,
             nhead=nhead,
@@ -642,6 +644,7 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
             "layer_count": self.encoder.num_layers,
             "dropout_prob": self.pos_encoder.dropout.p,
             "output_dim": self.linear.out_features,
+            "embedding_dim": self.embedding_dim,
         }
 
     def init_weights(self) -> None:
