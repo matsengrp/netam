@@ -15,7 +15,7 @@ from netam.dnsm import DNSMBurrito, DNSMDataset
 
 def test_aa_idx_tensor_of_str_ambig():
     input_seq = "ACX"
-    expected_output = torch.tensor([0, 1, MAX_AA_TOKEN_IDX], dtype=torch.int)
+    expected_output = torch.tensor([0, 1, 20], dtype=torch.int)
     output = aa_idx_tensor_of_str_ambig(input_seq)
     assert torch.equal(output, expected_output)
 

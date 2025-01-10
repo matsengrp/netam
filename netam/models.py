@@ -597,11 +597,21 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         mask = aa_mask_tensor_of(aa_str)
         mask = mask.to(self.device)
 
-        with torch.no_grad():
-            model_out = self(aa_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
-            final_out = torch.exp(model_out)
+        # Here we're ignoring sites containing tokens that have index greater
+        # than the embedding dimension.
+        consider_sites = aa_idxs < self.hyperparameters["embedding_dim"]
+        # TODO test with DNSM that this is really how the outputs are shaped
+        if self.hyperparameters["output_dim"] == 1:
+            result = torch.full((len(aa_str),), float("nan"), device=self.device)
+        else:
+            result = torch.full((len(aa_str), self.hyperparameters["output_dim"]), float("nan"), device=self.device)
+        
 
-        return final_out[: len(aa_str)]
+        with torch.no_grad():
+            model_out = self(aa_idxs[consider_sites].unsqueeze(0), mask[consider_sites].unsqueeze(0)).squeeze(0)
+            result[consider_sites] = torch.exp(model_out)[: consider_sites.sum()]
+
+        return result
 
 
 class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
