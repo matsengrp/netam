@@ -604,11 +604,16 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         if self.hyperparameters["output_dim"] == 1:
             result = torch.full((len(aa_str),), float("nan"), device=self.device)
         else:
-            result = torch.full((len(aa_str), self.hyperparameters["output_dim"]), float("nan"), device=self.device)
-        
+            result = torch.full(
+                (len(aa_str), self.hyperparameters["output_dim"]),
+                float("nan"),
+                device=self.device,
+            )
 
         with torch.no_grad():
-            model_out = self(aa_idxs[consider_sites].unsqueeze(0), mask[consider_sites].unsqueeze(0)).squeeze(0)
+            model_out = self(
+                aa_idxs[consider_sites].unsqueeze(0), mask[consider_sites].unsqueeze(0)
+            ).squeeze(0)
             result[consider_sites] = torch.exp(model_out)[: consider_sites.sum()]
 
         return result

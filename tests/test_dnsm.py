@@ -7,7 +7,6 @@ from netam.framework import (
     crepe_exists,
     load_crepe,
 )
-from netam.sequences import MAX_AA_TOKEN_IDX
 from netam.common import aa_idx_tensor_of_str_ambig, force_spawn
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dnsm import DNSMBurrito, DNSMDataset
