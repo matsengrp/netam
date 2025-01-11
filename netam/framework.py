@@ -599,6 +599,9 @@ class Burrito(ABC):
                         self.optimizer.zero_grad()
                         scalar_loss.backward()
 
+                        if torch.isnan(scalar_loss):
+                            raise ValueError(f"NaN in loss: {scalar_loss.item()}")
+
                         nan_in_gradients = False
                         for name, param in self.model.named_parameters():
                             if torch.isnan(param).any():

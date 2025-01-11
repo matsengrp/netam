@@ -117,6 +117,14 @@ def dataset_inputs_of_pcp_df(pcp_df, known_token_count):
     )
 
 
+def build_stop_codon_indicator_tensor():
+    """Return a tensor indicating the stop codons."""
+    stop_codon_indicator = torch.zeros(len(CODONS))
+    for stop_codon in STOP_CODONS:
+        stop_codon_indicator[CODONS.index(stop_codon)] = 1.0
+    return stop_codon_indicator
+
+
 def nt_idx_array_of_str(nt_str):
     """Return the indices of the nucleotides in a string."""
     try:
@@ -151,6 +159,30 @@ def aa_idx_tensor_of_str(aa_str):
     except ValueError:
         print(f"Found an invalid amino acid in the string: {aa_str}")
         raise
+
+
+# TODO isolating all this stuff here
+
+AMBIGUOUS_CODON_IDX = len(CODONS)
+
+
+def idx_of_codon_allowing_ambiguous(codon):
+    # if codon contains an N
+    if "N" in codon:
+        return AMBIGUOUS_CODON_IDX
+    else:
+        return CODONS.index(codon)
+
+
+def codon_idx_tensor_of_str_ambig(nt_str):
+    """Return the indices of the codons in a string."""
+    assert len(nt_str) % 3 == 0
+    return torch.tensor(
+        [idx_of_codon_allowing_ambiguous(codon) for codon in iter_codons(nt_str)]
+    )
+
+
+# TODO end isolating new stuff
 
 
 def aa_onehot_tensor_of_str(aa_str):

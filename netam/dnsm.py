@@ -56,6 +56,7 @@ class DNSMDataset(DXSMDataset):
             mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
             nt_csps = nt_csps[:parent_len, :]
 
+            # TODO singular/plural mismatch
             neutral_aa_mut_prob = molevol.neutral_aa_mut_probs(
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
