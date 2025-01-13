@@ -38,6 +38,7 @@ jobs:
         shell: bash -l {0}
         run: |
           cd main
+          make checktodo
           make checkformat
 
       - name: Install
