@@ -1,3 +1,4 @@
+# The outputs used for this test are produced by the wd-old-model-runner branch.
 
 import torch
 
