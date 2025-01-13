@@ -11,7 +11,12 @@ def test_old_model_outputs():
     dasm_crepe = load_crepe("tests/old_models/dasm_13k-v1jaffe+v1tang-joint")
     dnsm_crepe = load_crepe("tests/old_models/dnsm_13k-v1jaffe+v1tang-joint")
 
-    dasm_vals = torch.nan_to_num(set_wt_to_nan(torch.load("tests/old_models/dasm_output", weights_only=True), example_seq), 0.0)
+    dasm_vals = torch.nan_to_num(
+        set_wt_to_nan(
+            torch.load("tests/old_models/dasm_output", weights_only=True), example_seq
+        ),
+        0.0,
+    )
     dnsm_vals = torch.load("tests/old_models/dnsm_output", weights_only=True)
 
     dasm_result = torch.nan_to_num(dasm_crepe([example_seq])[0], 0.0)
