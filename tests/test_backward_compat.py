@@ -1,11 +1,11 @@
-# The outputs used for this test are produced by the wd-old-model-runner branch.
-
 import torch
 
 from netam.framework import load_crepe
 from netam.sequences import set_wt_to_nan
 
 
+# The outputs used for this test are produced by running
+# `test_backward_compat_copy.py` on the wd-old-model-runner branch.
 def test_old_model_outputs():
     example_seq = "QVQLVESGGGVVQPGRSLRLSCAASGFTFSSSGMHWVRQAPGKGLEWVAVIWYDGSNKYYADSVKGRFTISRDNSKNTVYLQMNSLRAEDTAVYYCAREGHSNYPYYYYYMDVWGKGTTVTVSS"
     dasm_crepe = load_crepe("tests/old_models/dasm_13k-v1jaffe+v1tang-joint")
