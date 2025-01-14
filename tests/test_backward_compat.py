@@ -6,6 +6,9 @@ from netam.sequences import set_wt_to_nan
 
 # The outputs used for this test are produced by running
 # `test_backward_compat_copy.py` on the wd-old-model-runner branch.
+# This is to ensure that we can still load older crepes, even if we change the
+# dimensions of model layers, as we did with the Embedding layer in
+# https://github.com/matsengrp/netam/pull/92.
 def test_old_model_outputs():
     example_seq = "QVQLVESGGGVVQPGRSLRLSCAASGFTFSSSGMHWVRQAPGKGLEWVAVIWYDGSNKYYADSVKGRFTISRDNSKNTVYLQMNSLRAEDTAVYYCAREGHSNYPYYYYYMDVWGKGTTVTVSS"
     dasm_crepe = load_crepe("tests/old_models/dasm_13k-v1jaffe+v1tang-joint")

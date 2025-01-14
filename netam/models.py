@@ -598,11 +598,14 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         mask = mask.to(self.device)
 
         # Here we're ignoring sites containing tokens that have index greater
-        # than the embedding dimension.
+        # than the embedding dimension. If extra tokens have been added since
+        # this model was defined, they are stripped out before feeding the
+        # sequence to the model, and the returned selection factors will be NaN
+        # at sites containing those unrecognized tokens.
         if "embedding_dim" in self.hyperparameters:
-            consider_sites = aa_idxs < self.hyperparameters["embedding_dim"]
+            model_valid_sites = aa_idxs < self.hyperparameters["embedding_dim"]
         else:
-            consider_sites = torch.ones_like(aa_idxs, dtype=torch.bool)
+            model_valid_sites = torch.ones_like(aa_idxs, dtype=torch.bool)
         if self.hyperparameters["output_dim"] == 1:
             result = torch.full((len(aa_str),), float("nan"), device=self.device)
         else:
@@ -614,9 +617,9 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
 
         with torch.no_grad():
             model_out = self(
-                aa_idxs[consider_sites].unsqueeze(0), mask[consider_sites].unsqueeze(0)
+                aa_idxs[model_valid_sites].unsqueeze(0), mask[model_valid_sites].unsqueeze(0)
             ).squeeze(0)
-            result[consider_sites] = torch.exp(model_out)[: consider_sites.sum()]
+            result[model_valid_sites] = torch.exp(model_out)[: model_valid_sites.sum()]
 
         return result
 

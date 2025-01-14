@@ -18,14 +18,14 @@ RESERVED_TOKENS = "^"
 NT_STR_SORTED = "".join(BASES)
 BASES_AND_N_TO_INDEX = {base: idx for idx, base in enumerate(NT_STR_SORTED + "N")}
 # Must add new tokens to the end of this string.
-AA_TOKEN_STR_SORTED = AA_STR_SORTED + "X" + RESERVED_TOKENS
+TOKEN_STR_SORTED = AA_STR_SORTED + "X" + RESERVED_TOKENS
 AA_AMBIG_IDX = len(AA_STR_SORTED)
 
 RESERVED_TOKEN_AA_BOUNDS = (
-    min(AA_TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS),
-    max(AA_TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS),
+    min(TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS),
+    max(TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS),
 )
-MAX_AA_TOKEN_IDX = len(AA_TOKEN_STR_SORTED) - 1
+MAX_AA_TOKEN_IDX = len(TOKEN_STR_SORTED) - 1
 CODONS = ["".join(codon_list) for codon_list in itertools.product(BASES, repeat=3)]
 STOP_CODONS = ["TAA", "TAG", "TGA"]
 # Each token in RESERVED_TOKENS will appear once in aa strings, and three times
@@ -48,7 +48,7 @@ def nt_idx_array_of_str(nt_str):
 def aa_idx_array_of_str(aa_str):
     """Return the indices of the amino acids in a string."""
     try:
-        return np.array([AA_TOKEN_STR_SORTED.index(aa) for aa in aa_str])
+        return np.array([TOKEN_STR_SORTED.index(aa) for aa in aa_str])
     except ValueError:
         print(f"Found an invalid amino acid in the string: {aa_str}")
         raise
@@ -66,7 +66,7 @@ def nt_idx_tensor_of_str(nt_str):
 def aa_idx_tensor_of_str(aa_str):
     """Return the indices of the amino acids in a string."""
     try:
-        return torch.tensor([AA_TOKEN_STR_SORTED.index(aa) for aa in aa_str])
+        return torch.tensor([TOKEN_STR_SORTED.index(aa) for aa in aa_str])
     except ValueError:
         print(f"Found an invalid amino acid in the string: {aa_str}")
         raise
@@ -135,7 +135,7 @@ def translate_sequences(nt_sequences):
 def aa_index_of_codon(codon):
     """Return the index of the amino acid encoded by a codon."""
     aa = translate_sequence(codon)
-    return AA_TOKEN_STR_SORTED.index(aa)
+    return TOKEN_STR_SORTED.index(aa)
 
 
 def generic_mutation_frequency(ambig_symb, parent, child):
