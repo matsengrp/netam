@@ -603,7 +603,6 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
             consider_sites = aa_idxs < self.hyperparameters["embedding_dim"]
         else:
             consider_sites = torch.ones_like(aa_idxs, dtype=torch.bool)
-        # TODO test with DNSM that this is really how the outputs are shaped
         if self.hyperparameters["output_dim"] == 1:
             result = torch.full((len(aa_str),), float("nan"), device=self.device)
         else:

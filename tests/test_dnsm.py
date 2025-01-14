@@ -10,11 +10,12 @@ from netam.framework import (
 from netam.common import aa_idx_tensor_of_str_ambig, force_spawn
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dnsm import DNSMBurrito, DNSMDataset
+from netam.sequences import AA_AMBIG_IDX
 
 
 def test_aa_idx_tensor_of_str_ambig():
     input_seq = "ACX"
-    expected_output = torch.tensor([0, 1, 20], dtype=torch.int)
+    expected_output = torch.tensor([0, 1, AA_AMBIG_IDX], dtype=torch.int)
     output = aa_idx_tensor_of_str_ambig(input_seq)
     assert torch.equal(output, expected_output)
 

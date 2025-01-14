@@ -20,6 +20,7 @@ BASES_AND_N_TO_INDEX = {base: idx for idx, base in enumerate(NT_STR_SORTED + "N"
 # Must add new tokens to the end of this string.
 # TODO It is assumed elsewhere that the max index denotes the ambiguous base
 AA_TOKEN_STR_SORTED = AA_STR_SORTED + "X" + RESERVED_TOKENS
+AA_AMBIG_IDX = len(AA_STR_SORTED)
 
 RESERVED_TOKEN_AA_BOUNDS = (
     min(AA_TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS),
