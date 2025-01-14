@@ -164,7 +164,7 @@ class DNSMBurrito(DXSMBurrito):
         parent = sequences.translate_sequence(parent)
         selection_factors = self.model.selection_factors_of_aa_str(parent)
         selection_matrix = torch.zeros(
-            (len(selection_factors), sequences.MAX_AA_TOKEN_IDX + 1), dtype=torch.float
+            (len(selection_factors), 20), dtype=torch.float
         )
         # Every "off-diagonal" entry of the selection matrix is set to the selection
         # factor, where "diagonal" means keeping the same amino acid.

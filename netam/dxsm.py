@@ -29,6 +29,7 @@ from netam.sequences import (
     nt_mutation_frequency,
     MAX_AA_TOKEN_IDX,
     RESERVED_TOKEN_REGEX,
+    AA_AMBIG_IDX,
 )
 
 
@@ -70,7 +71,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         # to the ambiguous amino acid, and then will fill in the actual values
         # below.
         self.aa_parents_idxss = torch.full(
-            (pcp_count, self.max_aa_seq_len), MAX_AA_TOKEN_IDX
+            (pcp_count, self.max_aa_seq_len), AA_AMBIG_IDX
         )
         self.aa_children_idxss = self.aa_parents_idxss.clone()
         self.aa_subs_indicators = torch.zeros((pcp_count, self.max_aa_seq_len))

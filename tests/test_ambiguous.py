@@ -11,7 +11,6 @@ from netam.framework import (
     load_pcp_df,
     add_shm_model_outputs_to_pcp_df,
 )
-from netam.sequences import MAX_AA_TOKEN_IDX
 from netam import pretrained
 import random
 
@@ -170,7 +169,7 @@ def dasm_model():
         d_model_per_head=4,
         dim_feedforward=256,
         layer_count=2,
-        output_dim=MAX_AA_TOKEN_IDX + 1,
+        output_dim=20,
     )
 
 

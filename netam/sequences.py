@@ -185,15 +185,16 @@ def pcp_criteria_check(parent, child, max_mut_freq=0.3):
 def generate_codon_aa_indicator_matrix():
     """Generate a matrix that maps codons (rows) to amino acids (columns)."""
 
-    matrix = np.zeros((len(CODONS), len(AA_TOKEN_STR_SORTED)))
+    matrix = np.zeros((len(CODONS), len(AA_STR_SORTED)))
 
     for i, codon in enumerate(CODONS):
         try:
             aa = translate_sequences([codon])[0]
-            aa_idx = AA_TOKEN_STR_SORTED.index(aa)
-            matrix[i, aa_idx] = 1
         except ValueError:  # Handle STOP codon
             pass
+        else:
+            aa_idx = AA_STR_SORTED.index(aa)
+            matrix[i, aa_idx] = 1
 
     return matrix
 

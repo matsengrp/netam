@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from torch import Tensor, optim
 
-from netam.sequences import CODON_AA_INDICATOR_MATRIX, MAX_AA_TOKEN_IDX
+from netam.sequences import CODON_AA_INDICATOR_MATRIX
 
 import netam.sequences as sequences
 
@@ -444,7 +444,7 @@ def mutsel_log_pcp_probability_of(
     """
 
     assert len(parent) % 3 == 0
-    assert sel_matrix.shape == (len(parent) // 3, MAX_AA_TOKEN_IDX + 1)
+    assert sel_matrix.shape == (len(parent) // 3, 20)
 
     parent_idxs = sequences.nt_idx_tensor_of_str(parent)
     child_idxs = sequences.nt_idx_tensor_of_str(child)
