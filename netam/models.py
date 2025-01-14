@@ -617,7 +617,8 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
 
         with torch.no_grad():
             model_out = self(
-                aa_idxs[model_valid_sites].unsqueeze(0), mask[model_valid_sites].unsqueeze(0)
+                aa_idxs[model_valid_sites].unsqueeze(0),
+                mask[model_valid_sites].unsqueeze(0),
             ).squeeze(0)
             result[model_valid_sites] = torch.exp(model_out)[: model_valid_sites.sum()]
 
