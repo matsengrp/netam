@@ -599,7 +599,10 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
 
         # Here we're ignoring sites containing tokens that have index greater
         # than the embedding dimension.
-        consider_sites = aa_idxs < self.hyperparameters["embedding_dim"]
+        if "embedding_dim" in self.hyperparameters:
+            consider_sites = aa_idxs < self.hyperparameters["embedding_dim"]
+        else:
+            consider_sites = torch.ones_like(aa_idxs, dtype=torch.bool)
         # TODO test with DNSM that this is really how the outputs are shaped
         if self.hyperparameters["output_dim"] == 1:
             result = torch.full((len(aa_str),), float("nan"), device=self.device)
