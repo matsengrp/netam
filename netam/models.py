@@ -602,10 +602,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         # this model was defined, they are stripped out before feeding the
         # sequence to the model, and the returned selection factors will be NaN
         # at sites containing those unrecognized tokens.
-        if "embedding_dim" in self.hyperparameters:
-            model_valid_sites = aa_idxs < self.hyperparameters["embedding_dim"]
-        else:
-            model_valid_sites = torch.ones_like(aa_idxs, dtype=torch.bool)
+        model_valid_sites = aa_idxs < self.hyperparameters["embedding_dim"]
         if self.hyperparameters["output_dim"] == 1:
             result = torch.full((len(aa_str),), float("nan"), device=self.device)
         else:
@@ -772,14 +769,15 @@ class TransformerBinarySelectionModelTrainableWiggleAct(
 class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
     """A one parameter selection model as a baseline."""
 
-    def __init__(self, output_dim: int = 1):
+    def __init__(self, output_dim: int = 1, embedding_dim: int = MAX_AA_TOKEN_IDX + 1):
         super().__init__()
         self.single_value = nn.Parameter(torch.tensor(0.0))
         self.output_dim = output_dim
+        self.embedding_dim = embedding_dim
 
     @property
     def hyperparameters(self):
-        return {"output_dim": self.output_dim}
+        return {"output_dim": self.output_dim, "embedding_dim": self.embedding_dim}
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         """Build a binary log selection matrix from an index-encoded parent sequence."""
