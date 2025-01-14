@@ -321,6 +321,11 @@ def load_crepe(prefix, device=None):
             f"Model class '{model_class_name}' not found in 'models' module."
         )
 
+    if issubclass(model_class, models.TransformerBinarySelectionModelLinAct):
+        if "embedding_dim" not in config["model_hyperparameters"]:
+            # Assume the model is from before any new tokens were added, so 21
+            config["model_hyperparameters"]["embedding_dim"] = 21
+
     model = model_class(**config["model_hyperparameters"])
 
     model_state_path = f"{prefix}.pth"

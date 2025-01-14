@@ -597,11 +597,29 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         mask = aa_mask_tensor_of(aa_str)
         mask = mask.to(self.device)
 
-        with torch.no_grad():
-            model_out = self(aa_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0)
-            final_out = torch.exp(model_out)
+        # Here we're ignoring sites containing tokens that have index greater
+        # than the embedding dimension. If extra tokens have been added since
+        # this model was defined, they are stripped out before feeding the
+        # sequence to the model, and the returned selection factors will be NaN
+        # at sites containing those unrecognized tokens.
+        model_valid_sites = aa_idxs < self.hyperparameters["embedding_dim"]
+        if self.hyperparameters["output_dim"] == 1:
+            result = torch.full((len(aa_str),), float("nan"), device=self.device)
+        else:
+            result = torch.full(
+                (len(aa_str), self.hyperparameters["output_dim"]),
+                float("nan"),
+                device=self.device,
+            )
 
-        return final_out[: len(aa_str)]
+        with torch.no_grad():
+            model_out = self(
+                aa_idxs[model_valid_sites].unsqueeze(0),
+                mask[model_valid_sites].unsqueeze(0),
+            ).squeeze(0)
+            result[model_valid_sites] = torch.exp(model_out)[: model_valid_sites.sum()]
+
+        return result
 
 
 class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
@@ -613,6 +631,7 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
         layer_count: int,
         dropout_prob: float = 0.5,
         output_dim: int = 1,
+        embedding_dim: int = MAX_AA_TOKEN_IDX + 1,
     ):
         super().__init__()
         # Note that d_model has to be divisible by nhead, so we make that
@@ -620,9 +639,10 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
         self.d_model_per_head = d_model_per_head
         self.d_model = d_model_per_head * nhead
         self.nhead = nhead
+        self.embedding_dim = embedding_dim
         self.dim_feedforward = dim_feedforward
         self.pos_encoder = PositionalEncoding(self.d_model, dropout_prob)
-        self.amino_acid_embedding = nn.Embedding(MAX_AA_TOKEN_IDX + 1, self.d_model)
+        self.amino_acid_embedding = nn.Embedding(self.embedding_dim, self.d_model)
         self.encoder_layer = nn.TransformerEncoderLayer(
             d_model=self.d_model,
             nhead=nhead,
@@ -642,6 +662,7 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
             "layer_count": self.encoder.num_layers,
             "dropout_prob": self.pos_encoder.dropout.p,
             "output_dim": self.linear.out_features,
+            "embedding_dim": self.embedding_dim,
         }
 
     def init_weights(self) -> None:
@@ -748,14 +769,15 @@ class TransformerBinarySelectionModelTrainableWiggleAct(
 class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
     """A one parameter selection model as a baseline."""
 
-    def __init__(self, output_dim: int = 1):
+    def __init__(self, output_dim: int = 1, embedding_dim: int = MAX_AA_TOKEN_IDX + 1):
         super().__init__()
         self.single_value = nn.Parameter(torch.tensor(0.0))
         self.output_dim = output_dim
+        self.embedding_dim = embedding_dim
 
     @property
     def hyperparameters(self):
-        return {"output_dim": self.output_dim}
+        return {"output_dim": self.output_dim, "embedding_dim": self.embedding_dim}
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         """Build a binary log selection matrix from an index-encoded parent sequence."""

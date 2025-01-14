@@ -1,0 +1,17 @@
+encoder_class: PlaceholderEncoder
+encoder_parameters: {}
+model_class: TransformerBinarySelectionModelWiggleAct
+model_hyperparameters:
+  d_model_per_head: 4
+  dim_feedforward: 64
+  dropout_prob: 0.1
+  layer_count: 3
+  nhead: 4
+  output_dim: 1
+serialization_version: 0
+training_hyperparameters:
+  batch_size: 1024
+  learning_rate: 0.001
+  min_learning_rate: 1.0e-06
+  optimizer_name: RMSprop
+  weight_decay: 1.0e-06

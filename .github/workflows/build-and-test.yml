@@ -34,6 +34,12 @@ jobs:
           cache-environment: false
           post-cleanup: 'none'
 
+      - name: Check for TODOs
+        shell: bash -l {0}
+        run: |
+          cd main
+          make checktodo
+
       - name: Check format
         shell: bash -l {0}
         run: |
