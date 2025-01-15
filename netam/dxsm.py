@@ -27,6 +27,7 @@ from netam.sequences import (
     translate_sequences,
     apply_aa_mask_to_nt_sequence,
     nt_mutation_frequency,
+    token_regex_from_embedding_dim,
     MAX_AA_TOKEN_IDX,
     RESERVED_TOKEN_REGEX,
     AA_AMBIG_IDX,
@@ -43,8 +44,12 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         nt_ratess: torch.Tensor,
         nt_cspss: torch.Tensor,
         branch_lengths: torch.Tensor,
+        model_embedding_dim: int,
         multihit_model=None,
     ):
+        # TODO I'm not sure if we need to keep this around
+        self.model_embedding_dim = model_embedding_dim
+        nt_parents = nt_parents.str.replace(token_regex_from_embedding_dim(self.model_embedding_dim), "", regex=True)
         self.nt_parents = nt_parents.str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
         # We will replace reserved tokens with Ns but use the unmodified
         # originals for translation and mask creation.

@@ -35,6 +35,14 @@ RESERVED_TOKEN_TRANSLATIONS = {token * 3: token for token in RESERVED_TOKENS}
 # Create a regex pattern
 RESERVED_TOKEN_REGEX = f"[{''.join(map(re.escape, list(RESERVED_TOKENS)))}]"
 
+# TODO test this
+def token_regex_from_embedding_dim(embedding_dim: int) -> str:
+    """Return a regex pattern that matches any token which cannot be handled by
+    a model with the provided embedding dimension."""
+    unsupported_tokens = TOKEN_STR_SORTED[embedding_dim:]
+    # X is a special case, as it's handled separately.
+    unsupported_tokens = unsupported_tokens.replace("X", "")
+    return f"[{''.join(map(re.escape, list(unsupported_tokens)))}]"
 
 def nt_idx_array_of_str(nt_str):
     """Return the indices of the nucleotides in a string."""
@@ -229,9 +237,12 @@ def set_wt_to_nan(predictions: torch.Tensor, aa_sequence: str) -> torch.Tensor:
     """Set the wild-type predictions to NaN.
 
     Modifies the supplied predictions tensor in-place and returns it.
+    For sites containing special tokens, all predictions are set to NaN.
     """
     wt_idxs = aa_idx_tensor_of_str(aa_sequence)
-    predictions[torch.arange(len(aa_sequence)), wt_idxs] = float("nan")
+    token_mask = wt_idxs < AA_AMBIG_IDX
+    predictions[token_mask][torch.arange(token_mask.sum()), wt_idxs[token_mask]] = float("nan")
+    predictions[~token_mask] = float("nan")
     return predictions
 
 
