@@ -41,7 +41,7 @@ def test_strip_unrecognized_tokens_from_series():
     newseqs = strip_unrecognized_tokens_from_series(df["seq"], 21)
     for seq, nseq in zip(df["seq"], newseqs):
         for token in RESERVED_TOKENS:
-            seq = seq.replace(token, "N")
+            seq = seq.replace(token, "")
         assert nseq == seq
 
 
