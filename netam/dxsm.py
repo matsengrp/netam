@@ -27,7 +27,7 @@ from netam.sequences import (
     translate_sequences,
     apply_aa_mask_to_nt_sequence,
     nt_mutation_frequency,
-    token_regex_from_embedding_dim,
+    strip_unrecognized_tokens_from_series,
     MAX_AA_TOKEN_IDX,
     RESERVED_TOKEN_REGEX,
     AA_AMBIG_IDX,
@@ -47,12 +47,11 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         model_embedding_dim: int,
         multihit_model=None,
     ):
-        # TODO I'm not sure if we need to keep this around
-        self.model_embedding_dim = model_embedding_dim
-        nt_parents = nt_parents.str.replace(token_regex_from_embedding_dim(self.model_embedding_dim), "", regex=True)
-        self.nt_parents = nt_parents.str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
+        nt_parents = strip_unrecognized_tokens_from_series(nt_parents, self.model_embedding_dim)
+        nt_children = strip_unrecognized_tokens_from_series(nt_children, self.model_embedding_dim)
         # We will replace reserved tokens with Ns but use the unmodified
         # originals for translation and mask creation.
+        self.nt_parents = nt_parents.str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
         self.nt_children = nt_children.str.replace(
             RESERVED_TOKEN_REGEX, "N", regex=True
         )
@@ -140,7 +139,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         )
 
     @classmethod
-    def of_pcp_df(cls, pcp_df, branch_length_multiplier=5.0, multihit_model=None):
+    def of_pcp_df(cls, pcp_df, model_embedding_dim, branch_length_multiplier=5.0, multihit_model=None):
         """Alternative constructor that takes in a pcp_df and calculates the initial
         branch lengths."""
         assert (
@@ -151,13 +150,14 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             pcp_df["child"],
             pcp_df["nt_rates"],
             pcp_df["nt_csps"],
+            model_embedding_dim,
             branch_length_multiplier=branch_length_multiplier,
             multihit_model=multihit_model,
         )
 
     @classmethod
     def train_val_datasets_of_pcp_df(
-        cls, pcp_df, branch_length_multiplier=5.0, multihit_model=None
+        cls, pcp_df, model_embedding_dim, branch_length_multiplier=5.0, multihit_model=None
     ):
         """Perform a train-val split based on the 'in_train' column.
 
@@ -168,6 +168,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
 
         val_dataset = cls.of_pcp_df(
             val_df,
+            model_embedding_dim,
             branch_length_multiplier=branch_length_multiplier,
             multihit_model=multihit_model,
         )
@@ -177,6 +178,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         # else:
         train_dataset = cls.of_pcp_df(
             train_df,
+            model_embedding_dim,
             branch_length_multiplier=branch_length_multiplier,
             multihit_model=multihit_model,
         )
@@ -191,6 +193,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             self.nt_ratess.copy(),
             self.nt_cspss.copy(),
             self._branch_lengths.copy(),
+            self.model_embedding_dim,
             multihit_model=self.multihit_model,
         )
         return new_dataset
@@ -208,6 +211,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             self.nt_ratess[indices],
             self.nt_cspss[indices],
             self._branch_lengths[indices],
+            self.model_embedding_dim,
             multihit_model=self.multihit_model,
         )
         return new_dataset
