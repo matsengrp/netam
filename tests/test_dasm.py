@@ -23,7 +23,9 @@ def dasm_burrito(pcp_df):
     """Fixture that returns the DNSM Burrito object."""
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
-    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(pcp_df, MAX_EMBEDDING_DIM)
+    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(
+        pcp_df, MAX_EMBEDDING_DIM
+    )
 
     model = TransformerBinarySelectionModelWiggleAct(
         nhead=2,

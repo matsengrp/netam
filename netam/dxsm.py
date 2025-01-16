@@ -47,8 +47,13 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         model_embedding_dim: int,
         multihit_model=None,
     ):
-        nt_parents = strip_unrecognized_tokens_from_series(nt_parents, self.model_embedding_dim)
-        nt_children = strip_unrecognized_tokens_from_series(nt_children, self.model_embedding_dim)
+        self.model_embedding_dim = model_embedding_dim
+        nt_parents = strip_unrecognized_tokens_from_series(
+            nt_parents, self.model_embedding_dim
+        )
+        nt_children = strip_unrecognized_tokens_from_series(
+            nt_children, self.model_embedding_dim
+        )
         # We will replace reserved tokens with Ns but use the unmodified
         # originals for translation and mask creation.
         self.nt_parents = nt_parents.str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
@@ -114,6 +119,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         nt_children: pd.Series,
         nt_rates_series: pd.Series,
         nt_csps_series: pd.Series,
+        model_embedding_dim,
         branch_length_multiplier=5.0,
         multihit_model=None,
     ):
@@ -135,11 +141,18 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             stack_heterogeneous(nt_rates_series.reset_index(drop=True)),
             stack_heterogeneous(nt_csps_series.reset_index(drop=True)),
             initial_branch_lengths,
+            model_embedding_dim,
             multihit_model=multihit_model,
         )
 
     @classmethod
-    def of_pcp_df(cls, pcp_df, model_embedding_dim, branch_length_multiplier=5.0, multihit_model=None):
+    def of_pcp_df(
+        cls,
+        pcp_df,
+        model_embedding_dim,
+        branch_length_multiplier=5.0,
+        multihit_model=None,
+    ):
         """Alternative constructor that takes in a pcp_df and calculates the initial
         branch lengths."""
         assert (
@@ -157,7 +170,11 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
 
     @classmethod
     def train_val_datasets_of_pcp_df(
-        cls, pcp_df, model_embedding_dim, branch_length_multiplier=5.0, multihit_model=None
+        cls,
+        pcp_df,
+        model_embedding_dim,
+        branch_length_multiplier=5.0,
+        multihit_model=None,
     ):
         """Perform a train-val split based on the 'in_train' column.
 

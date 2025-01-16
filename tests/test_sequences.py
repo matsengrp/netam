@@ -17,6 +17,7 @@ from netam.sequences import (
     translate_sequences,
     token_mask_of_aa_idxs,
     aa_idx_tensor_of_str,
+    strip_unrecognized_tokens_from_series,
 )
 
 
@@ -29,6 +30,15 @@ def test_token_order():
 def test_token_replace():
     df = pd.DataFrame({"seq": ["AGCGTC" + token for token in TOKEN_STR_SORTED]})
     newseqs = df["seq"].str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
+    for seq, nseq in zip(df["seq"], newseqs):
+        for token in RESERVED_TOKENS:
+            seq = seq.replace(token, "N")
+        assert nseq == seq
+
+
+def test_strip_unrecognized_tokens_from_series():
+    df = pd.DataFrame({"seq": ["AGCGTC" + token for token in TOKEN_STR_SORTED]})
+    newseqs = strip_unrecognized_tokens_from_series(df["seq"], 21)
     for seq, nseq in zip(df["seq"], newseqs):
         for token in RESERVED_TOKENS:
             seq = seq.replace(token, "N")

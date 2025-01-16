@@ -26,7 +26,9 @@ def dnsm_burrito(pcp_df):
     force_spawn()
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
-    train_dataset, val_dataset = DNSMDataset.train_val_datasets_of_pcp_df(pcp_df, MAX_EMBEDDING_DIM)
+    train_dataset, val_dataset = DNSMDataset.train_val_datasets_of_pcp_df(
+        pcp_df, MAX_EMBEDDING_DIM
+    )
 
     model = TransformerBinarySelectionModelWiggleAct(
         nhead=2, d_model_per_head=4, dim_feedforward=256, layer_count=2

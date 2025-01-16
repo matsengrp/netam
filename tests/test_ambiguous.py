@@ -150,7 +150,9 @@ def test_dnsm_burrito(ambig_pcp_df, dnsm_model):
     force_spawn()
     ambig_pcp_df["in_train"] = True
     ambig_pcp_df.loc[ambig_pcp_df.index[-15:], "in_train"] = False
-    train_dataset, val_dataset = DNSMDataset.train_val_datasets_of_pcp_df(ambig_pcp_df, MAX_EMBEDDING_DIM)
+    train_dataset, val_dataset = DNSMDataset.train_val_datasets_of_pcp_df(
+        ambig_pcp_df, MAX_EMBEDDING_DIM
+    )
 
     burrito = DNSMBurrito(
         train_dataset,
@@ -179,7 +181,9 @@ def test_dasm_burrito(ambig_pcp_df, dasm_model):
     """Fixture that returns the DNSM Burrito object."""
     ambig_pcp_df["in_train"] = True
     ambig_pcp_df.loc[ambig_pcp_df.index[-15:], "in_train"] = False
-    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(ambig_pcp_df, MAX_EMBEDDING_DIM)
+    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(
+        ambig_pcp_df, MAX_EMBEDDING_DIM
+    )
 
     burrito = DASMBurrito(
         train_dataset,
