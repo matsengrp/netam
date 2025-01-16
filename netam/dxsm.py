@@ -28,6 +28,7 @@ from netam.sequences import (
     apply_aa_mask_to_nt_sequence,
     nt_mutation_frequency,
     strip_unrecognized_tokens_from_series,
+    dataset_inputs_of_pcp_df,
     MAX_AA_TOKEN_IDX,
     RESERVED_TOKEN_REGEX,
     AA_AMBIG_IDX,
@@ -46,14 +47,13 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         branch_lengths: torch.Tensor,
         model_embedding_dim: int,
         multihit_model=None,
+        # TODO For debugging:
+        succeed=False,
     ):
+        assert succeed, "Dataset should be created through other constructor"
+        #This is no longer needed here, but it seems like we should be able to verify what model version an instance is built for anyway:
         self.model_embedding_dim = model_embedding_dim
-        nt_parents = strip_unrecognized_tokens_from_series(
-            nt_parents, self.model_embedding_dim
-        )
-        nt_children = strip_unrecognized_tokens_from_series(
-            nt_children, self.model_embedding_dim
-        )
+
         # We will replace reserved tokens with Ns but use the unmodified
         # originals for translation and mask creation.
         self.nt_parents = nt_parents.str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
@@ -122,6 +122,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         model_embedding_dim,
         branch_length_multiplier=5.0,
         multihit_model=None,
+        succeed=False,
     ):
         """Alternative constructor that takes the raw data and calculates the initial
         branch lengths.
@@ -143,6 +144,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             initial_branch_lengths,
             model_embedding_dim,
             multihit_model=multihit_model,
+            succeed=succeed,
         )
 
     @classmethod
@@ -156,16 +158,19 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         """Alternative constructor that takes in a pcp_df and calculates the initial
         branch lengths."""
         assert (
-            "nt_rates" in pcp_df.columns
+            "nt_rates_l" in pcp_df.columns
         ), "pcp_df must have a neutral nt_rates column"
+        # use sequences.prepare_heavy_light_pair and the resulting
+        # added_indices to get the parent and child sequences and neutral model
+        # outputs
+        
+
         return cls.of_seriess(
-            pcp_df["parent"],
-            pcp_df["child"],
-            pcp_df["nt_rates"],
-            pcp_df["nt_csps"],
+            *dataset_inputs_of_pcp_df(pcp_df, model_embedding_dim),
             model_embedding_dim,
             branch_length_multiplier=branch_length_multiplier,
             multihit_model=multihit_model,
+            succeed=True,
         )
 
     @classmethod
@@ -212,6 +217,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             self._branch_lengths.copy(),
             self.model_embedding_dim,
             multihit_model=self.multihit_model,
+            succeed=True,
         )
         return new_dataset
 
@@ -230,6 +236,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             self._branch_lengths[indices],
             self.model_embedding_dim,
             multihit_model=self.multihit_model,
+            succeed=True,
         )
         return new_dataset
 

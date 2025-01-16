@@ -11,6 +11,7 @@ from netam.sequences import (
     TOKEN_STR_SORTED,
     CODONS,
     CODON_AA_INDICATOR_MATRIX,
+    MAX_EMBEDDING_DIM,
     aa_onehot_tensor_of_str,
     nt_idx_array_of_str,
     nt_subs_indicator_tensor_of,
@@ -18,6 +19,8 @@ from netam.sequences import (
     token_mask_of_aa_idxs,
     aa_idx_tensor_of_str,
     strip_unrecognized_tokens_from_series,
+    prepare_heavy_light_pair,
+    combine_and_pad_tensors,
 )
 
 
@@ -44,6 +47,35 @@ def test_strip_unrecognized_tokens_from_series():
             seq = seq.replace(token, "")
         assert nseq == seq
 
+def test_prepare_heavy_light_pair():
+    heavy = "AGCGTC"
+    light = "AGCGTC"
+    for heavy, light in [
+            ("AGCGTC", "AGCGTC"),
+            ("AGCGTC", ""),
+            ("", "AGCGTC"),
+    ]:
+        assert prepare_heavy_light_pair(heavy, light, MAX_EMBEDDING_DIM) == (heavy + "^^^" + light, tuple(range(len(heavy), len(heavy) + 3)))
+
+    heavy = "QVQ"
+    light = "QVQ"
+    for heavy, light in [
+            ("QVQ", "QVQ"),
+            ("QVQ", ""),
+            ("", "QVQ"),
+    ]:
+        assert prepare_heavy_light_pair(heavy, light, MAX_EMBEDDING_DIM, is_nt=False) == (heavy + "^" + light, tuple(range(len(heavy), len(heavy) + 1)))
+
+
+def test_combine_and_pad_tensors():
+    # Test that function works with 1d tensors:
+    t1 = torch.tensor([1, 2, 3], dtype=torch.float)
+    t2 = torch.tensor([4, 5, 6], dtype=torch.float)
+    idxs = (0, 4, 5)
+    result = combine_and_pad_tensors(t1, t2, idxs)
+    mask = result.isnan()
+    assert torch.equal(result[~mask], torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.float))
+    assert all(mask[torch.tensor(idxs)])
 
 def test_token_mask():
     sample_aa_seq = "QYX^QC"

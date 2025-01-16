@@ -38,6 +38,7 @@ RESERVED_TOKEN_TRANSLATIONS = {token * 3: token for token in RESERVED_TOKENS}
 RESERVED_TOKEN_REGEX = f"[{''.join(map(re.escape, list(RESERVED_TOKENS)))}]"
 
 
+# TODO maybe remove now?
 def token_regex_from_embedding_dim(embedding_dim: int) -> str:
     """Return a regex pattern that matches any token which cannot be handled by a model
     with the provided embedding dimension."""
@@ -49,6 +50,7 @@ def token_regex_from_embedding_dim(embedding_dim: int) -> str:
     return f"[{''.join(map(re.escape, list(unsupported_tokens)))}]"
 
 
+# TODO maybe remove now?
 def strip_unrecognized_tokens_from_series(
     series: pd.Series, embedding_dim: int
 ) -> pd.Series:
@@ -62,6 +64,70 @@ def strip_unrecognized_tokens_from_series(
         return series.str.replace(pattern, "", regex=True)
     else:
         return series
+
+
+def prepare_heavy_light_pair(heavy_seq, light_seq, known_token_count, is_nt=True):
+    """Prepare a pair of heavy and light chain sequences for model input.
+    
+    Args:
+        heavy_seq (str): The heavy chain sequence.
+        light_seq (str): The light chain sequence.
+        known_token_count (int): The number of tokens recognized by the model which will take the result as input.
+        is_nt (bool): Whether the sequences are nucleotide sequences. Otherwise, they
+            are assumed to be amino acid sequences.
+    Returns:
+        The prepared sequence, and a tuple of indices indicating positions where tokens were added to the prepared sequence."""
+    # In the future, we'll define a list of functions that will be applied in
+    # order, up to the maximum number of accepted tokens.
+    if known_token_count > AA_AMBIG_IDX + 1:
+        if is_nt:
+            heavy_light_separator = "^^^"
+        else:
+            heavy_light_separator = "^"
+
+        prepared_seq = heavy_seq + heavy_light_separator + light_seq
+        added_indices = tuple(range(len(heavy_seq), len(heavy_seq) + len(heavy_light_separator)))
+    else:
+        prepared_seq = heavy_seq
+        added_indices = tuple()
+
+    return prepared_seq, added_indices
+
+def combine_and_pad_tensors(first, second, padding_idxs, fill=float("nan")):
+    res = torch.full((first.shape[0] + second.shape[0] + len(padding_idxs),) + first.shape[1:], fill)
+    mask = torch.full((res.shape[0],), True, dtype=torch.bool)
+    mask[torch.tensor(padding_idxs)] = False
+    res[mask] = torch.concat([first, second], dim=0)
+    return res
+
+
+# TODO test
+def dataset_inputs_of_pcp_df(pcp_df, known_token_count):
+    parents = []
+    children = []
+    nt_ratess = []
+    nt_cspss = []
+    for row in pcp_df.itertuples():
+        parent, parent_token_idxs = prepare_heavy_light_pair(
+            row.parent_h, row.parent_l, known_token_count, is_nt=True
+        )
+        child = prepare_heavy_light_pair(row.child_h, row.child_l, known_token_count, is_nt=True)[0]
+        # TODO It would be nice for these fill values to be nan, but there's
+        # lots of checking that would be made more difficult by that. These are
+        # the values that the neutral model returns when given N's.
+        nt_rates = combine_and_pad_tensors(row.nt_rates_h, row.nt_rates_l, parent_token_idxs, fill=1.0)
+        nt_csps = combine_and_pad_tensors(row.nt_csps_h, row.nt_csps_l, parent_token_idxs, fill=0.0)
+        parents.append(parent)
+        children.append(child)
+        nt_ratess.append(nt_rates)
+        nt_cspss.append(nt_csps)
+
+    return tuple(map(pd.Series, (
+        parents,
+        children,
+        nt_ratess,
+        nt_cspss,
+    )))
 
 
 def nt_idx_array_of_str(nt_str):
