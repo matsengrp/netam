@@ -157,7 +157,7 @@ class DNSMBurrito(DXSMBurrito):
         return self.bce_loss(predictions, aa_subs_indicator)
 
     def build_selection_matrix_from_parent(self, parent: str):
-        """Build a selection matrix from a parent amino acid sequence.
+        """Build a selection matrix from a nucleotide sequence.
 
         Values at ambiguous sites are meaningless.
         """

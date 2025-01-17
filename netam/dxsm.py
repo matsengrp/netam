@@ -282,6 +282,8 @@ class DXSMBurrito(framework.Burrito, ABC):
         multihit_model,
         **optimization_kwargs,
     ):
+        # TODO finish switching to build_selection_matrix_from_parent_aa
+        # thing...
         sel_matrix = self.build_selection_matrix_from_parent(parent)
         trimmed_aa_mask = aa_mask[: len(sel_matrix)]
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(

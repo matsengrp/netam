@@ -99,7 +99,7 @@ class DASMDataset(DXSMDataset):
             self.multihit_model = self.multihit_model.to(device)
 
 
-def zap_predictions_along_diagonal(predictions, aa_parents_idxs):
+def zap_predictions_along_diagonal(predictions, aa_parents_idxs, fill=-BIG):
     """Set the diagonal (i.e. no amino acid change) of the predictions tensor to -BIG,
     except where aa_parents_idxs >= 20, which indicates no update should be done."""
 
@@ -116,7 +116,7 @@ def zap_predictions_along_diagonal(predictions, aa_parents_idxs):
         batch_indices[valid_mask],
         sequence_indices[valid_mask],
         aa_parents_idxs[valid_mask],
-    ] = -BIG
+    ] = fill
 
     return predictions
 
@@ -204,8 +204,23 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
         csp_loss = self.xent_loss(csp_pred, csp_targets)
         return torch.stack([subs_pos_loss, csp_loss])
 
-    def build_selection_matrix_from_parent(self, parent: str):
+    # TODO have a close look at these two functions, I'm feeling unsure about
+    # them
+    def build_selection_matrix_from_parent_aa(self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor):
         """Build a selection matrix from a parent amino acid sequence.
+
+        Values at ambiguous sites are meaningless.
+        """
+        per_aa_selection_factors = self.model.forward(aa_parent_idxs, mask)
+        
+
+        # TODO why 1.0?
+        return zap_predictions_along_diagonal(per_aa_selection_factors, aa_parent_idxs, fill=1.0)
+
+        return per_aa_selection_factors
+
+    def build_selection_matrix_from_parent(self, parent: str):
+        """Build a selection matrix from a parent nucleotide sequence.
 
         Values at ambiguous sites are meaningless.
         """

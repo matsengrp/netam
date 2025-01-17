@@ -584,12 +584,17 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         """Do the forward method then exponentiation without gradients from an amino
         acid string.
 
+        Insertion of model tokens will be done automatically.
+
         Args:
-            aa_str: A string of amino acids.
+            aa_str: A string of amino acids. If a string, we assume this is a light chain sequence.
+                Otherwise it should be a tuple, with the first element being the heavy chain and the second element being the light chain sequence.
 
         Returns:
             A numpy array of the same length as the input string representing
             the level of selection for each amino acid at each site.
+            If the input was a tuple of heavy/light chain sequences, the output will be a tuple of
+            numpy arrays.
         """
 
         aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
