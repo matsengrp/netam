@@ -14,10 +14,12 @@ from netam.dasm import (
     DASMDataset,
     zap_predictions_along_diagonal,
 )
-from netam.sequences import MAX_EMBEDDING_DIM
+from netam.sequences import MAX_EMBEDDING_DIM, TOKEN_STR_SORTED
 
 
-@pytest.fixture(scope="module")
+# TODO verify that this loops through both pcp_dfs, even though one is named
+# the same as the argument. If not, remember to fix in test_dnsm.py too.
+@pytest.fixture(scope="module", params=["pcp_df", "pcp_df_paired"])
 def dasm_burrito(pcp_df):
     force_spawn()
     """Fixture that returns the DNSM Burrito object."""
@@ -94,3 +96,23 @@ def test_zap_diagonal(dasm_burrito):
                         zeroed_predictions[batch_idx, i, j]
                         == predictions[batch_idx, i, j]
                     )
+
+
+# TODO this won't work until build_selection_matrix_from_parent is fixed
+def test_build_selection_matrix_from_parent(dasm_burrito):
+    dataset_row = dasm_burrito.val_dataset[0]
+    
+    parent = dasm_burrito.val_dataset.nt_parents[0]
+    parent_aa_idxs = dasm_burrito.val_dataset.aa_parents_idxss[0]
+    aa_mask = dasm_burrito.val_dataset.masks[0]
+    aa_parent = "".join(TOKEN_STR_SORTED[i] for i in parent)
+
+    separator_idx = aa_parent.index('^') * 3
+    light_chain_seq = parent[:separator_idx]
+    heavy_chain_seq = parent[separator_idx + 3:]
+    
+    direct_val = dasm_burrito.build_selection_matrix_from_parent_aa(parent_aa_idxs, aa_mask)
+
+    indirect_val = dasm_burrito.build_selection_matrix_from_parent((light_chain_seq, heavy_chain_seq))
+
+    assert torch.allclose(direct_val, indirect_val)

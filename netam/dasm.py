@@ -139,10 +139,7 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
             raise ValueError(
                 f"log_neutral_aa_probs has non-finite values at relevant positions: {log_neutral_aa_probs[mask]}"
             )
-        # We need the model to see special tokens here. For every other purpose
-        # they are masked out.
-        keep_token_mask = mask | sequences.token_mask_of_aa_idxs(aa_parents_idxs)
-        log_selection_factors = self.model(aa_parents_idxs, keep_token_mask)
+        log_selection_factors = self.selection_factors_of_aa_idxs(aa_parents_idxs, mask)
         return log_neutral_aa_probs, log_selection_factors
 
     def predictions_of_pair(self, log_neutral_aa_probs, log_selection_factors):
@@ -207,17 +204,16 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
     # TODO have a close look at these two functions, I'm feeling unsure about
     # them
     def build_selection_matrix_from_parent_aa(self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor):
-        """Build a selection matrix from a parent amino acid sequence.
+        """Build a selection matrix from a single parent amino acid sequence.
+        Inputs are expected to be as prepared in the Dataset constructor.
 
         Values at ambiguous sites are meaningless.
         """
-        per_aa_selection_factors = self.model.forward(aa_parent_idxs, mask)
-        
+        with torch.no_grad():
+            per_aa_selection_factors = self.selection_factors_of_aa_idxs(aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0).exp()
 
         # TODO why 1.0?
         return zap_predictions_along_diagonal(per_aa_selection_factors, aa_parent_idxs, fill=1.0)
-
-        return per_aa_selection_factors
 
     def build_selection_matrix_from_parent(self, parent: str):
         """Build a selection matrix from a parent nucleotide sequence.

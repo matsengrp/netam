@@ -127,7 +127,8 @@ class DNSMBurrito(DXSMBurrito):
             raise ValueError(
                 f"log_neutral_aa_mut_probs has non-finite values at relevant positions: {log_neutral_aa_mut_probs[mask]}"
             )
-        log_selection_factors = self.model(aa_parents_idxs, mask)
+        # Right here is where model is evaluated!
+        log_selection_factors = self.selection_factors_of_aa_idxs(aa_parents_idxs, mask)
         return log_neutral_aa_mut_probs, log_selection_factors
 
     def predictions_of_pair(self, log_neutral_aa_mut_probs, log_selection_factors):
@@ -156,6 +157,30 @@ class DNSMBurrito(DXSMBurrito):
         predictions = self.predictions_of_batch(batch).masked_select(mask)
         return self.bce_loss(predictions, aa_subs_indicator)
 
+
+    def _build_selection_matrix_from_selection_factors(self, selection_factors, aa_parent_idxs):
+        """Build a selection matrix from a selection factor tensor for a single sequence.
+        upgrades the provided tensor containing a selection factor per site to a matrix
+        containing a selection factor per site and amino acid. The wildtype aa selection
+        factor is set ot 1, and the rest are set to the selection factor."""
+        selection_matrix = torch.zeros((len(selection_factors), 20), dtype=torch.float)
+        # Every "off-diagonal" entry of the selection matrix is set to the selection
+        # factor, where "diagonal" means keeping the same amino acid.
+        selection_matrix[:, :] = selection_factors[:, None]
+        selection_matrix[torch.arange(len(parent_idxs)), parent_idxs] = 1.0
+        return selection_matrix
+
+    def build_selection_matrix_from_parent_aa(self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor):
+        """Build a selection matrix from a single parent amino acid sequence.
+
+        Values at ambiguous sites are meaningless.
+        """
+        with torch.no_grad():
+            per_aa_selection_factors = self.selection_factors_of_aa_idxs(aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0).exp()
+        return self._build_selection_matrix_from_selection_factors(
+            selection_factors, aa_parent_idxs
+
+    # TODO upgrade this to take pair of heavy and light sequences
     def build_selection_matrix_from_parent(self, parent: str):
         """Build a selection matrix from a nucleotide sequence.
 
@@ -163,17 +188,13 @@ class DNSMBurrito(DXSMBurrito):
         """
         parent = sequences.translate_sequence(parent)
         selection_factors = self.model.selection_factors_of_aa_str(parent)
-        selection_matrix = torch.zeros((len(selection_factors), 20), dtype=torch.float)
-        # Every "off-diagonal" entry of the selection matrix is set to the selection
-        # factor, where "diagonal" means keeping the same amino acid.
-        selection_matrix[:, :] = selection_factors[:, None]
         parent = parent.replace("X", "A")
         # Set "diagonal" elements to one.
         parent_idxs = sequences.aa_idx_array_of_str(parent)
-        selection_matrix[torch.arange(len(parent_idxs)), parent_idxs] = 1.0
 
-        return selection_matrix
-
+        return self._build_selection_matrix_from_selection_factors(
+            selection_factors, parent_idxs
+        )
 
 class DNSMHyperBurrito(HyperBurrito):
     # Note that we have to write the args out explicitly because we use some magic to filter kwargs in the optuna_objective method.

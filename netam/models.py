@@ -18,9 +18,12 @@ from netam.common import (
     aa_mask_tensor_of,
     encode_sequences,
     chunk_function,
+    assume_single_sequence_is_heavy_chain,
 )
 
 from netam.sequences import set_wt_to_nan
+
+from typing import Tuple
 
 warnings.filterwarnings(
     "ignore", category=UserWarning, module="torch.nn.modules.transformer"
@@ -580,7 +583,10 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
     def evaluate_sequences(self, sequences: list[str], **kwargs) -> Tensor:
         return tuple(self.selection_factors_of_aa_str(seq) for seq in sequences)
 
-    def selection_factors_of_aa_str(self, aa_str: str) -> Tensor:
+    # TODO make sure that insertion of model tokens is actually done here...
+    # Also check if this is used anymore...
+    @assume_single_sequence_is_heavy_chain
+    def selection_factors_of_aa_str(self, aa_sequence: Tuple[str, str]) -> Tensor:
         """Do the forward method then exponentiation without gradients from an amino
         acid string.
 
@@ -591,40 +597,34 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
                 Otherwise it should be a tuple, with the first element being the heavy chain and the second element being the light chain sequence.
 
         Returns:
-            A numpy array of the same length as the input string representing
+            A tuple of numpy arrays of the same length as the input strings representing
             the level of selection for each amino acid at each site.
-            If the input was a tuple of heavy/light chain sequences, the output will be a tuple of
-            numpy arrays.
         """
 
+        aa_str, added_indices = sequences.prepare_heavy_light_pair(*aa_sequence, self.hyperparameters["embedding_dim"])
         aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
         aa_idxs = aa_idxs.to(self.device)
+        # This makes the expected mask because of
+        # test_sequence.py::test_compare_mask_tensors.
+        # TODO write test that compares for all possible embedding_dim values
+        # the output of aa_mask_tensor_of and (codon_mask_tensor_of | token_mask_of_aa_idxs).
+        # (Here we expect those two to be the same)
         mask = aa_mask_tensor_of(aa_str)
         mask = mask.to(self.device)
 
-        # Here we're ignoring sites containing tokens that have index greater
-        # than the embedding dimension. If extra tokens have been added since
-        # this model was defined, they are stripped out before feeding the
-        # sequence to the model, and the returned selection factors will be NaN
-        # at sites containing those unrecognized tokens.
-        model_valid_sites = aa_idxs < self.hyperparameters["embedding_dim"]
-        if self.hyperparameters["output_dim"] == 1:
-            result = torch.full((len(aa_str),), float("nan"), device=self.device)
-        else:
-            result = torch.full(
-                (len(aa_str), self.hyperparameters["output_dim"]),
-                float("nan"),
-                device=self.device,
-            )
-
         with torch.no_grad():
             model_out = self(
-                aa_idxs[model_valid_sites].unsqueeze(0),
-                mask[model_valid_sites].unsqueeze(0),
-            ).squeeze(0)
-            result[model_valid_sites] = torch.exp(model_out)[: model_valid_sites.sum()]
+                aa_idxs.unsqueeze(0),
+                mask.unsqueeze(0),
+            ).squeeze(0).exp()
 
-        return result
+        # Now split into heavy and light chain results:
+        sequence_mask = torch.ones(len(model_out), dtype=bool)
+        sequence_mask[added_indices] = False
+        masked_model_out = model_out[sequence_mask]
+        light_chain = masked_model_out[:len(aa_str[0])]
+        heavy_chain = masked_model_out[len(aa_str[0]):]
+        return light_chain, heavy_chain
 
 
 class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):

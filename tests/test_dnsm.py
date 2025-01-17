@@ -10,7 +10,7 @@ from netam.framework import (
 from netam.common import aa_idx_tensor_of_str_ambig, force_spawn
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dnsm import DNSMBurrito, DNSMDataset
-from netam.sequences import AA_AMBIG_IDX, MAX_EMBEDDING_DIM
+from netam.sequences import AA_AMBIG_IDX, MAX_EMBEDDING_DIM, TOKEN_STR_SORTED
 
 
 def test_aa_idx_tensor_of_str_ambig():
@@ -20,7 +20,7 @@ def test_aa_idx_tensor_of_str_ambig():
     assert torch.equal(output, expected_output)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module", params=["pcp_df", "pcp_df_paired"])
 def dnsm_burrito(pcp_df):
     """Fixture that returns the DNSM Burrito object."""
     force_spawn()
@@ -68,3 +68,23 @@ def test_crepe_roundtrip(dnsm_burrito):
         dnsm_burrito.model.state_dict().values(), model.state_dict().values()
     ):
         assert torch.equal(t1, t2)
+
+
+# TODO this won't work until build_selection_matrix_from_parent is fixed
+def test_build_selection_matrix_from_parent(dasm_burrito):
+    dataset_row = dasm_burrito.val_dataset[0]
+    
+    parent = dasm_burrito.val_dataset.nt_parents[0]
+    parent_aa_idxs = dasm_burrito.val_dataset.aa_parents_idxss[0]
+    aa_mask = dasm_burrito.val_dataset.masks[0]
+    aa_parent = "".join(TOKEN_STR_SORTED[i] for i in parent)
+
+    separator_idx = aa_parent.index('^') * 3
+    light_chain_seq = parent[:separator_idx]
+    heavy_chain_seq = parent[separator_idx + 3:]
+    
+    direct_val = dasm_burrito.build_selection_matrix_from_parent_aa(parent_aa_idxs, aa_mask)
+
+    indirect_val = dasm_burrito.build_selection_matrix_from_parent((light_chain_seq, heavy_chain_seq))
+
+    assert torch.allclose(direct_val, indirect_val)

@@ -29,6 +29,7 @@ from netam.sequences import (
     nt_mutation_frequency,
     strip_unrecognized_tokens_from_series,
     dataset_inputs_of_pcp_df,
+    token_mask_of_aa_idxs,
     MAX_AA_TOKEN_IDX,
     RESERVED_TOKEN_REGEX,
     AA_AMBIG_IDX,
@@ -36,7 +37,8 @@ from netam.sequences import (
 
 
 class DXSMDataset(framework.BranchLengthDataset, ABC):
-    prefix = "dxsm"
+    # Not defining model_type here; instead defining it in subclasses.
+    # This will raise an error if we aren't using a subclass.
 
     def __init__(
         self,
@@ -271,6 +273,16 @@ class DXSMBurrito(framework.Burrito, ABC):
     # Not defining model_type here; instead defining it in subclasses.
     # This will raise an error if we aren't using a subclass.
 
+    def selection_factors_of_aa_idxs(self, aa_idxs, aa_mask):
+        """Get the log selection factors for a batch of amino acid indices.
+        aa_idxs and aa_mask are expected to be as prepared in the Dataset constructor."""
+        
+        # We need the model to see special tokens here. For every other purpose
+        # they are masked out.
+        keep_token_mask = mask | token_mask_of_aa_idxs(aa_idxs)
+        return self.model(aa_idxs, keep_token_mask)
+
+
     def _find_optimal_branch_length(
         self,
         parent,
@@ -278,13 +290,14 @@ class DXSMBurrito(framework.Burrito, ABC):
         nt_rates,
         nt_csps,
         aa_mask,
+        aa_parents_indices,
         starting_branch_length,
         multihit_model,
         **optimization_kwargs,
     ):
         # TODO finish switching to build_selection_matrix_from_parent_aa
         # thing...
-        sel_matrix = self.build_selection_matrix_from_parent(parent)
+        sel_matrix = self.build_selection_matrix_from_parent_aa(aa_parents_indices, aa_mask)
         trimmed_aa_mask = aa_mask[: len(sel_matrix)]
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
             sel_matrix[trimmed_aa_mask],
@@ -304,13 +317,14 @@ class DXSMBurrito(framework.Burrito, ABC):
         optimal_lengths = []
         failed_count = 0
 
-        for parent, child, nt_rates, nt_csps, aa_mask, starting_length in tqdm(
+        for parent, child, nt_rates, nt_csps, aa_mask, aa_parents_indices, starting_length in tqdm(
             zip(
                 dataset.nt_parents,
                 dataset.nt_children,
                 dataset.nt_ratess,
                 dataset.nt_cspss,
                 dataset.masks,
+                dataset.aa_parents_idxss,
                 dataset.branch_lengths,
             ),
             total=len(dataset.nt_parents),
@@ -322,6 +336,7 @@ class DXSMBurrito(framework.Burrito, ABC):
                 nt_rates[: len(parent)],
                 nt_csps[: len(parent), :],
                 aa_mask,
+                aa_parents_indices,
                 starting_length,
                 dataset.multihit_model,
                 **optimization_kwargs,

@@ -89,38 +89,6 @@ def generic_mask_tensor_of(ambig_symb, seq_str, length=None):
     return mask
 
 
-def _consider_codon(codon):
-    """Return False if codon should be masked, True otherwise."""
-    if "N" in codon:
-        return False
-    elif codon in RESERVED_TOKEN_TRANSLATIONS:
-        return False
-    else:
-        return True
-
-
-def codon_mask_tensor_of(nt_parent, *other_nt_seqs, aa_length=None):
-    """Return a mask tensor indicating codons which contain at least one N.
-
-    Codons beyond the length of the sequence are masked. If other_nt_seqs are provided,
-    the "and" mask will be computed for all sequences. Codons containing marker tokens
-    are also masked.
-    """
-    if aa_length is None:
-        aa_length = len(nt_parent) // 3
-    sequences = (nt_parent,) + other_nt_seqs
-    mask = [
-        all(_consider_codon(codon) for codon in codons)
-        for codons in zip(*(iter_codons(sequence) for sequence in sequences))
-    ]
-    if len(mask) < aa_length:
-        mask += [False] * (aa_length - len(mask))
-    else:
-        mask = mask[:aa_length]
-    assert len(mask) == aa_length
-    return torch.tensor(mask, dtype=torch.bool)
-
-
 def aa_strs_from_idx_tensor(idx_tensor):
     """Convert a tensor of amino acid indices back to a list of amino acid strings.
 
@@ -175,6 +143,39 @@ def nt_mask_tensor_of(*args, **kwargs):
 
 def aa_mask_tensor_of(*args, **kwargs):
     return generic_mask_tensor_of("X", *args, **kwargs)
+
+
+def _consider_codon(codon):
+    """Return False if codon should be masked, True otherwise."""
+    if "N" in codon:
+        return False
+    elif codon in RESERVED_TOKEN_TRANSLATIONS:
+        return False
+    else:
+        return True
+
+
+def codon_mask_tensor_of(nt_parent, *other_nt_seqs, aa_length=None):
+    """Return a mask tensor indicating codons which contain at least one N.
+
+    Codons beyond the length of the sequence are masked. If other_nt_seqs are provided,
+    the "and" mask will be computed for all sequences. Codons containing marker tokens
+    are also masked.
+    """
+    if aa_length is None:
+        aa_length = len(nt_parent) // 3
+    sequences = (nt_parent,) + other_nt_seqs
+    mask = [
+        all(_consider_codon(codon) for codon in codons)
+        for codons in zip(*(iter_codons(sequence) for sequence in sequences))
+    ]
+    if len(mask) < aa_length:
+        mask += [False] * (aa_length - len(mask))
+    else:
+        mask = mask[:aa_length]
+    assert len(mask) == aa_length
+    return torch.tensor(mask, dtype=torch.bool)
+
 
 
 def informative_site_count(seq_str):
@@ -427,6 +428,23 @@ def chunked(iterable, n):
         if not chunk:
             return
         yield chunk
+
+
+def assume_single_sequence_is_heavy_chain(function):
+    """Wraps a function that takes a heavy/light sequence pair as its first argument
+    and returns a tuple of results.
+
+    The wrapped function will assume that if the first argument is a string, it is a
+    heavy chain sequence, and in that case will return only the heavy chain result."""
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        seq = args[0]
+        if isinstance(seq, str):
+            seq = (seq, "")
+            res = function(seq, *args[1:], **kwargs)
+            return res[0]
+        else:
+            return function(*args, **kwargs)
 
 
 def chunk_function(
