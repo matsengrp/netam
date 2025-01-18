@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from netam.hit_class import apply_multihit_correction
+from netam import sequences
 from netam.sequences import MAX_AA_TOKEN_IDX
 from netam.common import (
     aa_idx_tensor_of_str_ambig,
@@ -585,7 +586,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
 
     # TODO make sure that insertion of model tokens is actually done here...
     # Also check if this is used anymore...
-    @assume_single_sequence_is_heavy_chain
+    @assume_single_sequence_is_heavy_chain(1)
     def selection_factors_of_aa_str(self, aa_sequence: Tuple[str, str]) -> Tensor:
         """Do the forward method then exponentiation without gradients from an amino
         acid string.
@@ -601,14 +602,11 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
             the level of selection for each amino acid at each site.
         """
 
-        aa_str, added_indices = sequences.prepare_heavy_light_pair(*aa_sequence, self.hyperparameters["embedding_dim"])
+        aa_str, added_indices = sequences.prepare_heavy_light_pair(*aa_sequence, self.hyperparameters["embedding_dim"], is_nt=False)
         aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
         aa_idxs = aa_idxs.to(self.device)
         # This makes the expected mask because of
-        # test_sequence.py::test_compare_mask_tensors.
-        # TODO write test that compares for all possible embedding_dim values
-        # the output of aa_mask_tensor_of and (codon_mask_tensor_of | token_mask_of_aa_idxs).
-        # (Here we expect those two to be the same)
+        # test_common.py::test_compare_mask_tensors.
         mask = aa_mask_tensor_of(aa_str)
         mask = mask.to(self.device)
 
@@ -620,11 +618,11 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
 
         # Now split into heavy and light chain results:
         sequence_mask = torch.ones(len(model_out), dtype=bool)
-        sequence_mask[added_indices] = False
+        sequence_mask[torch.tensor(added_indices)] = False
         masked_model_out = model_out[sequence_mask]
-        light_chain = masked_model_out[:len(aa_str[0])]
-        heavy_chain = masked_model_out[len(aa_str[0]):]
-        return light_chain, heavy_chain
+        heavy_chain = masked_model_out[:len(aa_sequence[0])]
+        light_chain = masked_model_out[len(aa_sequence[0]):]
+        return heavy_chain, light_chain
 
 
 class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):

@@ -279,7 +279,7 @@ class DXSMBurrito(framework.Burrito, ABC):
         
         # We need the model to see special tokens here. For every other purpose
         # they are masked out.
-        keep_token_mask = mask | token_mask_of_aa_idxs(aa_idxs)
+        keep_token_mask = aa_mask | token_mask_of_aa_idxs(aa_idxs)
         return self.model(aa_idxs, keep_token_mask)
 
 
@@ -295,9 +295,9 @@ class DXSMBurrito(framework.Burrito, ABC):
         multihit_model,
         **optimization_kwargs,
     ):
-        # TODO finish switching to build_selection_matrix_from_parent_aa
-        # thing...
-        sel_matrix = self.build_selection_matrix_from_parent_aa(aa_parents_indices, aa_mask)
+        sel_matrix = self.build_selection_matrix_from_parent_aa(aa_parents_indices, aa_mask)[: len(parent) // 3]
+        # TODO something is wrong with the mask length now, since before we
+        # were using the actual unpadded sequence...
         trimmed_aa_mask = aa_mask[: len(sel_matrix)]
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
             sel_matrix[trimmed_aa_mask],
@@ -354,11 +354,12 @@ class DXSMBurrito(framework.Burrito, ABC):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         worker_count = min(mp.cpu_count() // 2, 10)
-        # # The following can be used when one wants a better traceback.
-        # burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
-        # return burrito.serial_find_optimal_branch_lengths(
-        #     dataset, **optimization_kwargs
-        # )
+        # TODO
+        # The following can be used when one wants a better traceback.
+        burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
+        return burrito.serial_find_optimal_branch_lengths(
+            dataset, **optimization_kwargs
+        )
         our_optimize_branch_length = partial(
             worker_optimize_branch_length,
             self.__class__,

@@ -13,6 +13,8 @@ from netam.hyper_burrito import HyperBurrito
 import netam.molevol as molevol
 import netam.sequences as sequences
 
+from typing import Tuple
+
 
 class DNSMDataset(DXSMDataset):
 
@@ -167,7 +169,9 @@ class DNSMBurrito(DXSMBurrito):
         # Every "off-diagonal" entry of the selection matrix is set to the selection
         # factor, where "diagonal" means keeping the same amino acid.
         selection_matrix[:, :] = selection_factors[:, None]
-        selection_matrix[torch.arange(len(parent_idxs)), parent_idxs] = 1.0
+        valid_mask = aa_parent_idxs < 20
+        selection_matrix[torch.arange(len(aa_parent_idxs))[valid_mask], aa_parent_idxs[valid_mask]] = 1.0
+        selection_matrix[~valid_mask] = 1.0
         return selection_matrix
 
     def build_selection_matrix_from_parent_aa(self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor):
@@ -176,25 +180,30 @@ class DNSMBurrito(DXSMBurrito):
         Values at ambiguous sites are meaningless.
         """
         with torch.no_grad():
-            per_aa_selection_factors = self.selection_factors_of_aa_idxs(aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0).exp()
+            selection_factors = self.selection_factors_of_aa_idxs(aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0).exp()
         return self._build_selection_matrix_from_selection_factors(
             selection_factors, aa_parent_idxs
+        )
 
-    # TODO upgrade this to take pair of heavy and light sequences
-    def build_selection_matrix_from_parent(self, parent: str):
+    def build_selection_matrix_from_parent(self, parent: Tuple[str, str]):
         """Build a selection matrix from a nucleotide sequence.
 
         Values at ambiguous sites are meaningless.
         """
-        parent = sequences.translate_sequence(parent)
-        selection_factors = self.model.selection_factors_of_aa_str(parent)
-        parent = parent.replace("X", "A")
-        # Set "diagonal" elements to one.
-        parent_idxs = sequences.aa_idx_array_of_str(parent)
+        aa_parent_pair = tuple(map(sequences.translate_sequence, parent))
+        selection_factorss = self.model.selection_factors_of_aa_str(aa_parent_pair)
 
-        return self._build_selection_matrix_from_selection_factors(
-            selection_factors, parent_idxs
-        )
+        result = []
+        for selection_factors, aa_parent in zip(selection_factorss, aa_parent_pair):
+            aa_parent_idxs = sequences.aa_idx_array_of_str(aa_parent)
+            if len(selection_factors) > 0:
+                result.append(self._build_selection_matrix_from_selection_factors(
+                    selection_factors, aa_parent_idxs
+                ))
+            else:
+                result.append(selection_factors)
+        return tuple(result)
+
 
 class DNSMHyperBurrito(HyperBurrito):
     # Note that we have to write the args out explicitly because we use some magic to filter kwargs in the optuna_objective method.

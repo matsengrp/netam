@@ -12,6 +12,7 @@ from netam.sequences import (
     CODONS,
     CODON_AA_INDICATOR_MATRIX,
     MAX_EMBEDDING_DIM,
+    AA_AMBIG_IDX,
     aa_onehot_tensor_of_str,
     nt_idx_array_of_str,
     nt_subs_indicator_tensor_of,
@@ -21,6 +22,7 @@ from netam.sequences import (
     strip_unrecognized_tokens_from_series,
     prepare_heavy_light_pair,
     combine_and_pad_tensors,
+    dataset_inputs_of_pcp_df,
 )
 
 
@@ -138,3 +140,12 @@ def test_subs_indicator_tensor_of():
     expected_output = torch.tensor([0, 0, 1, 0], dtype=torch.float)
     output = nt_subs_indicator_tensor_of(parent, child)
     assert torch.equal(output, expected_output)
+
+
+def test_dataset_inputs_of_pcp_df(pcp_df, pcp_df_paired):
+    for token_count in range(AA_AMBIG_IDX + 1, MAX_EMBEDDING_DIM + 1):
+        for df in (pcp_df, pcp_df_paired):
+            for parent, child, nt_rates, nt_csps in zip(*dataset_inputs_of_pcp_df(df, 22)):
+                assert len(nt_rates) == len(parent)
+                assert len(nt_csps) == len(parent)
+                assert len(parent) == len(child)

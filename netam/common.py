@@ -430,21 +430,27 @@ def chunked(iterable, n):
         yield chunk
 
 
-def assume_single_sequence_is_heavy_chain(function):
+
+def assume_single_sequence_is_heavy_chain(seq_arg_idx=0):
     """Wraps a function that takes a heavy/light sequence pair as its first argument
     and returns a tuple of results.
 
     The wrapped function will assume that if the first argument is a string, it is a
     heavy chain sequence, and in that case will return only the heavy chain result."""
-    @wraps(function)
-    def wrapper(*args, **kwargs):
-        seq = args[0]
-        if isinstance(seq, str):
-            seq = (seq, "")
-            res = function(seq, *args[1:], **kwargs)
-            return res[0]
-        else:
-            return function(*args, **kwargs)
+    def decorator(function):
+        @wraps(function)
+        def wrapper(*args, **kwargs):
+            seq = args[seq_arg_idx]
+            if isinstance(seq, str):
+                seq = (seq, "")
+                args = list(args)
+                args[seq_arg_idx] = seq
+                res = function(*args, **kwargs)
+                return res[0]
+            else:
+                return function(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 def chunk_function(

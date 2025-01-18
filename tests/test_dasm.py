@@ -97,22 +97,34 @@ def test_zap_diagonal(dasm_burrito):
                         == predictions[batch_idx, i, j]
                     )
 
+def test_selection_factors_of_aa_str(dasm_burrito):
+    parent_aa_idxs = dasm_burrito.val_dataset.aa_parents_idxss[0]
+    aa_parent = "".join(TOKEN_STR_SORTED[i] for i in parent_aa_idxs)
+    # This won't work if we start testing with ambiguous sequences
+    aa_parent = aa_parent.replace("X", "")
+    aa_parent_pair = tuple(aa_parent.split('^'))
+    res = dasm_burrito.model.selection_factors_of_aa_str(aa_parent_pair)
+    assert len(res[0]) == len(aa_parent_pair[0])
+    assert len(res[1]) == len(aa_parent_pair[1])
+    assert res[0].shape[1] == 20
+    assert res[1].shape[1] == 20
 
-# TODO this won't work until build_selection_matrix_from_parent is fixed
+
 def test_build_selection_matrix_from_parent(dasm_burrito):
-    dataset_row = dasm_burrito.val_dataset[0]
-    
     parent = dasm_burrito.val_dataset.nt_parents[0]
     parent_aa_idxs = dasm_burrito.val_dataset.aa_parents_idxss[0]
     aa_mask = dasm_burrito.val_dataset.masks[0]
-    aa_parent = "".join(TOKEN_STR_SORTED[i] for i in parent)
+    aa_parent = "".join(TOKEN_STR_SORTED[i] for i in parent_aa_idxs)
+    # This won't work if we start testing with ambiguous sequences
+    aa_parent = aa_parent.replace("X", "")
 
     separator_idx = aa_parent.index('^') * 3
     light_chain_seq = parent[:separator_idx]
     heavy_chain_seq = parent[separator_idx + 3:]
-    
+
     direct_val = dasm_burrito.build_selection_matrix_from_parent_aa(parent_aa_idxs, aa_mask)
 
     indirect_val = dasm_burrito.build_selection_matrix_from_parent((light_chain_seq, heavy_chain_seq))
 
-    assert torch.allclose(direct_val, indirect_val)
+    assert torch.allclose(direct_val[:len(indirect_val[0])], indirect_val[0])
+    assert torch.allclose(direct_val[len(indirect_val[0]) + 1 :][:len(indirect_val[1])], indirect_val[1])
