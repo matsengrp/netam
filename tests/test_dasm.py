@@ -14,7 +14,7 @@ from netam.dasm import (
     DASMDataset,
     zap_predictions_along_diagonal,
 )
-from netam.sequences import MAX_EMBEDDING_DIM, TOKEN_STR_SORTED
+from netam.sequences import MAX_KNOWN_TOKEN_COUNT, TOKEN_STR_SORTED
 
 
 # TODO verify that this loops through both pcp_dfs, even though one is named
@@ -26,7 +26,7 @@ def dasm_burrito(pcp_df):
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
     train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(
-        pcp_df, MAX_EMBEDDING_DIM
+        pcp_df, MAX_KNOWN_TOKEN_COUNT
     )
 
     model = TransformerBinarySelectionModelWiggleAct(

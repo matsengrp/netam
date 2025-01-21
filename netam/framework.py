@@ -322,9 +322,9 @@ def load_crepe(prefix, device=None):
         )
 
     if issubclass(model_class, models.TransformerBinarySelectionModelLinAct):
-        if "embedding_dim" not in config["model_hyperparameters"]:
+        if "known_token_count" not in config["model_hyperparameters"]:
             # Assume the model is from before any new tokens were added, so 21
-            config["model_hyperparameters"]["embedding_dim"] = 21
+            config["model_hyperparameters"]["known_token_count"] = 21
 
     model = model_class(**config["model_hyperparameters"])
 

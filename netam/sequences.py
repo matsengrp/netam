@@ -26,8 +26,8 @@ RESERVED_TOKEN_AA_BOUNDS = (
     min(TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS),
     max(TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS),
 )
-MAX_EMBEDDING_DIM = len(TOKEN_STR_SORTED)
-MAX_AA_TOKEN_IDX = MAX_EMBEDDING_DIM - 1
+MAX_KNOWN_TOKEN_COUNT = len(TOKEN_STR_SORTED)
+MAX_AA_TOKEN_IDX = MAX_KNOWN_TOKEN_COUNT - 1
 CODONS = ["".join(codon_list) for codon_list in itertools.product(BASES, repeat=3)]
 STOP_CODONS = ["TAA", "TAG", "TGA"]
 # Each token in RESERVED_TOKENS will appear once in aa strings, and three times
@@ -36,34 +36,6 @@ RESERVED_TOKEN_TRANSLATIONS = {token * 3: token for token in RESERVED_TOKENS}
 
 # Create a regex pattern
 RESERVED_TOKEN_REGEX = f"[{''.join(map(re.escape, list(RESERVED_TOKENS)))}]"
-
-
-# TODO maybe remove now?
-def token_regex_from_embedding_dim(embedding_dim: int) -> str:
-    """Return a regex pattern that matches any token which cannot be handled by a model
-    with the provided embedding dimension."""
-    assert embedding_dim >= 21, "The provided embedding dimension is too small."
-    assert (
-        embedding_dim < MAX_EMBEDDING_DIM
-    ), "The provided embedding dimension is large enough for all recognized tokens."
-    unsupported_tokens = TOKEN_STR_SORTED[embedding_dim:]
-    return f"[{''.join(map(re.escape, list(unsupported_tokens)))}]"
-
-
-# TODO maybe remove now?
-def strip_unrecognized_tokens_from_series(
-    series: pd.Series, embedding_dim: int
-) -> pd.Series:
-    """Return a copy of the series with any tokens not recognized by a model with the
-    provided embedding dimension removed."""
-    assert (
-        embedding_dim <= MAX_EMBEDDING_DIM
-    ), "The provided embedding dimension is larger than the number of recognized tokens."
-    if embedding_dim < MAX_EMBEDDING_DIM:
-        pattern = token_regex_from_embedding_dim(embedding_dim)
-        return series.str.replace(pattern, "", regex=True)
-    else:
-        return series
 
 
 def prepare_heavy_light_pair(heavy_seq, light_seq, known_token_count, is_nt=True):

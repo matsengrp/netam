@@ -584,8 +584,6 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
     def evaluate_sequences(self, sequences: list[str], **kwargs) -> Tensor:
         return tuple(self.selection_factors_of_aa_str(seq) for seq in sequences)
 
-    # TODO make sure that insertion of model tokens is actually done here...
-    # Also check if this is used anymore...
     @assume_single_sequence_is_heavy_chain(1)
     def selection_factors_of_aa_str(self, aa_sequence: Tuple[str, str]) -> Tensor:
         """Do the forward method then exponentiation without gradients from an amino
@@ -603,9 +601,13 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         """
 
         aa_str, added_indices = sequences.prepare_heavy_light_pair(
-            *aa_sequence, self.hyperparameters["embedding_dim"], is_nt=False
+            *aa_sequence, self.hyperparameters["known_token_count"], is_nt=False
         )
         aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
+        if torch.any(aa_idxs >= self.hyperparameters["known_token_count"]):
+            raise ValueError(
+                "Provided sequence contains tokens unrecognized by the model. Provide unmodified heavy and/or light chain sequences."
+            )
         aa_idxs = aa_idxs.to(self.device)
         # This makes the expected mask because of
         # test_common.py::test_compare_mask_tensors.
@@ -641,7 +643,7 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
         layer_count: int,
         dropout_prob: float = 0.5,
         output_dim: int = 1,
-        embedding_dim: int = MAX_AA_TOKEN_IDX + 1,
+        known_token_count: int = MAX_AA_TOKEN_IDX + 1,
     ):
         super().__init__()
         # Note that d_model has to be divisible by nhead, so we make that
@@ -649,10 +651,10 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
         self.d_model_per_head = d_model_per_head
         self.d_model = d_model_per_head * nhead
         self.nhead = nhead
-        self.embedding_dim = embedding_dim
+        self.known_token_count = known_token_count
         self.dim_feedforward = dim_feedforward
         self.pos_encoder = PositionalEncoding(self.d_model, dropout_prob)
-        self.amino_acid_embedding = nn.Embedding(self.embedding_dim, self.d_model)
+        self.amino_acid_embedding = nn.Embedding(self.known_token_count, self.d_model)
         self.encoder_layer = nn.TransformerEncoderLayer(
             d_model=self.d_model,
             nhead=nhead,
@@ -672,7 +674,7 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
             "layer_count": self.encoder.num_layers,
             "dropout_prob": self.pos_encoder.dropout.p,
             "output_dim": self.linear.out_features,
-            "embedding_dim": self.embedding_dim,
+            "known_token_count": self.known_token_count,
         }
 
     def init_weights(self) -> None:
@@ -779,15 +781,20 @@ class TransformerBinarySelectionModelTrainableWiggleAct(
 class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
     """A one parameter selection model as a baseline."""
 
-    def __init__(self, output_dim: int = 1, embedding_dim: int = MAX_AA_TOKEN_IDX + 1):
+    def __init__(
+        self, output_dim: int = 1, known_token_count: int = MAX_AA_TOKEN_IDX + 1
+    ):
         super().__init__()
         self.single_value = nn.Parameter(torch.tensor(0.0))
         self.output_dim = output_dim
-        self.embedding_dim = embedding_dim
+        self.known_token_count = known_token_count
 
     @property
     def hyperparameters(self):
-        return {"output_dim": self.output_dim, "embedding_dim": self.embedding_dim}
+        return {
+            "output_dim": self.output_dim,
+            "known_token_count": self.known_token_count,
+        }
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         """Build a binary log selection matrix from an index-encoded parent sequence."""

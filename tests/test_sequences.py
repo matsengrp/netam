@@ -11,7 +11,7 @@ from netam.sequences import (
     TOKEN_STR_SORTED,
     CODONS,
     CODON_AA_INDICATOR_MATRIX,
-    MAX_EMBEDDING_DIM,
+    MAX_KNOWN_TOKEN_COUNT,
     AA_AMBIG_IDX,
     aa_onehot_tensor_of_str,
     nt_idx_array_of_str,
@@ -19,7 +19,6 @@ from netam.sequences import (
     translate_sequences,
     token_mask_of_aa_idxs,
     aa_idx_tensor_of_str,
-    strip_unrecognized_tokens_from_series,
     prepare_heavy_light_pair,
     combine_and_pad_tensors,
     dataset_inputs_of_pcp_df,
@@ -41,15 +40,6 @@ def test_token_replace():
         assert nseq == seq
 
 
-def test_strip_unrecognized_tokens_from_series():
-    df = pd.DataFrame({"seq": ["AGCGTC" + token for token in TOKEN_STR_SORTED]})
-    newseqs = strip_unrecognized_tokens_from_series(df["seq"], 21)
-    for seq, nseq in zip(df["seq"], newseqs):
-        for token in RESERVED_TOKENS:
-            seq = seq.replace(token, "")
-        assert nseq == seq
-
-
 def test_prepare_heavy_light_pair():
     heavy = "AGCGTC"
     light = "AGCGTC"
@@ -58,7 +48,7 @@ def test_prepare_heavy_light_pair():
         ("AGCGTC", ""),
         ("", "AGCGTC"),
     ]:
-        assert prepare_heavy_light_pair(heavy, light, MAX_EMBEDDING_DIM) == (
+        assert prepare_heavy_light_pair(heavy, light, MAX_KNOWN_TOKEN_COUNT) == (
             heavy + "^^^" + light,
             tuple(range(len(heavy), len(heavy) + 3)),
         )
@@ -71,7 +61,7 @@ def test_prepare_heavy_light_pair():
         ("", "QVQ"),
     ]:
         assert prepare_heavy_light_pair(
-            heavy, light, MAX_EMBEDDING_DIM, is_nt=False
+            heavy, light, MAX_KNOWN_TOKEN_COUNT, is_nt=False
         ) == (heavy + "^" + light, tuple(range(len(heavy), len(heavy) + 1)))
 
 
@@ -152,7 +142,7 @@ def test_subs_indicator_tensor_of():
 
 
 def test_dataset_inputs_of_pcp_df(pcp_df, pcp_df_paired):
-    for token_count in range(AA_AMBIG_IDX + 1, MAX_EMBEDDING_DIM + 1):
+    for token_count in range(AA_AMBIG_IDX + 1, MAX_KNOWN_TOKEN_COUNT + 1):
         for df in (pcp_df, pcp_df_paired):
             for parent, child, nt_rates, nt_csps in zip(
                 *dataset_inputs_of_pcp_df(df, 22)

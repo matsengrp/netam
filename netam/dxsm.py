@@ -46,14 +46,11 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         nt_ratess: torch.Tensor,
         nt_cspss: torch.Tensor,
         branch_lengths: torch.Tensor,
-        model_embedding_dim: int,
+        model_known_token_count: int,
         multihit_model=None,
-        # TODO For debugging:
-        succeed=False,
     ):
-        assert succeed, "Dataset should be created through other constructor"
         # This is no longer needed here, but it seems like we should be able to verify what model version an instance is built for anyway:
-        self.model_embedding_dim = model_embedding_dim
+        self.model_known_token_count = model_known_token_count
 
         # We will replace reserved tokens with Ns but use the unmodified
         # originals for translation and mask creation.
@@ -120,10 +117,9 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         nt_children: pd.Series,
         nt_rates_series: pd.Series,
         nt_csps_series: pd.Series,
-        model_embedding_dim,
+        model_known_token_count,
         branch_length_multiplier=5.0,
         multihit_model=None,
-        succeed=False,
     ):
         """Alternative constructor that takes the raw data and calculates the initial
         branch lengths.
@@ -143,16 +139,15 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             stack_heterogeneous(nt_rates_series.reset_index(drop=True)),
             stack_heterogeneous(nt_csps_series.reset_index(drop=True)),
             initial_branch_lengths,
-            model_embedding_dim,
+            model_known_token_count,
             multihit_model=multihit_model,
-            succeed=succeed,
         )
 
     @classmethod
     def of_pcp_df(
         cls,
         pcp_df,
-        model_embedding_dim,
+        model_known_token_count,
         branch_length_multiplier=5.0,
         multihit_model=None,
     ):
@@ -166,18 +161,17 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         # outputs
 
         return cls.of_seriess(
-            *dataset_inputs_of_pcp_df(pcp_df, model_embedding_dim),
-            model_embedding_dim,
+            *dataset_inputs_of_pcp_df(pcp_df, model_known_token_count),
+            model_known_token_count,
             branch_length_multiplier=branch_length_multiplier,
             multihit_model=multihit_model,
-            succeed=True,
         )
 
     @classmethod
     def train_val_datasets_of_pcp_df(
         cls,
         pcp_df,
-        model_embedding_dim,
+        model_known_token_count,
         branch_length_multiplier=5.0,
         multihit_model=None,
     ):
@@ -190,7 +184,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
 
         val_dataset = cls.of_pcp_df(
             val_df,
-            model_embedding_dim,
+            model_known_token_count,
             branch_length_multiplier=branch_length_multiplier,
             multihit_model=multihit_model,
         )
@@ -200,7 +194,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         # else:
         train_dataset = cls.of_pcp_df(
             train_df,
-            model_embedding_dim,
+            model_known_token_count,
             branch_length_multiplier=branch_length_multiplier,
             multihit_model=multihit_model,
         )
@@ -215,9 +209,8 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             self.nt_ratess.copy(),
             self.nt_cspss.copy(),
             self._branch_lengths.copy(),
-            self.model_embedding_dim,
+            self.model_known_token_count,
             multihit_model=self.multihit_model,
-            succeed=True,
         )
         return new_dataset
 
@@ -234,9 +227,8 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             self.nt_ratess[indices],
             self.nt_cspss[indices],
             self._branch_lengths[indices],
-            self.model_embedding_dim,
+            self.model_known_token_count,
             multihit_model=self.multihit_model,
-            succeed=True,
         )
         return new_dataset
 

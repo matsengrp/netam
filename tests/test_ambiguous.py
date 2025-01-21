@@ -1,6 +1,6 @@
 import pytest
 
-from netam.sequences import MAX_EMBEDDING_DIM
+from netam.sequences import MAX_KNOWN_TOKEN_COUNT
 from netam.common import force_spawn
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dasm import (
@@ -148,7 +148,7 @@ def test_dnsm_burrito(ambig_pcp_df, dnsm_model):
     ambig_pcp_df["in_train"] = True
     ambig_pcp_df.loc[ambig_pcp_df.index[-15:], "in_train"] = False
     train_dataset, val_dataset = DNSMDataset.train_val_datasets_of_pcp_df(
-        ambig_pcp_df, MAX_EMBEDDING_DIM
+        ambig_pcp_df, MAX_KNOWN_TOKEN_COUNT
     )
 
     burrito = DNSMBurrito(
@@ -179,7 +179,7 @@ def test_dasm_burrito(ambig_pcp_df, dasm_model):
     ambig_pcp_df["in_train"] = True
     ambig_pcp_df.loc[ambig_pcp_df.index[-15:], "in_train"] = False
     train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(
-        ambig_pcp_df, MAX_EMBEDDING_DIM
+        ambig_pcp_df, MAX_KNOWN_TOKEN_COUNT
     )
 
     burrito = DASMBurrito(

@@ -8,7 +8,7 @@ from netam.common import (
 )
 from netam.sequences import (
     AA_AMBIG_IDX,
-    MAX_EMBEDDING_DIM,
+    MAX_KNOWN_TOKEN_COUNT,
     prepare_heavy_light_pair,
     translate_sequence,
     aa_idx_tensor_of_str,
@@ -51,9 +51,9 @@ def test_mask_functions_agree(pcp_df, pcp_df_paired):
         first_row = next(input_pcp_df.itertuples())
         seq = (first_row.parent_h, first_row.parent_l)
 
-        for token_count in range(AA_AMBIG_IDX + 1, MAX_EMBEDDING_DIM + 1):
+        for token_count in range(AA_AMBIG_IDX + 1, MAX_KNOWN_TOKEN_COUNT + 1):
             nt_seq_with_tokens = prepare_heavy_light_pair(
-                *seq, MAX_EMBEDDING_DIM, is_nt=True
+                *seq, MAX_KNOWN_TOKEN_COUNT, is_nt=True
             )[0]
             aa_seq_with_tokens = translate_sequence(nt_seq_with_tokens)
             aa_idx_seq = aa_idx_tensor_of_str(aa_seq_with_tokens)
