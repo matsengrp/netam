@@ -27,7 +27,6 @@ from netam.sequences import (
     translate_sequences,
     apply_aa_mask_to_nt_sequence,
     nt_mutation_frequency,
-    strip_unrecognized_tokens_from_series,
     dataset_inputs_of_pcp_df,
     token_mask_of_aa_idxs,
     MAX_AA_TOKEN_IDX,
@@ -364,12 +363,11 @@ class DXSMBurrito(framework.Burrito, ABC):
 
     def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         worker_count = min(mp.cpu_count() // 2, 10)
-        # TODO
-        # The following can be used when one wants a better traceback.
-        burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
-        return burrito.serial_find_optimal_branch_lengths(
-            dataset, **optimization_kwargs
-        )
+        # # The following can be used when one wants a better traceback.
+        # burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
+        # return burrito.serial_find_optimal_branch_lengths(
+        #     dataset, **optimization_kwargs
+        # )
         our_optimize_branch_length = partial(
             worker_optimize_branch_length,
             self.__class__,
