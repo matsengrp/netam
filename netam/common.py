@@ -177,7 +177,6 @@ def codon_mask_tensor_of(nt_parent, *other_nt_seqs, aa_length=None):
     return torch.tensor(mask, dtype=torch.bool)
 
 
-
 def informative_site_count(seq_str):
     return sum(c != "N" for c in seq_str)
 
@@ -430,13 +429,14 @@ def chunked(iterable, n):
         yield chunk
 
 
-
 def assume_single_sequence_is_heavy_chain(seq_arg_idx=0):
-    """Wraps a function that takes a heavy/light sequence pair as its first argument
-    and returns a tuple of results.
+    """Wraps a function that takes a heavy/light sequence pair as its first argument and
+    returns a tuple of results.
 
     The wrapped function will assume that if the first argument is a string, it is a
-    heavy chain sequence, and in that case will return only the heavy chain result."""
+    heavy chain sequence, and in that case will return only the heavy chain result.
+    """
+
     def decorator(function):
         @wraps(function)
         def wrapper(*args, **kwargs):
@@ -449,7 +449,9 @@ def assume_single_sequence_is_heavy_chain(seq_arg_idx=0):
                 return res[0]
             else:
                 return function(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 

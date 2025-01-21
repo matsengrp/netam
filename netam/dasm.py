@@ -202,39 +202,54 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
         csp_loss = self.xent_loss(csp_pred, csp_targets)
         return torch.stack([subs_pos_loss, csp_loss])
 
-
-    def build_selection_matrix_from_parent_aa(self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor):
-        """Build a selection matrix from a single parent amino acid sequence.
-        Inputs are expected to be as prepared in the Dataset constructor.
+    def build_selection_matrix_from_parent_aa(
+        self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor
+    ):
+        """Build a selection matrix from a single parent amino acid sequence. Inputs are
+        expected to be as prepared in the Dataset constructor.
 
         Values at ambiguous sites are meaningless.
         """
         with torch.no_grad():
-            per_aa_selection_factors = self.selection_factors_of_aa_idxs(aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)).exp()
-        return zap_predictions_along_diagonal(per_aa_selection_factors, aa_parent_idxs.unsqueeze(0), fill=1.0).squeeze(0)
-
+            per_aa_selection_factors = self.selection_factors_of_aa_idxs(
+                aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)
+            ).exp()
+        return zap_predictions_along_diagonal(
+            per_aa_selection_factors, aa_parent_idxs.unsqueeze(0), fill=1.0
+        ).squeeze(0)
 
     # TODO I'm not sure if this is still used anywhere. It would be best to
     # just have it take aa strings, but that's not what it did before, so I'm
     # keeping the original behavior for now. (although, the old docstring
     # claimed incorrectly that it took an aa sequence)
     def build_selection_matrix_from_parent(self, parent: Tuple[str, str]):
-        """Build a selection matrix from a parent nucleotide sequence, a heavy-chain, light-chain pair.
+        """Build a selection matrix from a parent nucleotide sequence, a heavy-chain,
+        light-chain pair.
 
-        Values at ambiguous sites are meaningless.
-        Returned value is a tuple of selection matrix for heavy and light chain sequences.
+        Values at ambiguous sites are meaningless. Returned value is a tuple of
+        selection matrix for heavy and light chain sequences.
         """
         # This is simpler than the equivalent in dnsm.py because we get the selection
         # matrix directly. Note that selection_factors_of_aa_str does the exponentiation
         # so this indeed gives us the selection factors, not the log selection factors.
         aa_parent_pair = tuple(map(sequences.translate_sequence, parent))
-        per_aa_selection_factorss = self.model.selection_factors_of_aa_str(aa_parent_pair)
+        per_aa_selection_factorss = self.model.selection_factors_of_aa_str(
+            aa_parent_pair
+        )
 
         result = []
-        for per_aa_selection_factors, aa_parent in zip(per_aa_selection_factorss, aa_parent_pair):
+        for per_aa_selection_factors, aa_parent in zip(
+            per_aa_selection_factorss, aa_parent_pair
+        ):
             aa_parent_idxs = torch.tensor(sequences.aa_idx_array_of_str(aa_parent))
             if len(per_aa_selection_factors) > 0:
-                result.append(zap_predictions_along_diagonal(per_aa_selection_factors.unsqueeze(0), aa_parent_idxs.unsqueeze(0), fill=1.0).squeeze(0))
+                result.append(
+                    zap_predictions_along_diagonal(
+                        per_aa_selection_factors.unsqueeze(0),
+                        aa_parent_idxs.unsqueeze(0),
+                        fill=1.0,
+                    ).squeeze(0)
+                )
             else:
                 result.append(per_aa_selection_factors)
 

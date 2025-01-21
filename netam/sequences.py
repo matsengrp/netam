@@ -68,7 +68,7 @@ def strip_unrecognized_tokens_from_series(
 
 def prepare_heavy_light_pair(heavy_seq, light_seq, known_token_count, is_nt=True):
     """Prepare a pair of heavy and light chain sequences for model input.
-    
+
     Args:
         heavy_seq (str): The heavy chain sequence.
         light_seq (str): The light chain sequence.
@@ -76,7 +76,8 @@ def prepare_heavy_light_pair(heavy_seq, light_seq, known_token_count, is_nt=True
         is_nt (bool): Whether the sequences are nucleotide sequences. Otherwise, they
             are assumed to be amino acid sequences.
     Returns:
-        The prepared sequence, and a tuple of indices indicating positions where tokens were added to the prepared sequence."""
+        The prepared sequence, and a tuple of indices indicating positions where tokens were added to the prepared sequence.
+    """
     # In the future, we'll define a list of functions that will be applied in
     # order, up to the maximum number of accepted tokens.
     if known_token_count > AA_AMBIG_IDX + 1:
@@ -86,15 +87,20 @@ def prepare_heavy_light_pair(heavy_seq, light_seq, known_token_count, is_nt=True
             heavy_light_separator = "^"
 
         prepared_seq = heavy_seq + heavy_light_separator + light_seq
-        added_indices = tuple(range(len(heavy_seq), len(heavy_seq) + len(heavy_light_separator)))
+        added_indices = tuple(
+            range(len(heavy_seq), len(heavy_seq) + len(heavy_light_separator))
+        )
     else:
         prepared_seq = heavy_seq
         added_indices = tuple()
 
     return prepared_seq, added_indices
 
+
 def combine_and_pad_tensors(first, second, padding_idxs, fill=float("nan")):
-    res = torch.full((first.shape[0] + second.shape[0] + len(padding_idxs),) + first.shape[1:], fill)
+    res = torch.full(
+        (first.shape[0] + second.shape[0] + len(padding_idxs),) + first.shape[1:], fill
+    )
     mask = torch.full((res.shape[0],), True, dtype=torch.bool)
     mask[torch.tensor(padding_idxs)] = False
     res[mask] = torch.concat([first, second], dim=0)
@@ -111,23 +117,34 @@ def dataset_inputs_of_pcp_df(pcp_df, known_token_count):
         parent, parent_token_idxs = prepare_heavy_light_pair(
             row.parent_h, row.parent_l, known_token_count, is_nt=True
         )
-        child = prepare_heavy_light_pair(row.child_h, row.child_l, known_token_count, is_nt=True)[0]
+        child = prepare_heavy_light_pair(
+            row.child_h, row.child_l, known_token_count, is_nt=True
+        )[0]
         # TODO It would be nice for these fill values to be nan, but there's
         # lots of checking that would be made more difficult by that. These are
         # the values that the neutral model returns when given N's.
-        nt_rates = combine_and_pad_tensors(row.nt_rates_h, row.nt_rates_l, parent_token_idxs, fill=1.0)
-        nt_csps = combine_and_pad_tensors(row.nt_csps_h, row.nt_csps_l, parent_token_idxs, fill=0.0)
+        nt_rates = combine_and_pad_tensors(
+            row.nt_rates_h, row.nt_rates_l, parent_token_idxs, fill=1.0
+        )
+        nt_csps = combine_and_pad_tensors(
+            row.nt_csps_h, row.nt_csps_l, parent_token_idxs, fill=0.0
+        )
         parents.append(parent)
         children.append(child)
         nt_ratess.append(nt_rates)
         nt_cspss.append(nt_csps)
 
-    return tuple(map(pd.Series, (
-        parents,
-        children,
-        nt_ratess,
-        nt_cspss,
-    )))
+    return tuple(
+        map(
+            pd.Series,
+            (
+                parents,
+                children,
+                nt_ratess,
+                nt_cspss,
+            ),
+        )
+    )
 
 
 def nt_idx_array_of_str(nt_str):

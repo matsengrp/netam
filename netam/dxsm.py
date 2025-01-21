@@ -53,7 +53,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         succeed=False,
     ):
         assert succeed, "Dataset should be created through other constructor"
-        #This is no longer needed here, but it seems like we should be able to verify what model version an instance is built for anyway:
+        # This is no longer needed here, but it seems like we should be able to verify what model version an instance is built for anyway:
         self.model_embedding_dim = model_embedding_dim
 
         # We will replace reserved tokens with Ns but use the unmodified
@@ -165,7 +165,6 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         # use sequences.prepare_heavy_light_pair and the resulting
         # added_indices to get the parent and child sequences and neutral model
         # outputs
-        
 
         return cls.of_seriess(
             *dataset_inputs_of_pcp_df(pcp_df, model_embedding_dim),
@@ -275,13 +274,14 @@ class DXSMBurrito(framework.Burrito, ABC):
 
     def selection_factors_of_aa_idxs(self, aa_idxs, aa_mask):
         """Get the log selection factors for a batch of amino acid indices.
-        aa_idxs and aa_mask are expected to be as prepared in the Dataset constructor."""
-        
+
+        aa_idxs and aa_mask are expected to be as prepared in the Dataset constructor.
+        """
+
         # We need the model to see special tokens here. For every other purpose
         # they are masked out.
         keep_token_mask = aa_mask | token_mask_of_aa_idxs(aa_idxs)
         return self.model(aa_idxs, keep_token_mask)
-
 
     def _find_optimal_branch_length(
         self,
@@ -295,7 +295,9 @@ class DXSMBurrito(framework.Burrito, ABC):
         multihit_model,
         **optimization_kwargs,
     ):
-        sel_matrix = self.build_selection_matrix_from_parent_aa(aa_parents_indices, aa_mask)[: len(parent) // 3]
+        sel_matrix = self.build_selection_matrix_from_parent_aa(
+            aa_parents_indices, aa_mask
+        )[: len(parent) // 3]
         # TODO something is wrong with the mask length now, since before we
         # were using the actual unpadded sequence...
         trimmed_aa_mask = aa_mask[: len(sel_matrix)]
@@ -317,7 +319,15 @@ class DXSMBurrito(framework.Burrito, ABC):
         optimal_lengths = []
         failed_count = 0
 
-        for parent, child, nt_rates, nt_csps, aa_mask, aa_parents_indices, starting_length in tqdm(
+        for (
+            parent,
+            child,
+            nt_rates,
+            nt_csps,
+            aa_mask,
+            aa_parents_indices,
+            starting_length,
+        ) in tqdm(
             zip(
                 dataset.nt_parents,
                 dataset.nt_children,

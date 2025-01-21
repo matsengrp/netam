@@ -602,7 +602,9 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
             the level of selection for each amino acid at each site.
         """
 
-        aa_str, added_indices = sequences.prepare_heavy_light_pair(*aa_sequence, self.hyperparameters["embedding_dim"], is_nt=False)
+        aa_str, added_indices = sequences.prepare_heavy_light_pair(
+            *aa_sequence, self.hyperparameters["embedding_dim"], is_nt=False
+        )
         aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
         aa_idxs = aa_idxs.to(self.device)
         # This makes the expected mask because of
@@ -611,17 +613,22 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         mask = mask.to(self.device)
 
         with torch.no_grad():
-            model_out = self(
-                aa_idxs.unsqueeze(0),
-                mask.unsqueeze(0),
-            ).squeeze(0).exp()
+            model_out = (
+                self(
+                    aa_idxs.unsqueeze(0),
+                    mask.unsqueeze(0),
+                )
+                .squeeze(0)
+                .exp()
+            )
 
         # Now split into heavy and light chain results:
         sequence_mask = torch.ones(len(model_out), dtype=bool)
-        sequence_mask[torch.tensor(added_indices)] = False
+        if len(added_indices) > 0:
+            sequence_mask[torch.tensor(added_indices)] = False
         masked_model_out = model_out[sequence_mask]
-        heavy_chain = masked_model_out[:len(aa_sequence[0])]
-        light_chain = masked_model_out[len(aa_sequence[0]):]
+        heavy_chain = masked_model_out[: len(aa_sequence[0])]
+        light_chain = masked_model_out[len(aa_sequence[0]) :]
         return heavy_chain, light_chain
 
 

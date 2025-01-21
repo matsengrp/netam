@@ -7,7 +7,14 @@ from netam.common import (
     codon_mask_tensor_of,
     aa_strs_from_idx_tensor,
 )
-from netam.sequences import AA_AMBIG_IDX, MAX_EMBEDDING_DIM, prepare_heavy_light_pair, translate_sequence, aa_idx_tensor_of_str, token_mask_of_aa_idxs
+from netam.sequences import (
+    AA_AMBIG_IDX,
+    MAX_EMBEDDING_DIM,
+    prepare_heavy_light_pair,
+    translate_sequence,
+    aa_idx_tensor_of_str,
+    token_mask_of_aa_idxs,
+)
 
 
 def test_mask_tensor_of():
@@ -46,7 +53,9 @@ def test_mask_functions_agree(pcp_df, pcp_df_paired):
         seq = (first_row.parent_h, first_row.parent_l)
 
         for token_count in range(AA_AMBIG_IDX + 1, MAX_EMBEDDING_DIM + 1):
-            nt_seq_with_tokens = prepare_heavy_light_pair(*seq, MAX_EMBEDDING_DIM, is_nt=True)[0]
+            nt_seq_with_tokens = prepare_heavy_light_pair(
+                *seq, MAX_EMBEDDING_DIM, is_nt=True
+            )[0]
             aa_seq_with_tokens = translate_sequence(nt_seq_with_tokens)
             aa_idx_seq = aa_idx_tensor_of_str(aa_seq_with_tokens)
 
@@ -55,7 +64,6 @@ def test_mask_functions_agree(pcp_df, pcp_df_paired):
             # when evaluating the model during loss computation in training.
             assert torch.allclose(
                 aa_mask_tensor_of(aa_seq_with_tokens),
-                codon_mask_tensor_of(nt_seq_with_tokens) | token_mask_of_aa_idxs(aa_idx_seq),
+                codon_mask_tensor_of(nt_seq_with_tokens)
+                | token_mask_of_aa_idxs(aa_idx_seq),
             )
-
-

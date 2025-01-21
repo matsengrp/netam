@@ -358,8 +358,8 @@ def trimmed_shm_model_outputs_of_crepe(crepe, parents):
 
 
 def standardize_heavy_light_columns(pcp_df):
-    """Ensure that heavy and light chain columns are present, and fill missing ones
-    with placeholder values.
+    """Ensure that heavy and light chain columns are present, and fill missing ones with
+    placeholder values.
 
     If only `parent` and `child` column is present, we assume these are heavy chain sequences.
     """
@@ -454,8 +454,12 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
 
 
 def add_shm_model_outputs_to_pcp_df(pcp_df, crepe):
-    pcp_df["nt_rates_h"], pcp_df["nt_csps_h"] = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent_h"])
-    pcp_df["nt_rates_l"], pcp_df["nt_csps_l"] = trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent_l"])
+    pcp_df["nt_rates_h"], pcp_df["nt_csps_h"] = trimmed_shm_model_outputs_of_crepe(
+        crepe, pcp_df["parent_h"]
+    )
+    pcp_df["nt_rates_l"], pcp_df["nt_csps_l"] = trimmed_shm_model_outputs_of_crepe(
+        crepe, pcp_df["parent_l"]
+    )
     return pcp_df
 
 

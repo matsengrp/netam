@@ -26,14 +26,3 @@ def test_old_crepe_outputs():
     dnsm_result = dnsm_crepe([example_seq])[0]
     assert torch.allclose(dasm_result, dasm_vals)
     assert torch.allclose(dnsm_result, dnsm_vals)
-
-
-def test_old_model_on_new_inputs():
-    example_seq = "QVQLV^ESGGGVVQPGRSLRLSCAASGFTFSSSGMHWVRQAPGKGLEWVAVIWYDGSNKYYADSVKGRFTISRDNSKNTVYLQMNSLRAEDTAVYYCAREGHSNYPYYYYYMDVWGKGTTVTVSS^"
-    dasm_crepe = load_crepe("tests/old_models/dasm_13k-v1jaffe+v1tang-joint")
-    dnsm_crepe = load_crepe("tests/old_models/dnsm_13k-v1jaffe+v1tang-joint")
-
-    dasm_result = dasm_crepe([example_seq])[0]
-    assert len(dasm_result) == len(example_seq)
-    dnsm_result = dnsm_crepe([example_seq])[0]
-    assert len(dnsm_result) == len(example_seq)

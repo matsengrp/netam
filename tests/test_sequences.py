@@ -49,24 +49,30 @@ def test_strip_unrecognized_tokens_from_series():
             seq = seq.replace(token, "")
         assert nseq == seq
 
+
 def test_prepare_heavy_light_pair():
     heavy = "AGCGTC"
     light = "AGCGTC"
     for heavy, light in [
-            ("AGCGTC", "AGCGTC"),
-            ("AGCGTC", ""),
-            ("", "AGCGTC"),
+        ("AGCGTC", "AGCGTC"),
+        ("AGCGTC", ""),
+        ("", "AGCGTC"),
     ]:
-        assert prepare_heavy_light_pair(heavy, light, MAX_EMBEDDING_DIM) == (heavy + "^^^" + light, tuple(range(len(heavy), len(heavy) + 3)))
+        assert prepare_heavy_light_pair(heavy, light, MAX_EMBEDDING_DIM) == (
+            heavy + "^^^" + light,
+            tuple(range(len(heavy), len(heavy) + 3)),
+        )
 
     heavy = "QVQ"
     light = "QVQ"
     for heavy, light in [
-            ("QVQ", "QVQ"),
-            ("QVQ", ""),
-            ("", "QVQ"),
+        ("QVQ", "QVQ"),
+        ("QVQ", ""),
+        ("", "QVQ"),
     ]:
-        assert prepare_heavy_light_pair(heavy, light, MAX_EMBEDDING_DIM, is_nt=False) == (heavy + "^" + light, tuple(range(len(heavy), len(heavy) + 1)))
+        assert prepare_heavy_light_pair(
+            heavy, light, MAX_EMBEDDING_DIM, is_nt=False
+        ) == (heavy + "^" + light, tuple(range(len(heavy), len(heavy) + 1)))
 
 
 def test_combine_and_pad_tensors():
@@ -76,8 +82,11 @@ def test_combine_and_pad_tensors():
     idxs = (0, 4, 5)
     result = combine_and_pad_tensors(t1, t2, idxs)
     mask = result.isnan()
-    assert torch.equal(result[~mask], torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.float))
+    assert torch.equal(
+        result[~mask], torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.float)
+    )
     assert all(mask[torch.tensor(idxs)])
+
 
 def test_token_mask():
     sample_aa_seq = "QYX^QC"
@@ -145,7 +154,9 @@ def test_subs_indicator_tensor_of():
 def test_dataset_inputs_of_pcp_df(pcp_df, pcp_df_paired):
     for token_count in range(AA_AMBIG_IDX + 1, MAX_EMBEDDING_DIM + 1):
         for df in (pcp_df, pcp_df_paired):
-            for parent, child, nt_rates, nt_csps in zip(*dataset_inputs_of_pcp_df(df, 22)):
+            for parent, child, nt_rates, nt_csps in zip(
+                *dataset_inputs_of_pcp_df(df, 22)
+            ):
                 assert len(nt_rates) == len(parent)
                 assert len(nt_csps) == len(parent)
                 assert len(parent) == len(child)

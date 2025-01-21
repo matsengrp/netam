@@ -69,15 +69,17 @@ def test_crepe_roundtrip(dnsm_burrito):
     ):
         assert torch.equal(t1, t2)
 
+
 def test_selection_factors_of_aa_str(dnsm_burrito):
     parent_aa_idxs = dnsm_burrito.val_dataset.aa_parents_idxss[0]
     aa_parent = "".join(TOKEN_STR_SORTED[i] for i in parent_aa_idxs)
     # This won't work if we start testing with ambiguous sequences
     aa_parent = aa_parent.replace("X", "")
-    aa_parent_pair = tuple(aa_parent.split('^'))
+    aa_parent_pair = tuple(aa_parent.split("^"))
     res = dnsm_burrito.model.selection_factors_of_aa_str(aa_parent_pair)
     assert len(res[0]) == len(aa_parent_pair[0])
     assert len(res[1]) == len(aa_parent_pair[1])
+
 
 def test_build_selection_matrix_from_parent(dnsm_burrito):
     parent = dnsm_burrito.val_dataset.nt_parents[0]
@@ -87,13 +89,19 @@ def test_build_selection_matrix_from_parent(dnsm_burrito):
     # This won't work if we start testing with ambiguous sequences
     aa_parent = aa_parent.replace("X", "")
 
-    separator_idx = aa_parent.index('^') * 3
+    separator_idx = aa_parent.index("^") * 3
     light_chain_seq = parent[:separator_idx]
-    heavy_chain_seq = parent[separator_idx + 3:]
+    heavy_chain_seq = parent[separator_idx + 3 :]
 
-    direct_val = dnsm_burrito.build_selection_matrix_from_parent_aa(parent_aa_idxs, aa_mask)
+    direct_val = dnsm_burrito.build_selection_matrix_from_parent_aa(
+        parent_aa_idxs, aa_mask
+    )
 
-    indirect_val = dnsm_burrito.build_selection_matrix_from_parent((light_chain_seq, heavy_chain_seq))
+    indirect_val = dnsm_burrito.build_selection_matrix_from_parent(
+        (light_chain_seq, heavy_chain_seq)
+    )
 
-    assert torch.allclose(direct_val[:len(indirect_val[0])], indirect_val[0])
-    assert torch.allclose(direct_val[len(indirect_val[0]) + 1 :][:len(indirect_val[1])], indirect_val[1])
+    assert torch.allclose(direct_val[: len(indirect_val[0])], indirect_val[0])
+    assert torch.allclose(
+        direct_val[len(indirect_val[0]) + 1 :][: len(indirect_val[1])], indirect_val[1]
+    )

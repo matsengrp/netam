@@ -159,28 +159,42 @@ class DNSMBurrito(DXSMBurrito):
         predictions = self.predictions_of_batch(batch).masked_select(mask)
         return self.bce_loss(predictions, aa_subs_indicator)
 
+    def _build_selection_matrix_from_selection_factors(
+        self, selection_factors, aa_parent_idxs
+    ):
+        """Build a selection matrix from a selection factor tensor for a single
+        sequence.
 
-    def _build_selection_matrix_from_selection_factors(self, selection_factors, aa_parent_idxs):
-        """Build a selection matrix from a selection factor tensor for a single sequence.
         upgrades the provided tensor containing a selection factor per site to a matrix
         containing a selection factor per site and amino acid. The wildtype aa selection
-        factor is set ot 1, and the rest are set to the selection factor."""
+        factor is set ot 1, and the rest are set to the selection factor.
+        """
         selection_matrix = torch.zeros((len(selection_factors), 20), dtype=torch.float)
         # Every "off-diagonal" entry of the selection matrix is set to the selection
         # factor, where "diagonal" means keeping the same amino acid.
         selection_matrix[:, :] = selection_factors[:, None]
         valid_mask = aa_parent_idxs < 20
-        selection_matrix[torch.arange(len(aa_parent_idxs))[valid_mask], aa_parent_idxs[valid_mask]] = 1.0
+        selection_matrix[
+            torch.arange(len(aa_parent_idxs))[valid_mask], aa_parent_idxs[valid_mask]
+        ] = 1.0
         selection_matrix[~valid_mask] = 1.0
         return selection_matrix
 
-    def build_selection_matrix_from_parent_aa(self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor):
+    def build_selection_matrix_from_parent_aa(
+        self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor
+    ):
         """Build a selection matrix from a single parent amino acid sequence.
 
         Values at ambiguous sites are meaningless.
         """
         with torch.no_grad():
-            selection_factors = self.selection_factors_of_aa_idxs(aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)).squeeze(0).exp()
+            selection_factors = (
+                self.selection_factors_of_aa_idxs(
+                    aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)
+                )
+                .squeeze(0)
+                .exp()
+            )
         return self._build_selection_matrix_from_selection_factors(
             selection_factors, aa_parent_idxs
         )
@@ -197,11 +211,13 @@ class DNSMBurrito(DXSMBurrito):
         for selection_factors, aa_parent in zip(selection_factorss, aa_parent_pair):
             aa_parent_idxs = sequences.aa_idx_array_of_str(aa_parent)
             if len(selection_factors) > 0:
-                result.append(self._build_selection_matrix_from_selection_factors(
-                    selection_factors, aa_parent_idxs
-                ))
+                result.append(
+                    self._build_selection_matrix_from_selection_factors(
+                        selection_factors, aa_parent_idxs
+                    )
+                )
             else:
-                result.append(selection_factors)
+                result.append(torch.empty(0, 20))
         return tuple(result)
 
 
