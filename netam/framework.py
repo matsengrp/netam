@@ -420,7 +420,6 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
     pcp_df = standardize_heavy_light_columns(pcp_df)
     if chosen_v_families is not None:
         chosen_v_families = set(chosen_v_families)
-        # TODO is this the right way to handle this? Or should it be OR?
         pcp_df = pcp_df[
             pcp_df["v_family_h"].isin(chosen_v_families)
             | pcp_df["v_family_l"].isin(chosen_v_families)

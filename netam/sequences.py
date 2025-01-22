@@ -92,9 +92,7 @@ def dataset_inputs_of_pcp_df(pcp_df, known_token_count):
         child = prepare_heavy_light_pair(
             row.child_h, row.child_l, known_token_count, is_nt=True
         )[0]
-        # TODO It would be nice for these fill values to be nan, but there's
-        # lots of checking that would be made more difficult by that. These are
-        # the values that the neutral model returns when given N's.
+        # These are the fill values that the neutral model returns when given N's:
         nt_rates = combine_and_pad_tensors(
             row.nt_rates_h, row.nt_rates_l, parent_token_idxs, fill=1.0
         )[: len(parent)]

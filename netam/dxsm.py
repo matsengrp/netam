@@ -296,12 +296,9 @@ class DXSMBurrito(framework.Burrito, ABC):
 
         aa_idxs and aa_mask are expected to be as prepared in the Dataset constructor.
         """
-
         # We need the model to see special tokens here. For every other purpose
         # they are masked out.
-        # TODO for testing
         keep_token_mask = aa_mask | token_mask_of_aa_idxs(aa_idxs)
-        # keep_token_mask = aa_mask
         return self.model(aa_idxs, keep_token_mask)
 
     def _find_optimal_branch_length(
@@ -322,9 +319,6 @@ class DXSMBurrito(framework.Burrito, ABC):
         # Masks may be padded at end to account for sequences of different
         # lengths. The first part of the mask up to parent length should be
         # all the valid bits for the sequence.
-
-        # TODO Why does aa_mask length not match nt_rates length? Shouldn't
-        # they be padded by the same amount?
         trimmed_aa_mask = aa_mask[: len(parent)]
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
             sel_matrix[aa_mask],

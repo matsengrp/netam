@@ -23,8 +23,6 @@ from netam.sequences import (
 torch.set_printoptions(precision=10)
 
 
-# TODO verify that this loops through both pcp_dfs, even though one is named
-# the same as the argument. If not, remember to fix in test_dnsm.py too.
 @pytest.fixture(scope="module", params=["pcp_df", "pcp_df_paired"])
 def dasm_burrito(pcp_df):
     force_spawn()
@@ -146,7 +144,7 @@ def test_build_selection_matrix_from_parent(dasm_burrito):
         parent_aa_idxs, aa_mask
     )
 
-    indirect_val = dasm_burrito.build_selection_matrix_from_parent(
+    indirect_val = dasm_burrito._build_selection_matrix_from_parent(
         (light_chain_seq, heavy_chain_seq)
     )
 

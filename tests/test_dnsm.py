@@ -97,7 +97,7 @@ def test_build_selection_matrix_from_parent(dnsm_burrito):
         parent_aa_idxs, aa_mask
     )
 
-    indirect_val = dnsm_burrito.build_selection_matrix_from_parent(
+    indirect_val = dnsm_burrito._build_selection_matrix_from_parent(
         (light_chain_seq, heavy_chain_seq)
     )
 

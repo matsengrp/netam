@@ -218,11 +218,9 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
             per_aa_selection_factors, aa_parent_idxs.unsqueeze(0), fill=1.0
         ).squeeze(0)
 
-    # TODO I'm not sure if this is still used anywhere. It would be best to
-    # just have it take aa strings, but that's not what it did before, so I'm
-    # keeping the original behavior for now. (although, the old docstring
-    # claimed incorrectly that it took an aa sequence)
-    def build_selection_matrix_from_parent(self, parent: Tuple[str, str]):
+    # This is not used anywhere, except for in a few tests. Keeping it around
+    # for that reason.
+    def _build_selection_matrix_from_parent(self, parent: Tuple[str, str]):
         """Build a selection matrix from a parent nucleotide sequence, a heavy-chain,
         light-chain pair.
 

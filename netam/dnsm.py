@@ -199,7 +199,7 @@ class DNSMBurrito(DXSMBurrito):
             selection_factors, aa_parent_idxs
         )
 
-    def build_selection_matrix_from_parent(self, parent: Tuple[str, str]):
+    def _build_selection_matrix_from_parent(self, parent: Tuple[str, str]):
         """Build a selection matrix from a nucleotide sequence.
 
         Values at ambiguous sites are meaningless.
