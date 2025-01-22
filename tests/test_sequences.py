@@ -145,8 +145,19 @@ def test_dataset_inputs_of_pcp_df(pcp_df, pcp_df_paired):
     for token_count in range(AA_AMBIG_IDX + 1, MAX_KNOWN_TOKEN_COUNT + 1):
         for df in (pcp_df, pcp_df_paired):
             for parent, child, nt_rates, nt_csps in zip(
-                *dataset_inputs_of_pcp_df(df, 22)
+                *dataset_inputs_of_pcp_df(df, token_count)
             ):
                 assert len(nt_rates) == len(parent)
                 assert len(nt_csps) == len(parent)
                 assert len(parent) == len(child)
+
+    # Here we just make sure for the largest possible token count, that csps
+    # and rates are padded in the correct places.
+    for df in (pcp_df, pcp_df_paired):
+        for parent, child, nt_rates, nt_csps in zip(
+            *dataset_inputs_of_pcp_df(df, MAX_KNOWN_TOKEN_COUNT)
+        ):
+            for idx in range(len(parent)):
+                if parent[idx] in RESERVED_TOKENS:
+                    assert torch.allclose(nt_rates[idx], torch.tensor(1.0))
+                    assert torch.allclose(nt_csps[idx], torch.tensor(0.0))

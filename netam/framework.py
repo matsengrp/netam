@@ -390,33 +390,11 @@ def standardize_heavy_light_columns(pcp_df):
     if (pcp_df["parent_h"].str.len() + pcp_df["parent_l"].str.len()).min() < 3:
         raise ValueError("At least one PCP has fewer than three nucleotides.")
 
-    pcp_df["parent"] = pcp_df["parent_h"] + "^^^" + pcp_df["parent_l"]
-    pcp_df["child"] = pcp_df["child_h"] + "^^^" + pcp_df["child_l"]
-
     pcp_df["v_family_h"] = pcp_df["v_gene_h"].str.split("-").str[0]
     pcp_df["v_family_l"] = pcp_df["v_gene_l"].str.split("-").str[0]
 
     pcp_df.drop(
         columns=["parent", "child", "v_gene"],
-        inplace=True,
-        errors="ignore",
-    )
-    return pcp_df
-
-
-# TODO maybe call this from the dataset constructor now?
-def join_chains(pcp_df):
-    """Join the parent and child chains in the pcp_df.
-
-    Make a parent column that is the parent_h + "^^^" + parent_l, and same for child.
-    """
-    pcp_df = pcp_df.copy()
-
-    pcp_df["parent"] = pcp_df["parent_h"] + "^^^" + pcp_df["parent_l"]
-    pcp_df["child"] = pcp_df["child_h"] + "^^^" + pcp_df["child_l"]
-
-    pcp_df.drop(
-        columns=["parent_h", "parent_l", "child_h", "child_l", "v_gene"],
         inplace=True,
         errors="ignore",
     )
@@ -445,7 +423,7 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
         # TODO is this the right way to handle this? Or should it be OR?
         pcp_df = pcp_df[
             pcp_df["v_family_h"].isin(chosen_v_families)
-            & pcp_df["v_family_l"].isin(chosen_v_families)
+            | pcp_df["v_family_l"].isin(chosen_v_families)
         ]
     if sample_count is not None:
         pcp_df = pcp_df.sample(sample_count)

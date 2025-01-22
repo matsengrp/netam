@@ -74,12 +74,12 @@ def combine_and_pad_tensors(first, second, padding_idxs, fill=float("nan")):
         (first.shape[0] + second.shape[0] + len(padding_idxs),) + first.shape[1:], fill
     )
     mask = torch.full((res.shape[0],), True, dtype=torch.bool)
-    mask[torch.tensor(padding_idxs)] = False
+    if len(padding_idxs) > 0:
+        mask[torch.tensor(padding_idxs)] = False
     res[mask] = torch.concat([first, second], dim=0)
     return res
 
 
-# TODO test
 def dataset_inputs_of_pcp_df(pcp_df, known_token_count):
     parents = []
     children = []
@@ -97,10 +97,10 @@ def dataset_inputs_of_pcp_df(pcp_df, known_token_count):
         # the values that the neutral model returns when given N's.
         nt_rates = combine_and_pad_tensors(
             row.nt_rates_h, row.nt_rates_l, parent_token_idxs, fill=1.0
-        )
+        )[: len(parent)]
         nt_csps = combine_and_pad_tensors(
             row.nt_csps_h, row.nt_csps_l, parent_token_idxs, fill=0.0
-        )
+        )[: len(parent)]
         parents.append(parent)
         children.append(child)
         nt_ratess.append(nt_rates)

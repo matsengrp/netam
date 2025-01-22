@@ -14,7 +14,13 @@ from netam.dasm import (
     DASMDataset,
     zap_predictions_along_diagonal,
 )
-from netam.sequences import MAX_KNOWN_TOKEN_COUNT, TOKEN_STR_SORTED
+from netam.sequences import (
+    MAX_KNOWN_TOKEN_COUNT,
+    TOKEN_STR_SORTED,
+    token_mask_of_aa_idxs,
+)
+
+torch.set_printoptions(precision=10)
 
 
 # TODO verify that this loops through both pcp_dfs, even though one is named
@@ -56,6 +62,19 @@ def test_parallel_branch_length_optimization(dasm_burrito):
     parallel_branch_lengths = dasm_burrito.find_optimal_branch_lengths(dataset)
     branch_lengths = dasm_burrito.serial_find_optimal_branch_lengths(dataset)
     assert torch.allclose(branch_lengths, parallel_branch_lengths)
+
+
+def test_split_recombine(dasm_burrito):
+    # This is a silly test, but it helped me catch a bug resulting from
+    # re-computing mask from nt strings with tokens stripped out in the split
+    # method, so I'm leaving it in.
+    dataset = dasm_burrito.val_dataset
+    splits = dataset.split(2)
+    parallel_tokens = torch.concat(
+        [token_mask_of_aa_idxs(dset.aa_parents_idxss) for dset in splits]
+    )
+    tokens = token_mask_of_aa_idxs(dataset.aa_parents_idxss)
+    assert torch.allclose(tokens, parallel_tokens)
 
 
 def test_crepe_roundtrip(dasm_burrito):
