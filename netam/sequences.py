@@ -30,6 +30,8 @@ MAX_KNOWN_TOKEN_COUNT = len(TOKEN_STR_SORTED)
 MAX_AA_TOKEN_IDX = MAX_KNOWN_TOKEN_COUNT - 1
 CODONS = ["".join(codon_list) for codon_list in itertools.product(BASES, repeat=3)]
 STOP_CODONS = ["TAA", "TAG", "TGA"]
+AMBIGUOUS_CODON_IDX = len(CODONS)
+
 # Each token in RESERVED_TOKENS will appear once in aa strings, and three times
 # in nt strings.
 RESERVED_TOKEN_TRANSLATIONS = {token * 3: token for token in RESERVED_TOKENS}
@@ -161,13 +163,7 @@ def aa_idx_tensor_of_str(aa_str):
         raise
 
 
-# TODO isolating all this stuff here
-
-AMBIGUOUS_CODON_IDX = len(CODONS)
-
-
 def idx_of_codon_allowing_ambiguous(codon):
-    # if codon contains an N
     if "N" in codon:
         return AMBIGUOUS_CODON_IDX
     else:
@@ -180,9 +176,6 @@ def codon_idx_tensor_of_str_ambig(nt_str):
     return torch.tensor(
         [idx_of_codon_allowing_ambiguous(codon) for codon in iter_codons(nt_str)]
     )
-
-
-# TODO end isolating new stuff
 
 
 def aa_onehot_tensor_of_str(aa_str):
