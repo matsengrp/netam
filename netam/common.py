@@ -542,6 +542,7 @@ def parallelize_function(
     max_worker_count = min(mp.cpu_count() // 2, max_workers)
     if max_worker_count <= 1:
         return function
+    force_spawn()
 
     @wraps(function)
     def wrapper(*args, **kwargs):
