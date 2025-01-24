@@ -36,6 +36,7 @@ RESERVED_TOKEN_TRANSLATIONS = {token * 3: token for token in RESERVED_TOKENS}
 
 # Create a regex pattern
 RESERVED_TOKEN_REGEX = f"[{''.join(map(re.escape, list(RESERVED_TOKENS)))}]"
+HL_SEPARATOR_TOKEN_IDX = TOKEN_STR_SORTED.index("^")
 
 
 def prepare_heavy_light_pair(heavy_seq, light_seq, known_token_count, is_nt=True):
@@ -67,6 +68,35 @@ def prepare_heavy_light_pair(heavy_seq, light_seq, known_token_count, is_nt=True
         added_indices = tuple()
 
     return prepared_seq, added_indices
+
+
+# TODO test
+def heavy_light_mask_of_aa_idxs(aa_idxs):
+    """Return a mask indicating which positions in a single amino acid sequence are in the
+    heavy chain, and which positions are in the light chain. The returned value is a dictionary
+    with keys `h` and `l`, and torch mask tensors as values.
+
+    The returned masks are True only for actual amino acid positions, never for reserved tokens."""
+    # As written, can only handle single sequences.
+    assert len(aa_idxs.shape) == 1
+    is_not_token = ~token_mask_of_aa_idxs(aa_idxs)
+    separator_indices = torch.where(aa_idxs == HL_SEPARATOR_TOKEN_IDX)[0]
+    if len(separator_indices) < 1:
+        # assume all heavy chain
+        return {"h": is_not_token, "l": torch.full_like(aa_idxs, False, dtype=torch.bool)}
+    elif len(separator_indices) == 1:
+        before_separator = torch.arange(len(aa_idxs)) < separator_indices[0]
+        after_separator = torch.arange(len(aa_idxs)) > separator_indices[0]
+        return {
+            "h": is_not_token & before_separator,
+            "l": is_not_token & after_separator,
+        }
+    else:
+        raise ValueError(
+            f"Expected exactly zero or one separator tokens in the sequence, found {len(separator_indices)}."
+        )
+
+    return aa_idxs < AA_AMBIG_IDX
 
 
 def combine_and_pad_tensors(first, second, padding_idxs, fill=float("nan")):
@@ -323,6 +353,6 @@ def set_wt_to_nan(predictions: torch.Tensor, aa_sequence: str) -> torch.Tensor:
 
 def token_mask_of_aa_idxs(aa_idxs: torch.Tensor) -> torch.Tensor:
     """Return a mask indicating which positions in an amino acid sequence contain
-    special indicator tokens."""
+    special indicator tokens. The mask is True for positions that contain special tokens."""
     min_idx, max_idx = RESERVED_TOKEN_AA_BOUNDS
     return (aa_idxs <= max_idx) & (aa_idxs >= min_idx)
