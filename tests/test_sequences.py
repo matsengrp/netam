@@ -24,6 +24,7 @@ from netam.sequences import (
     prepare_heavy_light_pair,
     combine_and_pad_tensors,
     dataset_inputs_of_pcp_df,
+    heavy_light_mask_of_aa_idxs,
 )
 
 
@@ -65,6 +66,19 @@ def test_prepare_heavy_light_pair():
         assert prepare_heavy_light_pair(
             heavy, light, MAX_KNOWN_TOKEN_COUNT, is_nt=False
         ) == (heavy + "^" + light, tuple(range(len(heavy), len(heavy) + 1)))
+
+
+def test_heavy_light_mask():
+    heavy = "AGCGNCCCN"
+    light = "AGCGTC"
+    heavy_aa_idxs = aa_idx_tensor_of_str(translate_sequences([heavy])[0])
+    light_aa_idxs = aa_idx_tensor_of_str(translate_sequences([light])[0])
+    prepared, _ = prepare_heavy_light_pair(heavy, light, MAX_KNOWN_TOKEN_COUNT)
+    prepared_aa = translate_sequences([prepared])[0]
+    prepared_idxs = aa_idx_tensor_of_str(prepared_aa)
+    hlmasks = heavy_light_mask_of_aa_idxs(prepared_idxs)
+    assert torch.allclose(prepared_idxs[hlmasks["h"]], heavy_aa_idxs)
+    assert torch.allclose(prepared_idxs[hlmasks["l"]], light_aa_idxs)
 
 
 def test_combine_and_pad_tensors():
