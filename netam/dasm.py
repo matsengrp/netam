@@ -12,6 +12,7 @@ import netam.framework as framework
 import netam.molevol as molevol
 import netam.sequences as sequences
 import copy
+from typing import Tuple
 
 
 class DASMDataset(DXSMDataset):
@@ -99,7 +100,7 @@ class DASMDataset(DXSMDataset):
             self.multihit_model = self.multihit_model.to(device)
 
 
-def zap_predictions_along_diagonal(predictions, aa_parents_idxs):
+def zap_predictions_along_diagonal(predictions, aa_parents_idxs, fill=-BIG):
     """Set the diagonal (i.e. no amino acid change) of the predictions tensor to -BIG,
     except where aa_parents_idxs >= 20, which indicates no update should be done."""
 
@@ -116,7 +117,7 @@ def zap_predictions_along_diagonal(predictions, aa_parents_idxs):
         batch_indices[valid_mask],
         sequence_indices[valid_mask],
         aa_parents_idxs[valid_mask],
-    ] = -BIG
+    ] = fill
 
     return predictions
 
@@ -139,10 +140,7 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
             raise ValueError(
                 f"log_neutral_aa_probs has non-finite values at relevant positions: {log_neutral_aa_probs[mask]}"
             )
-        # We need the model to see special tokens here. For every other purpose
-        # they are masked out.
-        keep_token_mask = mask | sequences.token_mask_of_aa_idxs(aa_parents_idxs)
-        log_selection_factors = self.model(aa_parents_idxs, keep_token_mask)
+        log_selection_factors = self.selection_factors_of_aa_idxs(aa_parents_idxs, mask)
         return log_neutral_aa_probs, log_selection_factors
 
     def predictions_of_pair(self, log_neutral_aa_probs, log_selection_factors):
@@ -204,19 +202,53 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
         csp_loss = self.xent_loss(csp_pred, csp_targets)
         return torch.stack([subs_pos_loss, csp_loss])
 
-    def build_selection_matrix_from_parent(self, parent: str):
-        """Build a selection matrix from a parent amino acid sequence.
+    def build_selection_matrix_from_parent_aa(
+        self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor
+    ):
+        """Build a selection matrix from a single parent amino acid sequence. Inputs are
+        expected to be as prepared in the Dataset constructor.
 
         Values at ambiguous sites are meaningless.
+        """
+        with torch.no_grad():
+            per_aa_selection_factors = self.selection_factors_of_aa_idxs(
+                aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)
+            ).exp()
+        return zap_predictions_along_diagonal(
+            per_aa_selection_factors, aa_parent_idxs.unsqueeze(0), fill=1.0
+        ).squeeze(0)
+
+    # This is not used anywhere, except for in a few tests. Keeping it around
+    # for that reason.
+    def _build_selection_matrix_from_parent(self, parent: Tuple[str, str]):
+        """Build a selection matrix from a parent nucleotide sequence, a heavy-chain,
+        light-chain pair.
+
+        Values at ambiguous sites are meaningless. Returned value is a tuple of
+        selection matrix for heavy and light chain sequences.
         """
         # This is simpler than the equivalent in dnsm.py because we get the selection
         # matrix directly. Note that selection_factors_of_aa_str does the exponentiation
         # so this indeed gives us the selection factors, not the log selection factors.
-        parent = sequences.translate_sequence(parent)
-        per_aa_selection_factors = self.model.selection_factors_of_aa_str(parent)
+        aa_parent_pair = tuple(map(sequences.translate_sequence, parent))
+        per_aa_selection_factorss = self.model.selection_factors_of_aa_str(
+            aa_parent_pair
+        )
 
-        parent = parent.replace("X", "A")
-        parent_idxs = sequences.aa_idx_array_of_str(parent)
-        per_aa_selection_factors[torch.arange(len(parent_idxs)), parent_idxs] = 1.0
+        result = []
+        for per_aa_selection_factors, aa_parent in zip(
+            per_aa_selection_factorss, aa_parent_pair
+        ):
+            aa_parent_idxs = torch.tensor(sequences.aa_idx_array_of_str(aa_parent))
+            if len(per_aa_selection_factors) > 0:
+                result.append(
+                    zap_predictions_along_diagonal(
+                        per_aa_selection_factors.unsqueeze(0),
+                        aa_parent_idxs.unsqueeze(0),
+                        fill=1.0,
+                    ).squeeze(0)
+                )
+            else:
+                result.append(per_aa_selection_factors)
 
-        return per_aa_selection_factors
+        return tuple(result)

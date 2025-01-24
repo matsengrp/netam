@@ -11,12 +11,17 @@ from netam.sequences import (
     TOKEN_STR_SORTED,
     CODONS,
     CODON_AA_INDICATOR_MATRIX,
+    MAX_KNOWN_TOKEN_COUNT,
+    AA_AMBIG_IDX,
     aa_onehot_tensor_of_str,
     nt_idx_array_of_str,
     nt_subs_indicator_tensor_of,
     translate_sequences,
     token_mask_of_aa_idxs,
     aa_idx_tensor_of_str,
+    prepare_heavy_light_pair,
+    combine_and_pad_tensors,
+    dataset_inputs_of_pcp_df,
 )
 
 
@@ -33,6 +38,44 @@ def test_token_replace():
         for token in RESERVED_TOKENS:
             seq = seq.replace(token, "N")
         assert nseq == seq
+
+
+def test_prepare_heavy_light_pair():
+    heavy = "AGCGTC"
+    light = "AGCGTC"
+    for heavy, light in [
+        ("AGCGTC", "AGCGTC"),
+        ("AGCGTC", ""),
+        ("", "AGCGTC"),
+    ]:
+        assert prepare_heavy_light_pair(heavy, light, MAX_KNOWN_TOKEN_COUNT) == (
+            heavy + "^^^" + light,
+            tuple(range(len(heavy), len(heavy) + 3)),
+        )
+
+    heavy = "QVQ"
+    light = "QVQ"
+    for heavy, light in [
+        ("QVQ", "QVQ"),
+        ("QVQ", ""),
+        ("", "QVQ"),
+    ]:
+        assert prepare_heavy_light_pair(
+            heavy, light, MAX_KNOWN_TOKEN_COUNT, is_nt=False
+        ) == (heavy + "^" + light, tuple(range(len(heavy), len(heavy) + 1)))
+
+
+def test_combine_and_pad_tensors():
+    # Test that function works with 1d tensors:
+    t1 = torch.tensor([1, 2, 3], dtype=torch.float)
+    t2 = torch.tensor([4, 5, 6], dtype=torch.float)
+    idxs = (0, 4, 5)
+    result = combine_and_pad_tensors(t1, t2, idxs)
+    mask = result.isnan()
+    assert torch.equal(
+        result[~mask], torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.float)
+    )
+    assert all(mask[torch.tensor(idxs)])
 
 
 def test_token_mask():
@@ -96,3 +139,25 @@ def test_subs_indicator_tensor_of():
     expected_output = torch.tensor([0, 0, 1, 0], dtype=torch.float)
     output = nt_subs_indicator_tensor_of(parent, child)
     assert torch.equal(output, expected_output)
+
+
+def test_dataset_inputs_of_pcp_df(pcp_df, pcp_df_paired):
+    for token_count in range(AA_AMBIG_IDX + 1, MAX_KNOWN_TOKEN_COUNT + 1):
+        for df in (pcp_df, pcp_df_paired):
+            for parent, child, nt_rates, nt_csps in zip(
+                *dataset_inputs_of_pcp_df(df, token_count)
+            ):
+                assert len(nt_rates) == len(parent)
+                assert len(nt_csps) == len(parent)
+                assert len(parent) == len(child)
+
+    # Here we just make sure for the largest possible token count, that csps
+    # and rates are padded in the correct places.
+    for df in (pcp_df, pcp_df_paired):
+        for parent, child, nt_rates, nt_csps in zip(
+            *dataset_inputs_of_pcp_df(df, MAX_KNOWN_TOKEN_COUNT)
+        ):
+            for idx in range(len(parent)):
+                if parent[idx] in RESERVED_TOKENS:
+                    assert torch.allclose(nt_rates[idx], torch.tensor(1.0))
+                    assert torch.allclose(nt_csps[idx], torch.tensor(0.0))

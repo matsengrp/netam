@@ -5,6 +5,7 @@ import re
 
 import torch
 import numpy as np
+import pandas as pd
 
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -25,7 +26,8 @@ RESERVED_TOKEN_AA_BOUNDS = (
     min(TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS),
     max(TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS),
 )
-MAX_AA_TOKEN_IDX = len(TOKEN_STR_SORTED) - 1
+MAX_KNOWN_TOKEN_COUNT = len(TOKEN_STR_SORTED)
+MAX_AA_TOKEN_IDX = MAX_KNOWN_TOKEN_COUNT - 1
 CODONS = ["".join(codon_list) for codon_list in itertools.product(BASES, repeat=3)]
 STOP_CODONS = ["TAA", "TAG", "TGA"]
 # Each token in RESERVED_TOKENS will appear once in aa strings, and three times
@@ -34,6 +36,85 @@ RESERVED_TOKEN_TRANSLATIONS = {token * 3: token for token in RESERVED_TOKENS}
 
 # Create a regex pattern
 RESERVED_TOKEN_REGEX = f"[{''.join(map(re.escape, list(RESERVED_TOKENS)))}]"
+
+
+def prepare_heavy_light_pair(heavy_seq, light_seq, known_token_count, is_nt=True):
+    """Prepare a pair of heavy and light chain sequences for model input.
+
+    Args:
+        heavy_seq (str): The heavy chain sequence.
+        light_seq (str): The light chain sequence.
+        known_token_count (int): The number of tokens recognized by the model which will take the result as input.
+        is_nt (bool): Whether the sequences are nucleotide sequences. Otherwise, they
+            are assumed to be amino acid sequences.
+    Returns:
+        The prepared sequence, and a tuple of indices indicating positions where tokens were added to the prepared sequence.
+    """
+    # In the future, we'll define a list of functions that will be applied in
+    # order, up to the maximum number of accepted tokens.
+    if known_token_count > AA_AMBIG_IDX + 1:
+        if is_nt:
+            heavy_light_separator = "^^^"
+        else:
+            heavy_light_separator = "^"
+
+        prepared_seq = heavy_seq + heavy_light_separator + light_seq
+        added_indices = tuple(
+            range(len(heavy_seq), len(heavy_seq) + len(heavy_light_separator))
+        )
+    else:
+        prepared_seq = heavy_seq
+        added_indices = tuple()
+
+    return prepared_seq, added_indices
+
+
+def combine_and_pad_tensors(first, second, padding_idxs, fill=float("nan")):
+    res = torch.full(
+        (first.shape[0] + second.shape[0] + len(padding_idxs),) + first.shape[1:], fill
+    )
+    mask = torch.full((res.shape[0],), True, dtype=torch.bool)
+    if len(padding_idxs) > 0:
+        mask[torch.tensor(padding_idxs)] = False
+    res[mask] = torch.concat([first, second], dim=0)
+    return res
+
+
+def dataset_inputs_of_pcp_df(pcp_df, known_token_count):
+    parents = []
+    children = []
+    nt_ratess = []
+    nt_cspss = []
+    for row in pcp_df.itertuples():
+        parent, parent_token_idxs = prepare_heavy_light_pair(
+            row.parent_h, row.parent_l, known_token_count, is_nt=True
+        )
+        child = prepare_heavy_light_pair(
+            row.child_h, row.child_l, known_token_count, is_nt=True
+        )[0]
+        # These are the fill values that the neutral model returns when given N's:
+        nt_rates = combine_and_pad_tensors(
+            row.nt_rates_h, row.nt_rates_l, parent_token_idxs, fill=1.0
+        )[: len(parent)]
+        nt_csps = combine_and_pad_tensors(
+            row.nt_csps_h, row.nt_csps_l, parent_token_idxs, fill=0.0
+        )[: len(parent)]
+        parents.append(parent)
+        children.append(child)
+        nt_ratess.append(nt_rates)
+        nt_cspss.append(nt_csps)
+
+    return tuple(
+        map(
+            pd.Series,
+            (
+                parents,
+                children,
+                nt_ratess,
+                nt_cspss,
+            ),
+        )
+    )
 
 
 def nt_idx_array_of_str(nt_str):
@@ -228,10 +309,15 @@ def iter_codons(nt_seq):
 def set_wt_to_nan(predictions: torch.Tensor, aa_sequence: str) -> torch.Tensor:
     """Set the wild-type predictions to NaN.
 
-    Modifies the supplied predictions tensor in-place and returns it.
+    Modifies the supplied predictions tensor in-place and returns it. For sites
+    containing special tokens, all predictions are set to NaN.
     """
     wt_idxs = aa_idx_tensor_of_str(aa_sequence)
-    predictions[torch.arange(len(aa_sequence)), wt_idxs] = float("nan")
+    token_mask = wt_idxs < AA_AMBIG_IDX
+    predictions[token_mask][torch.arange(token_mask.sum()), wt_idxs[token_mask]] = (
+        float("nan")
+    )
+    predictions[~token_mask] = float("nan")
     return predictions
 
 

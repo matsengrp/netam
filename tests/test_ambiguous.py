@@ -1,5 +1,6 @@
 import pytest
 
+from netam.sequences import MAX_KNOWN_TOKEN_COUNT
 from netam.common import force_spawn
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dasm import (
@@ -121,11 +122,8 @@ def ambig_pcp_df():
         "data/wyatt-10x-1p5m_pcp_2023-11-30_NI.first100.csv.gz",
     )
     # Apply the random N adding function to each row
-    df[["parent", "child"]] = df.apply(
-        lambda row: tuple(
-            seq + "^^^"
-            for seq in randomize_with_ns(row["parent"][:-3], row["child"][:-3])
-        ),
+    df[["parent_h", "child_h"]] = df.apply(
+        lambda row: tuple(randomize_with_ns(row["parent_h"][:-3], row["child_h"][:-3])),
         axis=1,
         result_type="expand",
     )
@@ -149,7 +147,9 @@ def test_dnsm_burrito(ambig_pcp_df, dnsm_model):
     force_spawn()
     ambig_pcp_df["in_train"] = True
     ambig_pcp_df.loc[ambig_pcp_df.index[-15:], "in_train"] = False
-    train_dataset, val_dataset = DNSMDataset.train_val_datasets_of_pcp_df(ambig_pcp_df)
+    train_dataset, val_dataset = DNSMDataset.train_val_datasets_of_pcp_df(
+        ambig_pcp_df, MAX_KNOWN_TOKEN_COUNT
+    )
 
     burrito = DNSMBurrito(
         train_dataset,
@@ -178,7 +178,9 @@ def test_dasm_burrito(ambig_pcp_df, dasm_model):
     """Fixture that returns the DNSM Burrito object."""
     ambig_pcp_df["in_train"] = True
     ambig_pcp_df.loc[ambig_pcp_df.index[-15:], "in_train"] = False
-    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(ambig_pcp_df)
+    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(
+        ambig_pcp_df, MAX_KNOWN_TOKEN_COUNT
+    )
 
     burrito = DASMBurrito(
         train_dataset,

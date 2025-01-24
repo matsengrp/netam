@@ -14,15 +14,24 @@ from netam.dasm import (
     DASMDataset,
     zap_predictions_along_diagonal,
 )
+from netam.sequences import (
+    MAX_KNOWN_TOKEN_COUNT,
+    TOKEN_STR_SORTED,
+    token_mask_of_aa_idxs,
+)
+
+torch.set_printoptions(precision=10)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module", params=["pcp_df", "pcp_df_paired"])
 def dasm_burrito(pcp_df):
     force_spawn()
     """Fixture that returns the DNSM Burrito object."""
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
-    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(pcp_df)
+    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(
+        pcp_df, MAX_KNOWN_TOKEN_COUNT
+    )
 
     model = TransformerBinarySelectionModelWiggleAct(
         nhead=2,
@@ -51,6 +60,19 @@ def test_parallel_branch_length_optimization(dasm_burrito):
     parallel_branch_lengths = dasm_burrito.find_optimal_branch_lengths(dataset)
     branch_lengths = dasm_burrito.serial_find_optimal_branch_lengths(dataset)
     assert torch.allclose(branch_lengths, parallel_branch_lengths)
+
+
+def test_split_recombine(dasm_burrito):
+    # This is a silly test, but it helped me catch a bug resulting from
+    # re-computing mask from nt strings with tokens stripped out in the split
+    # method, so I'm leaving it in.
+    dataset = dasm_burrito.val_dataset
+    splits = dataset.split(2)
+    parallel_tokens = torch.concat(
+        [token_mask_of_aa_idxs(dset.aa_parents_idxss) for dset in splits]
+    )
+    tokens = token_mask_of_aa_idxs(dataset.aa_parents_idxss)
+    assert torch.allclose(tokens, parallel_tokens)
 
 
 def test_crepe_roundtrip(dasm_burrito):
@@ -91,3 +113,42 @@ def test_zap_diagonal(dasm_burrito):
                         zeroed_predictions[batch_idx, i, j]
                         == predictions[batch_idx, i, j]
                     )
+
+
+def test_selection_factors_of_aa_str(dasm_burrito):
+    parent_aa_idxs = dasm_burrito.val_dataset.aa_parents_idxss[0]
+    aa_parent = "".join(TOKEN_STR_SORTED[i] for i in parent_aa_idxs)
+    # This won't work if we start testing with ambiguous sequences
+    aa_parent = aa_parent.replace("X", "")
+    aa_parent_pair = tuple(aa_parent.split("^"))
+    res = dasm_burrito.model.selection_factors_of_aa_str(aa_parent_pair)
+    assert len(res[0]) == len(aa_parent_pair[0])
+    assert len(res[1]) == len(aa_parent_pair[1])
+    assert res[0].shape[1] == 20
+    assert res[1].shape[1] == 20
+
+
+def test_build_selection_matrix_from_parent(dasm_burrito):
+    parent = dasm_burrito.val_dataset.nt_parents[0]
+    parent_aa_idxs = dasm_burrito.val_dataset.aa_parents_idxss[0]
+    aa_mask = dasm_burrito.val_dataset.masks[0]
+    aa_parent = "".join(TOKEN_STR_SORTED[i] for i in parent_aa_idxs)
+    # This won't work if we start testing with ambiguous sequences
+    aa_parent = aa_parent.replace("X", "")
+
+    separator_idx = aa_parent.index("^") * 3
+    light_chain_seq = parent[:separator_idx]
+    heavy_chain_seq = parent[separator_idx + 3 :]
+
+    direct_val = dasm_burrito.build_selection_matrix_from_parent_aa(
+        parent_aa_idxs, aa_mask
+    )
+
+    indirect_val = dasm_burrito._build_selection_matrix_from_parent(
+        (light_chain_seq, heavy_chain_seq)
+    )
+
+    assert torch.allclose(direct_val[: len(indirect_val[0])], indirect_val[0])
+    assert torch.allclose(
+        direct_val[len(indirect_val[0]) + 1 :][: len(indirect_val[1])], indirect_val[1]
+    )
