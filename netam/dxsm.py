@@ -434,7 +434,6 @@ def worker_optimize_branch_length(burrito_class, model, dataset, optimization_kw
     return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
 
 
-
 def zap_predictions_along_diagonal(predictions, aa_parents_idxs, fill=-BIG):
     """Set the diagonal (i.e. no amino acid change) of the predictions tensor to -BIG,
     except where aa_parents_idxs >= 20, which indicates no update should be done."""
@@ -455,5 +454,3 @@ def zap_predictions_along_diagonal(predictions, aa_parents_idxs, fill=-BIG):
     ] = fill
 
     return predictions
-
-

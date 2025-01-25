@@ -34,10 +34,8 @@ def single_mutant_aa_indices(codon):
 
 
 def make_codon_neighbor_indicator(nt_seq):
-    """
-    Create a binary array indicating the single-mutant amino acid neighbors of
-    each codon in a given DNA sequence.
-    """
+    """Create a binary array indicating the single-mutant amino acid neighbors of each
+    codon in a given DNA sequence."""
     neighbor = np.zeros((len(AA_STR_SORTED), len(nt_seq) // 3), dtype=bool)
     for i in range(0, len(nt_seq), 3):
         codon = nt_seq[i : i + 3]
