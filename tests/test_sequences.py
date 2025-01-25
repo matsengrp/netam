@@ -15,7 +15,7 @@ from netam.sequences import (
     AA_AMBIG_IDX,
     AMBIGUOUS_CODON_IDX,
     aa_onehot_tensor_of_str,
-    codon_idx_tensor_of_str,
+    codon_idx_tensor_of_str_ambig,
     nt_idx_array_of_str,
     nt_subs_indicator_tensor_of,
     translate_sequences,
@@ -99,7 +99,7 @@ def test_nucleotide_indices_of_codon():
 def test_codon_idx_tensor_of_str():
     nt_str = "AAAAACTTGTTTNTT"
     expected_output = torch.tensor([0, 1, 62, 63, AMBIGUOUS_CODON_IDX])
-    output = codon_idx_tensor_of_str(nt_str)
+    output = codon_idx_tensor_of_str_ambig(nt_str)
     assert torch.equal(output, expected_output)
 
 
