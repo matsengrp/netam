@@ -32,13 +32,13 @@ CODONS = ["".join(codon_list) for codon_list in itertools.product(BASES, repeat=
 STOP_CODONS = ["TAA", "TAG", "TGA"]
 AMBIGUOUS_CODON_IDX = len(CODONS)
 
+
 # Each token in RESERVED_TOKENS will appear once in aa strings, and three times
 # in nt strings.
 RESERVED_TOKEN_TRANSLATIONS = {token * 3: token for token in RESERVED_TOKENS}
 
 # Create a regex pattern
 RESERVED_TOKEN_REGEX = f"[{''.join(map(re.escape, list(RESERVED_TOKENS)))}]"
-
 
 def prepare_heavy_light_pair(heavy_seq, light_seq, known_token_count, is_nt=True):
     """Prepare a pair of heavy and light chain sequences for model input.

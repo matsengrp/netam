@@ -7,12 +7,10 @@ import torch
 import torch.nn.functional as F
 
 from netam.common import (
-    assert_pcp_valid,
     clamp_probability,
-    codon_mask_tensor_of,
     BIG,
 )
-from netam.dxsm import DXSMDataset, DXSMBurrito
+from netam.dxsm import DXSMDataset, DXSMBurrito, zap_predictions_along_diagonal
 import netam.molevol as molevol
 
 from netam.common import aa_idx_tensor_of_str_ambig
@@ -37,90 +35,33 @@ class DCSMDataset(DXSMDataset):
 
     def __init__(
         self,
-        nt_parents: pd.Series,
-        nt_children: pd.Series,
-        nt_ratess: torch.Tensor,
-        nt_cspss: torch.Tensor,
-        branch_lengths: torch.Tensor,
-        multihit_model=None,
+        *args,
+        **kwargs,
     ):
-        self.nt_parents = nt_parents.str.replace(RESERVED_TOKEN_REGEX, "N", regex=True)
-        # We will replace reserved tokens with Ns but use the unmodified
-        # originals for codons and mask creation.
-        self.nt_children = nt_children.str.replace(
-            RESERVED_TOKEN_REGEX, "N", regex=True
-        )
-        self.nt_ratess = nt_ratess
-        self.nt_cspss = nt_cspss
-        self.multihit_model = copy.deepcopy(multihit_model)
-        if multihit_model is not None:
-            # We want these parameters to act like fixed data. This is essential
-            # for multithreaded branch length optimization to work.
-            self.multihit_model.values.requires_grad_(False)
-
+        super().__init__(*args, **kwargs)
         assert len(self.nt_parents) == len(self.nt_children)
-        pcp_count = len(self.nt_parents)
+        # We need to add codon index tensors to the dataset.
 
-        # Important to use the unmodified versions of nt_parents and
-        # nt_children so they still contain special tokens.
-        aa_parents = translate_sequences(nt_parents)
-        aa_children = translate_sequences(nt_children)
-
-        self.max_codon_seq_len = max(len(seq) for seq in aa_parents)
-        # We have sequences of varying length, so we start with all tensors set
-        # to the ambiguous amino acid, and then will fill in the actual values
-        # below.
-        self.codon_parents_idxss = torch.full(
-            (pcp_count, self.max_codon_seq_len), AMBIGUOUS_CODON_IDX
+        self.max_codon_seq_len = self.max_aa_seq_len
+        self.codon_parents_idxss = torch.full_like(
+            self.aa_parents_idxss, AMBIGUOUS_CODON_IDX
         )
         self.codon_children_idxss = self.codon_parents_idxss.clone()
-        self.aa_parents_idxss = torch.full(
-            (pcp_count, self.max_codon_seq_len), AA_AMBIG_IDX
-        )
-        self.aa_children_idxss = torch.full(
-            (pcp_count, self.max_codon_seq_len), AA_AMBIG_IDX
-        )
-        # TODO here we are computing the subs indicators. This is handy for OE plots.
-        self.aa_subs_indicators = torch.zeros((pcp_count, self.max_codon_seq_len))
-
-        self.masks = torch.ones((pcp_count, self.max_codon_seq_len), dtype=torch.bool)
 
         # We are using the modified nt_parents and nt_children here because we
         # don't want any funky symbols in our codon indices.
-        for i, (nt_parent, nt_child, aa_parent, aa_child) in enumerate(
-            zip(self.nt_parents, self.nt_children, aa_parents, aa_children)
+        for i, (nt_parent, nt_child) in enumerate(
+            zip(self.nt_parents, self.nt_children)
         ):
-            self.masks[i, :] = codon_mask_tensor_of(
-                nt_parent, nt_child, aa_length=self.max_codon_seq_len
-            )
             assert len(nt_parent) % 3 == 0
             codon_seq_len = len(nt_parent) // 3
-
-            assert_pcp_valid(nt_parent, nt_child, aa_mask=self.masks[i][:codon_seq_len])
-
             self.codon_parents_idxss[i, :codon_seq_len] = codon_idx_tensor_of_str_ambig(
                 nt_parent
             )
             self.codon_children_idxss[i, :codon_seq_len] = (
                 codon_idx_tensor_of_str_ambig(nt_child)
             )
-            self.aa_parents_idxss[i, :codon_seq_len] = aa_idx_tensor_of_str_ambig(
-                aa_parent
-            )
-            self.aa_children_idxss[i, :codon_seq_len] = aa_idx_tensor_of_str_ambig(
-                aa_child
-            )
-            self.aa_subs_indicators[i, :codon_seq_len] = aa_subs_indicator_tensor_of(
-                aa_parent, aa_child
-            )
-
-        assert torch.all(self.masks.sum(dim=1) > 0)
-        assert torch.max(self.aa_parents_idxss) <= MAX_AA_TOKEN_IDX
-        assert torch.max(self.aa_children_idxss) <= MAX_AA_TOKEN_IDX
         assert torch.max(self.codon_parents_idxss) <= AMBIGUOUS_CODON_IDX
-
-        self._branch_lengths = branch_lengths
-        self.update_neutral_probs()
 
     def update_neutral_probs(self):
         """Update the neutral mutation probabilities for the dataset.
@@ -177,7 +118,7 @@ class DCSMDataset(DXSMDataset):
             # Ensure that all values are positive before taking the log later
             neutral_codon_probs = clamp_probability(neutral_codon_probs)
 
-            pad_len = self.max_codon_seq_len - neutral_codon_probs.shape[0]
+            pad_len = self.max_aa_seq_len - neutral_codon_probs.shape[0]
             if pad_len > 0:
                 neutral_codon_probs = F.pad(
                     neutral_codon_probs, (0, 0, 0, pad_len), value=1e-8
@@ -241,10 +182,7 @@ class DCSMBurrito(DXSMBurrito):
             raise ValueError(
                 f"log_neutral_codon_probs has non-finite values at relevant positions: {log_neutral_codon_probs[mask]}"
             )
-        # We need the model to see special tokens here. For every other purpose
-        # they are masked out.
-        keep_token_mask = mask | token_mask_of_aa_idxs(aa_parents_idxs)
-        log_selection_factors = self.model(aa_parents_idxs, keep_token_mask)
+        log_selection_factors = self.selection_factors_of_aa_idxs(aa_parents_idxs, mask)
         return log_neutral_codon_probs, log_selection_factors
 
     def predictions_of_batch(self, batch):
@@ -321,20 +259,19 @@ class DCSMBurrito(DXSMBurrito):
 
         return self.xent_loss(predictions, codon_children_idxs)
 
-    # TODO copied from dasm.py
-    def build_selection_matrix_from_parent(self, parent: str):
-        """Build a selection matrix from a parent amino acid sequence.
+    # TODO copied from dasm.py (updated for new organization from Will's PR)
+    def build_selection_matrix_from_parent_aa(
+        self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor
+    ):
+        """Build a selection matrix from a single parent amino acid sequence. Inputs are
+        expected to be as prepared in the Dataset constructor.
 
         Values at ambiguous sites are meaningless.
         """
-        # This is simpler than the equivalent in dnsm.py because we get the selection
-        # matrix directly. Note that selection_factors_of_aa_str does the exponentiation
-        # so this indeed gives us the selection factors, not the log selection factors.
-        parent = translate_sequence(parent)
-        per_aa_selection_factors = self.model.selection_factors_of_aa_str(parent)
-
-        parent = parent.replace("X", "A")
-        parent_idxs = aa_idx_array_of_str(parent)
-        per_aa_selection_factors[torch.arange(len(parent_idxs)), parent_idxs] = 1.0
-
-        return per_aa_selection_factors
+        with torch.no_grad():
+            per_aa_selection_factors = self.selection_factors_of_aa_idxs(
+                aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)
+            ).exp()
+        return zap_predictions_along_diagonal(
+            per_aa_selection_factors, aa_parent_idxs.unsqueeze(0), fill=1.0
+        ).squeeze(0)
