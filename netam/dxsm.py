@@ -423,6 +423,23 @@ class DXSMBurrito(framework.Burrito, ABC):
         encoder = framework.PlaceholderEncoder()
         return framework.Crepe(encoder, self.model, training_hyperparameters)
 
+    # This is overridden in DNSMBurrito
+    def build_selection_matrix_from_parent_aa(
+        self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor
+    ):
+        """Build a selection matrix from a single parent amino acid sequence. Inputs are
+        expected to be as prepared in the Dataset constructor.
+
+        Values at ambiguous sites are meaningless.
+        """
+        with torch.no_grad():
+            per_aa_selection_factors = self.selection_factors_of_aa_idxs(
+                aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)
+            ).exp()
+        return zap_predictions_along_diagonal(
+            per_aa_selection_factors, aa_parent_idxs.unsqueeze(0), fill=1.0
+        ).squeeze(0)
+
     @abstractmethod
     def loss_of_batch(self, batch):
         pass

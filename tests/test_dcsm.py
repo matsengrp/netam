@@ -1,14 +1,8 @@
-import os
-
 import torch
 import pytest
 
-from netam.common import BIG, force_spawn
-from netam.framework import (
-    crepe_exists,
-    load_crepe,
-)
-from netam.sequences import MAX_AA_TOKEN_IDX, MAX_KNOWN_TOKEN_COUNT
+from netam.common import force_spawn
+from netam.sequences import MAX_KNOWN_TOKEN_COUNT
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dcsm import (
     DCSMBurrito,

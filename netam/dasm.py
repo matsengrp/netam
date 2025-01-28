@@ -177,22 +177,6 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
         csp_loss = self.xent_loss(csp_pred, csp_targets)
         return torch.stack([subs_pos_loss, csp_loss])
 
-    def build_selection_matrix_from_parent_aa(
-        self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor
-    ):
-        """Build a selection matrix from a single parent amino acid sequence. Inputs are
-        expected to be as prepared in the Dataset constructor.
-
-        Values at ambiguous sites are meaningless.
-        """
-        with torch.no_grad():
-            per_aa_selection_factors = self.selection_factors_of_aa_idxs(
-                aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)
-            ).exp()
-        return zap_predictions_along_diagonal(
-            per_aa_selection_factors, aa_parent_idxs.unsqueeze(0), fill=1.0
-        ).squeeze(0)
-
     # This is not used anywhere, except for in a few tests. Keeping it around
     # for that reason.
     def _build_selection_matrix_from_parent(self, parent: Tuple[str, str]):

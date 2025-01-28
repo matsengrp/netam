@@ -2,7 +2,6 @@
 
 import copy
 
-import pandas as pd
 import torch
 import torch.nn.functional as F
 
@@ -10,24 +9,15 @@ from netam.common import (
     clamp_probability,
     BIG,
 )
-from netam.dxsm import DXSMDataset, DXSMBurrito, zap_predictions_along_diagonal
+from netam.dxsm import DXSMDataset, DXSMBurrito
 import netam.molevol as molevol
 
-from netam.common import aa_idx_tensor_of_str_ambig
 from netam.sequences import (
-    aa_idx_array_of_str,
-    aa_subs_indicator_tensor_of,
     build_stop_codon_indicator_tensor,
     nt_idx_tensor_of_str,
-    token_mask_of_aa_idxs,
-    translate_sequence,
-    translate_sequences,
     codon_idx_tensor_of_str_ambig,
-    AA_AMBIG_IDX,
     AMBIGUOUS_CODON_IDX,
     CODON_AA_INDICATOR_MATRIX,
-    RESERVED_TOKEN_REGEX,
-    MAX_AA_TOKEN_IDX,
 )
 
 
@@ -146,6 +136,8 @@ class DCSMDataset(DXSMDataset):
         }
 
     def to(self, device):
+        self.aa_codon_indicator_matrix = self.aa_codon_indicator_matrix.to(device)
+        self.stop_codon_zapper = self.stop_codon_zapper.to(device)
         self.codon_parents_idxss = self.codon_parents_idxss.to(device)
         self.codon_children_idxss = self.codon_children_idxss.to(device)
         self.aa_parents_idxss = self.aa_parents_idxss.to(device)
@@ -166,7 +158,10 @@ class DCSMBurrito(DXSMBurrito):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.xent_loss = torch.nn.CrossEntropyLoss()
-        self.stop_codon_zapper = build_stop_codon_indicator_tensor() * -BIG
+        self.stop_codon_zapper = (build_stop_codon_indicator_tensor() * -BIG).to(
+            self.device
+        )
+        self.aa_codon_indicator_matrix = CODON_AA_INDICATOR_MATRIX.to(self.device).T
 
     def prediction_pair_of_batch(self, batch):
         """Get log neutral codon substitution probabilities and log selection factors
@@ -209,13 +204,11 @@ class DCSMBurrito(DXSMBurrito):
         # of the parent codon. Namely, we need to set the parent codon to 1 -
         # sum(children).
 
-        # This indicator lifts things up from aa land to codon land.
-        # TODO I guess we could store indicator in self and have everything move with a self.to(device) call.
-        indicator = CODON_AA_INDICATOR_MATRIX.to(self.device).T
+        # The aa_codon_indicator_matrix lifts things up from aa land to codon land.
         log_preds = (
             log_neutral_codon_probs
-            + log_selection_factors @ indicator
-            + self.stop_codon_zapper.to(self.device)
+            + log_selection_factors @ self.aa_codon_indicator_matrix
+            + self.stop_codon_zapper
         )
         assert torch.isnan(log_preds).sum() == 0
 
@@ -258,20 +251,3 @@ class DCSMBurrito(DXSMBurrito):
         codon_children_idxs = codon_children_idxs[mask]
 
         return self.xent_loss(predictions, codon_children_idxs)
-
-    # TODO copied from dasm.py (updated for new organization from Will's PR)
-    def build_selection_matrix_from_parent_aa(
-        self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor
-    ):
-        """Build a selection matrix from a single parent amino acid sequence. Inputs are
-        expected to be as prepared in the Dataset constructor.
-
-        Values at ambiguous sites are meaningless.
-        """
-        with torch.no_grad():
-            per_aa_selection_factors = self.selection_factors_of_aa_idxs(
-                aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)
-            ).exp()
-        return zap_predictions_along_diagonal(
-            per_aa_selection_factors, aa_parent_idxs.unsqueeze(0), fill=1.0
-        ).squeeze(0)
