@@ -339,14 +339,14 @@ def build_codon_mutsel(
     return codon_mutsel, sums_too_big
 
 
-def neutral_aa_probs(
+def neutral_codon_probs(
     parent_codon_idxs: Tensor,
     codon_mut_probs: Tensor,
     codon_csps: Tensor,
     multihit_model=None,
 ) -> Tensor:
-    """For every site, what is the probability that the amino acid will mutate to every
-    amino acid?
+    """For every site, what is the probability that the site will mutate to every
+    alternate codon?
 
     Args:
         parent_codon_idxs (torch.Tensor): The parent codons for each sequence. Shape: (codon_count, 3)
@@ -354,8 +354,8 @@ def neutral_aa_probs(
         codon_csps (torch.Tensor): The substitution probabilities for each site in each codon. Shape: (codon_count, 3, 4)
 
     Returns:
-        torch.Tensor: The probability that each site will change to each amino acid.
-                      Shape: (codon_count, 20)
+        torch.Tensor: The probability that each site will change to each codon.
+                      Shape: (codon_count, 64)
     """
 
     mut_matrices = build_mutation_matrices(
@@ -366,8 +366,36 @@ def neutral_aa_probs(
     if multihit_model is not None:
         codon_probs = multihit_model(parent_codon_idxs, codon_probs)
 
+    return codon_probs.view(-1, 64)
+
+
+def neutral_aa_probs(
+    parent_codon_idxs: Tensor,
+    codon_mut_probs: Tensor,
+    codon_csps: Tensor,
+    multihit_model=None,
+) -> Tensor:
+    """For every site, what is the probability that the site will mutate to every
+    alternate amino acid?
+
+    Args:
+        parent_codon_idxs (torch.Tensor): The parent codons for each sequence. Shape: (codon_count, 3)
+        codon_mut_probs (torch.Tensor): The mutation probabilities for each site in each codon. Shape: (codon_count, 3)
+        codon_csps (torch.Tensor): The substitution probabilities for each site in each codon. Shape: (codon_count, 3, 4)
+
+    Returns:
+        torch.Tensor: The probability that each site will change to each codon.
+                      Shape: (codon_count, 20)
+    """
+    codon_probs = neutral_codon_probs(
+        parent_codon_idxs,
+        codon_mut_probs,
+        codon_csps,
+        multihit_model=multihit_model,
+    )
+
     # Get the probability of mutating to each amino acid.
-    aa_probs = codon_probs.view(-1, 64) @ CODON_AA_INDICATOR_MATRIX
+    aa_probs = codon_probs @ CODON_AA_INDICATOR_MATRIX
 
     return aa_probs
 

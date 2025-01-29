@@ -56,14 +56,14 @@ class DNSMDataset(DXSMDataset):
             mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
             nt_csps = nt_csps[:parent_len, :]
 
-            neutral_aa_mut_prob = molevol.neutral_aa_mut_probs(
+            neutral_aa_mut_probs = molevol.neutral_aa_mut_probs(
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
                 nt_csps.reshape(-1, 3, 4),
                 multihit_model=multihit_model,
             )
 
-            if not torch.isfinite(neutral_aa_mut_prob).all():
+            if not torch.isfinite(neutral_aa_mut_probs).all():
                 print(f"Found a non-finite neutral_aa_mut_prob")
                 print(f"nt_parent: {nt_parent}")
                 print(f"mask: {mask}")
@@ -71,21 +71,21 @@ class DNSMDataset(DXSMDataset):
                 print(f"nt_csps: {nt_csps}")
                 print(f"branch_length: {branch_length}")
                 raise ValueError(
-                    f"neutral_aa_mut_prob is not finite: {neutral_aa_mut_prob}"
+                    f"neutral_aa_mut_prob is not finite: {neutral_aa_mut_probs}"
                 )
 
             # Ensure that all values are positive before taking the log later
-            neutral_aa_mut_prob = clamp_probability(neutral_aa_mut_prob)
+            neutral_aa_mut_probs = clamp_probability(neutral_aa_mut_probs)
 
-            pad_len = self.max_aa_seq_len - neutral_aa_mut_prob.shape[0]
+            pad_len = self.max_aa_seq_len - neutral_aa_mut_probs.shape[0]
             if pad_len > 0:
-                neutral_aa_mut_prob = F.pad(
-                    neutral_aa_mut_prob, (0, pad_len), value=1e-8
+                neutral_aa_mut_probs = F.pad(
+                    neutral_aa_mut_probs, (0, pad_len), value=1e-8
                 )
             # Here we zero out masked positions.
-            neutral_aa_mut_prob *= mask
+            neutral_aa_mut_probs *= mask
 
-            neutral_aa_mut_prob_l.append(neutral_aa_mut_prob)
+            neutral_aa_mut_prob_l.append(neutral_aa_mut_probs)
 
         # Note that our masked out positions will have a nan log probability,
         # which will require us to handle them correctly downstream.

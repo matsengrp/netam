@@ -3,11 +3,8 @@
 import torch
 import torch.nn.functional as F
 
-from netam.common import (
-    clamp_probability,
-    BIG,
-)
-from netam.dxsm import DXSMDataset, DXSMBurrito
+from netam.common import clamp_probability
+from netam.dxsm import DXSMDataset, DXSMBurrito, zap_predictions_along_diagonal
 import netam.framework as framework
 import netam.molevol as molevol
 import netam.sequences as sequences
@@ -100,28 +97,6 @@ class DASMDataset(DXSMDataset):
             self.multihit_model = self.multihit_model.to(device)
 
 
-def zap_predictions_along_diagonal(predictions, aa_parents_idxs, fill=-BIG):
-    """Set the diagonal (i.e. no amino acid change) of the predictions tensor to -BIG,
-    except where aa_parents_idxs >= 20, which indicates no update should be done."""
-
-    device = predictions.device
-    batch_size, L, _ = predictions.shape
-    batch_indices = torch.arange(batch_size, device=device)[:, None].expand(-1, L)
-    sequence_indices = torch.arange(L, device=device)[None, :].expand(batch_size, -1)
-
-    # Create a mask for valid positions (where aa_parents_idxs is less than 20)
-    valid_mask = aa_parents_idxs < 20
-
-    # Only update the predictions for valid positions
-    predictions[
-        batch_indices[valid_mask],
-        sequence_indices[valid_mask],
-        aa_parents_idxs[valid_mask],
-    ] = fill
-
-    return predictions
-
-
 class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
     model_type = "dasm"
 
@@ -201,22 +176,6 @@ class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
         csp_targets = aa_children_idxs[subs_mask]
         csp_loss = self.xent_loss(csp_pred, csp_targets)
         return torch.stack([subs_pos_loss, csp_loss])
-
-    def build_selection_matrix_from_parent_aa(
-        self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor
-    ):
-        """Build a selection matrix from a single parent amino acid sequence. Inputs are
-        expected to be as prepared in the Dataset constructor.
-
-        Values at ambiguous sites are meaningless.
-        """
-        with torch.no_grad():
-            per_aa_selection_factors = self.selection_factors_of_aa_idxs(
-                aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)
-            ).exp()
-        return zap_predictions_along_diagonal(
-            per_aa_selection_factors, aa_parent_idxs.unsqueeze(0), fill=1.0
-        ).squeeze(0)
 
     # This is not used anywhere, except for in a few tests. Keeping it around
     # for that reason.

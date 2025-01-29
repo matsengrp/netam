@@ -19,6 +19,7 @@ from netam.common import (
     stack_heterogeneous,
     codon_mask_tensor_of,
     assert_pcp_valid,
+    BIG,
 )
 import netam.framework as framework
 import netam.molevol as molevol
@@ -78,6 +79,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         assert self.masks.shape[1] * 3 == self.nt_cspss.shape[1]
         assert torch.all(self.masks.sum(dim=1) > 0)
         assert torch.max(self.aa_parents_idxss) <= MAX_AA_TOKEN_IDX
+        assert torch.max(self.aa_children_idxss) <= MAX_AA_TOKEN_IDX
 
         self._branch_lengths = branch_lengths
         self.update_neutral_probs()
@@ -421,6 +423,23 @@ class DXSMBurrito(framework.Burrito, ABC):
         encoder = framework.PlaceholderEncoder()
         return framework.Crepe(encoder, self.model, training_hyperparameters)
 
+    # This is overridden in DNSMBurrito
+    def build_selection_matrix_from_parent_aa(
+        self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor
+    ):
+        """Build a selection matrix from a single parent amino acid sequence. Inputs are
+        expected to be as prepared in the Dataset constructor.
+
+        Values at ambiguous sites are meaningless.
+        """
+        with torch.no_grad():
+            per_aa_selection_factors = self.selection_factors_of_aa_idxs(
+                aa_parent_idxs.unsqueeze(0), mask.unsqueeze(0)
+            ).exp()
+        return zap_predictions_along_diagonal(
+            per_aa_selection_factors, aa_parent_idxs.unsqueeze(0), fill=1.0
+        ).squeeze(0)
+
     @abstractmethod
     def loss_of_batch(self, batch):
         pass
@@ -430,3 +449,25 @@ def worker_optimize_branch_length(burrito_class, model, dataset, optimization_kw
     """The worker used for parallel branch length optimization."""
     burrito = burrito_class(None, dataset, copy.deepcopy(model))
     return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
+
+
+def zap_predictions_along_diagonal(predictions, aa_parents_idxs, fill=-BIG):
+    """Set the diagonal (i.e. no amino acid change) of the predictions tensor to -BIG,
+    except where aa_parents_idxs >= 20, which indicates no update should be done."""
+
+    device = predictions.device
+    batch_size, L, _ = predictions.shape
+    batch_indices = torch.arange(batch_size, device=device)[:, None].expand(-1, L)
+    sequence_indices = torch.arange(L, device=device)[None, :].expand(batch_size, -1)
+
+    # Create a mask for valid positions (where aa_parents_idxs is less than 20)
+    valid_mask = aa_parents_idxs < 20
+
+    # Only update the predictions for valid positions
+    predictions[
+        batch_indices[valid_mask],
+        sequence_indices[valid_mask],
+        aa_parents_idxs[valid_mask],
+    ] = fill
+
+    return predictions
