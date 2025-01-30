@@ -82,11 +82,15 @@ def test_heavy_light_mask():
             prepared_aa = translate_sequences([prepared])[0]
             prepared_idxs = aa_idx_tensor_of_str(prepared_aa)
             hlmasks = heavy_light_mask_of_aa_idxs(prepared_idxs)
-            assert torch.allclose(prepared_idxs[hlmasks["h"]].long(), heavy_aa_idxs.long())
+            assert torch.allclose(
+                prepared_idxs[hlmasks["h"]].long(), heavy_aa_idxs.long()
+            )
             # The separator token is the next token after the ambiguous token.
             if TOKEN_COUNT > AA_AMBIG_IDX + 1:
                 print(prepared_idxs[hlmasks["l"]], light_aa_idxs)
-                assert torch.allclose(prepared_idxs[hlmasks["l"]].long(), light_aa_idxs.long())
+                assert torch.allclose(
+                    prepared_idxs[hlmasks["l"]].long(), light_aa_idxs.long()
+                )
             else:
                 assert not hlmasks["l"].any()
 
