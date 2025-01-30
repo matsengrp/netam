@@ -70,7 +70,6 @@ def prepare_heavy_light_pair(heavy_seq, light_seq, known_token_count, is_nt=True
     return prepared_seq, added_indices
 
 
-# TODO test
 def heavy_light_mask_of_aa_idxs(aa_idxs):
     """Return a mask indicating which positions in a single amino acid sequence are in the
     heavy chain, and which positions are in the light chain. The returned value is a dictionary
