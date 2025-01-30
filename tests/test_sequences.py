@@ -69,16 +69,26 @@ def test_prepare_heavy_light_pair():
 
 
 def test_heavy_light_mask():
-    heavy = "AGCGNCCCN"
-    light = "AGCGTC"
-    heavy_aa_idxs = aa_idx_tensor_of_str(translate_sequences([heavy])[0])
-    light_aa_idxs = aa_idx_tensor_of_str(translate_sequences([light])[0])
-    prepared, _ = prepare_heavy_light_pair(heavy, light, MAX_KNOWN_TOKEN_COUNT)
-    prepared_aa = translate_sequences([prepared])[0]
-    prepared_idxs = aa_idx_tensor_of_str(prepared_aa)
-    hlmasks = heavy_light_mask_of_aa_idxs(prepared_idxs)
-    assert torch.allclose(prepared_idxs[hlmasks["h"]], heavy_aa_idxs)
-    assert torch.allclose(prepared_idxs[hlmasks["l"]], light_aa_idxs)
+    test_pairs = [
+        ("AGCGNCCCN", "AGCGTC"),
+        ("AGCGNCCCT", ""),
+        ("", "AGCGTC"),
+    ]
+    for TOKEN_COUNT in range(AA_AMBIG_IDX + 1, MAX_KNOWN_TOKEN_COUNT + 1):
+        for heavy, light in test_pairs:
+            heavy_aa_idxs = aa_idx_tensor_of_str(translate_sequences([heavy])[0])
+            light_aa_idxs = aa_idx_tensor_of_str(translate_sequences([light])[0])
+            prepared, _ = prepare_heavy_light_pair(heavy, light, TOKEN_COUNT)
+            prepared_aa = translate_sequences([prepared])[0]
+            prepared_idxs = aa_idx_tensor_of_str(prepared_aa)
+            hlmasks = heavy_light_mask_of_aa_idxs(prepared_idxs)
+            assert torch.allclose(prepared_idxs[hlmasks["h"]].long(), heavy_aa_idxs.long())
+            # The separator token is the next token after the ambiguous token.
+            if TOKEN_COUNT > AA_AMBIG_IDX + 1:
+                print(prepared_idxs[hlmasks["l"]], light_aa_idxs)
+                assert torch.allclose(prepared_idxs[hlmasks["l"]].long(), light_aa_idxs.long())
+            else:
+                assert not hlmasks["l"].any()
 
 
 def test_combine_and_pad_tensors():
