@@ -365,28 +365,46 @@ def standardize_heavy_light_columns(pcp_df):
     If only `parent` and `child` column is present, we assume these are heavy chain sequences.
     """
     cols = pcp_df.columns
-    # Look for heavy chain
+    # Do some checking first:
     if "parent_h" in cols:
         assert "child_h" in cols, "child_h column missing!"
         assert "v_gene_h" in cols, "v_gene_h column missing!"
     elif "parent" in cols:
         assert "child" in cols, "child column missing!"
         assert "v_gene" in cols, "v_gene column missing!"
-        pcp_df["parent_h"] = pcp_df["parent"]
-        pcp_df["child_h"] = pcp_df["child"]
-        pcp_df["v_gene_h"] = pcp_df["v_gene"]
-    else:
-        pcp_df["parent_h"] = ""
-        pcp_df["child_h"] = ""
-        pcp_df["v_gene_h"] = ""
-    # Look for light chain
     if "parent_l" in cols:
         assert "child_l" in cols, "child_l column missing!"
         assert "v_gene_l" in cols, "v_gene_l column missing!"
-    else:
-        pcp_df["parent_l"] = ""
-        pcp_df["child_l"] = ""
-        pcp_df["v_gene_l"] = ""
+
+    differentiated_columns = [
+        "parent",
+        "child",
+        "v_gene",
+        "cdr1_codon_start",
+        "cdr1_codon_end",
+        "cdr2_codon_start",
+        "cdr2_codon_end",
+        "cdr3_codon_start",
+        "cdr3_codon_end",
+    ]
+    for diff_colname in differentiated_columns:
+        diff_colname_h = diff_colname + "_h"
+        diff_colname_l = diff_colname + "_l"
+
+        # Look for heavy chain, assuming undifferentiated name means heavy
+        # chain
+        if diff_colname + "_h" in cols:
+            pass
+        elif diff_colname in cols:
+            pcp_df[diff_colname_h] = pcp_df[diff_colname]
+        else:
+            pcp_df[diff_colname_h] = ""
+
+        # Look for light chain
+        if diff_colname_l in cols:
+            pass
+        else:
+            pcp_df[diff_colname_l] = ""
 
     if (pcp_df["parent_h"].str.len() + pcp_df["parent_l"].str.len()).min() < 3:
         raise ValueError("At least one PCP has fewer than three nucleotides.")
@@ -395,7 +413,7 @@ def standardize_heavy_light_columns(pcp_df):
     pcp_df["v_family_l"] = pcp_df["v_gene_l"].str.split("-").str[0]
 
     pcp_df.drop(
-        columns=["parent", "child", "v_gene"],
+        columns=differentiated_columns,
         inplace=True,
         errors="ignore",
     )
