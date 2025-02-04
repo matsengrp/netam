@@ -136,8 +136,6 @@ class DCSMDataset(DXSMDataset):
         }
 
     def to(self, device):
-        self.aa_codon_indicator_matrix = self.aa_codon_indicator_matrix.to(device)
-        self.stop_codon_zapper = self.stop_codon_zapper.to(device)
         self.codon_parents_idxss = self.codon_parents_idxss.to(device)
         self.codon_children_idxss = self.codon_children_idxss.to(device)
         self.aa_parents_idxss = self.aa_parents_idxss.to(device)
