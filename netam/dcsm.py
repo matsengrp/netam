@@ -21,7 +21,7 @@ from netam.sequences import (
 )
 
 
-class DCSMDataset(DXSMDataset):
+class DASMDataset(DXSMDataset):
 
     def __init__(
         self,
@@ -149,9 +149,9 @@ class DCSMDataset(DXSMDataset):
             self.multihit_model = self.multihit_model.to(device)
 
 
-class DCSMBurrito(DXSMBurrito):
+class DASMBurrito(DXSMBurrito):
 
-    model_type = "dcsm"
+    model_type = "dasm"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

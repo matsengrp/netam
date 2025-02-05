@@ -4,19 +4,19 @@ import pytest
 from netam.common import force_spawn
 from netam.sequences import MAX_KNOWN_TOKEN_COUNT
 from netam.models import TransformerBinarySelectionModelWiggleAct
-from netam.dcsm import (
-    DCSMBurrito,
-    DCSMDataset,
+from netam.dasm import (
+    DASMBurrito,
+    DASMDataset,
 )
 
 
 @pytest.fixture(scope="module")
-def dcsm_burrito(pcp_df):
+def dasm_burrito(pcp_df):
     force_spawn()
     """Fixture that returns the DNSM Burrito object."""
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
-    train_dataset, val_dataset = DCSMDataset.train_val_datasets_of_pcp_df(
+    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(
         pcp_df, MAX_KNOWN_TOKEN_COUNT
     )
 
@@ -28,7 +28,7 @@ def dcsm_burrito(pcp_df):
         output_dim=20,
     )
 
-    burrito = DCSMBurrito(
+    burrito = DASMBurrito(
         train_dataset,
         val_dataset,
         model,
@@ -42,8 +42,8 @@ def dcsm_burrito(pcp_df):
     return burrito
 
 
-def test_parallel_branch_length_optimization(dcsm_burrito):
-    dataset = dcsm_burrito.val_dataset
-    parallel_branch_lengths = dcsm_burrito.find_optimal_branch_lengths(dataset)
-    branch_lengths = dcsm_burrito.serial_find_optimal_branch_lengths(dataset)
+def test_parallel_branch_length_optimization(dasm_burrito):
+    dataset = dasm_burrito.val_dataset
+    parallel_branch_lengths = dasm_burrito.find_optimal_branch_lengths(dataset)
+    branch_lengths = dasm_burrito.serial_find_optimal_branch_lengths(dataset)
     assert torch.allclose(branch_lengths, parallel_branch_lengths)
