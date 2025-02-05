@@ -34,6 +34,9 @@ def fixed_dasm_val_burrito(pcp_df):
 
 
 def test_predictions_of_batch(fixed_dasm_val_burrito):
+    # These outputs were produced by the comparison code in this test, but
+    # written to the files referenced here. The code state was netam 3c632fa.
+    # (however, this test did not exist in the codebase at that time)
     branch_lengths = torch.tensor(
         pd.read_csv("tests/old_models/val_branch_lengths.csv")["branch_length"]
     ).double()
