@@ -3,9 +3,9 @@ import pytest
 from netam.sequences import MAX_KNOWN_TOKEN_COUNT
 from netam.common import force_spawn
 from netam.models import TransformerBinarySelectionModelWiggleAct
-from netam.dasm import (
-    DASMBurrito,
-    DASMDataset,
+from netam.ddsm import (
+    DDSMBurrito,
+    DDSMDataset,
 )
 from netam.dnsm import DNSMBurrito, DNSMDataset
 from netam.framework import (
@@ -163,7 +163,7 @@ def test_dnsm_burrito(ambig_pcp_df, dnsm_model):
 
 
 @pytest.fixture
-def dasm_model():
+def ddsm_model():
     return TransformerBinarySelectionModelWiggleAct(
         nhead=2,
         d_model_per_head=4,
@@ -173,19 +173,19 @@ def dasm_model():
     )
 
 
-def test_dasm_burrito(ambig_pcp_df, dasm_model):
+def test_ddsm_burrito(ambig_pcp_df, ddsm_model):
     force_spawn()
     """Fixture that returns the DNSM Burrito object."""
     ambig_pcp_df["in_train"] = True
     ambig_pcp_df.loc[ambig_pcp_df.index[-15:], "in_train"] = False
-    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(
+    train_dataset, val_dataset = DDSMDataset.train_val_datasets_of_pcp_df(
         ambig_pcp_df, MAX_KNOWN_TOKEN_COUNT
     )
 
-    burrito = DASMBurrito(
+    burrito = DDSMBurrito(
         train_dataset,
         val_dataset,
-        dasm_model,
+        ddsm_model,
         batch_size=32,
         learning_rate=0.001,
         min_learning_rate=0.0001,

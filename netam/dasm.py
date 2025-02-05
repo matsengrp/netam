@@ -12,7 +12,7 @@ import copy
 from typing import Tuple
 
 
-class DASMDataset(DXSMDataset):
+class DDSMDataset(DXSMDataset):
 
     def update_neutral_probs(self):
         neutral_aa_probs_l = []
@@ -97,8 +97,8 @@ class DASMDataset(DXSMDataset):
             self.multihit_model = self.multihit_model.to(device)
 
 
-class DASMBurrito(framework.TwoLossMixin, DXSMBurrito):
-    model_type = "dasm"
+class DDSMBurrito(framework.TwoLossMixin, DXSMBurrito):
+    model_type = "ddsm"
 
     def __init__(self, *args, loss_weights: list = [1.0, 0.01], **kwargs):
         super().__init__(*args, **kwargs)
