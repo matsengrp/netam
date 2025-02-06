@@ -77,7 +77,7 @@ def test_split_recombine(dasm_burrito):
 
 def test_crepe_roundtrip(dasm_burrito):
     os.makedirs("_ignore", exist_ok=True)
-    crepe_path = "_ignore/ddsm"
+    crepe_path = "_ignore/dasm"
     dasm_burrito.save_crepe(crepe_path)
     assert crepe_exists(crepe_path)
     crepe = load_crepe(crepe_path)
