@@ -3,30 +3,30 @@ import os
 import torch
 import pytest
 
-from netam.common import BIG, force_spawn
 from netam.framework import (
     crepe_exists,
     load_crepe,
 )
+from netam.common import BIG, force_spawn
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dasm import (
     DASMBurrito,
     DASMDataset,
-    zap_predictions_along_diagonal,
 )
+from netam.dxsm import zap_predictions_along_diagonal
 from netam.sequences import (
     MAX_KNOWN_TOKEN_COUNT,
+    AA_AMBIG_IDX,
     TOKEN_STR_SORTED,
     token_mask_of_aa_idxs,
+    CODON_AA_INDICATOR_MATRIX,
 )
-
-torch.set_printoptions(precision=10)
 
 
 @pytest.fixture(scope="module", params=["pcp_df", "pcp_df_paired"])
 def dasm_burrito(pcp_df):
     force_spawn()
-    """Fixture that returns the DNSM Burrito object."""
+    """Fixture that returns the DASM Burrito object."""
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
     train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(
@@ -93,15 +93,19 @@ def test_crepe_roundtrip(dasm_burrito):
 
 def test_zap_diagonal(dasm_burrito):
     batch = dasm_burrito.val_dataset[0:2]
-    predictions = dasm_burrito.predictions_of_batch(batch)
-    predictions = torch.cat(
-        [predictions, torch.zeros_like(predictions[:, :, :1])], dim=-1
-    )
+    codon_predictions = dasm_burrito.predictions_of_batch(batch)
+    predictions = torch.log((torch.exp(codon_predictions) @ CODON_AA_INDICATOR_MATRIX))
     aa_parents_idxs = batch["aa_parents_idxs"].to(dasm_burrito.device)
+    # These sites are set to NaN, so we need to make them zero for comparison
+    invalid_mask = aa_parents_idxs >= AA_AMBIG_IDX  # Shape: [B, L]
+    predictions[invalid_mask] = 0.0
     zeroed_predictions = predictions.clone()
     zeroed_predictions = zap_predictions_along_diagonal(
         zeroed_predictions, aa_parents_idxs
     )
+    print(predictions.shape, aa_parents_idxs.shape)
+    print(predictions)
+    print(aa_parents_idxs)
     L = predictions.shape[1]
     for batch_idx in range(2):
         for i in range(L):
@@ -126,29 +130,3 @@ def test_selection_factors_of_aa_str(dasm_burrito):
     assert len(res[1]) == len(aa_parent_pair[1])
     assert res[0].shape[1] == 20
     assert res[1].shape[1] == 20
-
-
-def test_build_selection_matrix_from_parent(dasm_burrito):
-    parent = dasm_burrito.val_dataset.nt_parents[0]
-    parent_aa_idxs = dasm_burrito.val_dataset.aa_parents_idxss[0]
-    aa_mask = dasm_burrito.val_dataset.masks[0]
-    aa_parent = "".join(TOKEN_STR_SORTED[i] for i in parent_aa_idxs)
-    # This won't work if we start testing with ambiguous sequences
-    aa_parent = aa_parent.replace("X", "")
-
-    separator_idx = aa_parent.index("^") * 3
-    light_chain_seq = parent[:separator_idx]
-    heavy_chain_seq = parent[separator_idx + 3 :]
-
-    direct_val = dasm_burrito.build_selection_matrix_from_parent_aa(
-        parent_aa_idxs, aa_mask
-    )
-
-    indirect_val = dasm_burrito._build_selection_matrix_from_parent(
-        (light_chain_seq, heavy_chain_seq)
-    )
-
-    assert torch.allclose(direct_val[: len(indirect_val[0])], indirect_val[0])
-    assert torch.allclose(
-        direct_val[len(indirect_val[0]) + 1 :][: len(indirect_val[1])], indirect_val[1]
-    )

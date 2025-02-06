@@ -23,10 +23,10 @@ class DNSMDataset(DXSMDataset):
 
         This is a somewhat vague name, but that's because it includes both the cases of
         the DNSM (in which case it's neutral probabilities of any nonsynonymous
-        mutation) and the DASM (in which case it's the neutral probabilities of mutation
+        mutation) and the DDSM (in which case it's the neutral probabilities of mutation
         to the various amino acids).
 
-        This is the case of the DNSM, but the DASM will override this method.
+        This is the case of the DNSM, but the DDSM will override this method.
         """
         neutral_aa_mut_prob_l = []
 
