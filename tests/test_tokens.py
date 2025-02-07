@@ -1,6 +1,6 @@
 import torch
 
-from netam.common import (
+from netam.tokens import (
     nt_mask_tensor_of,
     aa_mask_tensor_of,
     codon_mask_tensor_of,

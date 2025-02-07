@@ -15,11 +15,13 @@ import pandas as pd
 from tqdm import tqdm
 
 from netam.common import (
-    aa_idx_tensor_of_str_ambig,
     stack_heterogeneous,
+    BIG,
+)
+from netam.tokens import (
+    aa_idx_tensor_of_str_ambig,
     codon_mask_tensor_of,
     assert_pcp_valid,
-    BIG,
 )
 import netam.framework as framework
 import netam.molevol as molevol

@@ -16,18 +16,19 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tensorboardX import SummaryWriter
 
 from netam.common import (
+    optimizer_of_name,
+    tensor_to_np_if_needed,
+    BIG,
+    VRC01_NT_SEQ,
+    parallelize_function,
+)
+from netam.tokens import (
     generate_kmers,
     kmer_to_index_of,
     nt_mask_tensor_of,
-    optimizer_of_name,
-    tensor_to_np_if_needed,
-    BASES,
-    BIG,
-    VRC01_NT_SEQ,
     encode_sequences,
-    parallelize_function,
 )
-from netam.sequences import BASES_AND_N_TO_INDEX
+from netam.sequences import BASES_AND_N_TO_INDEX, BASES
 from netam import models
 import netam.molevol as molevol
 
