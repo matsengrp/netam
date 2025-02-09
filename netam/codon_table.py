@@ -72,5 +72,3 @@ def build_stop_codon_indicator_tensor():
     for stop_codon in STOP_CODONS:
         stop_codon_indicator[CODONS.index(stop_codon)] = 1.0
     return stop_codon_indicator
-
-

@@ -259,6 +259,7 @@ def heavy_light_mask_of_aa_idxs(aa_idxs):
 
     return aa_idxs < AA_AMBIG_IDX
 
+
 def dataset_inputs_of_pcp_df(pcp_df, known_token_count):
     parents = []
     children = []
@@ -294,7 +295,6 @@ def dataset_inputs_of_pcp_df(pcp_df, known_token_count):
             ),
         )
     )
-
 
 
 def generate_kmers(kmer_length):

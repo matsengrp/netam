@@ -15,6 +15,7 @@ import multiprocessing as mp
 BIG = 1e9
 SMALL_PROB = 1e-6
 
+
 def combine_and_pad_tensors(first, second, padding_idxs, fill=float("nan")):
     res = torch.full(
         (first.shape[0] + second.shape[0] + len(padding_idxs),) + first.shape[1:], fill

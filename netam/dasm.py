@@ -17,7 +17,10 @@ from netam.sequences import (
     codon_idx_tensor_of_str_ambig,
     AMBIGUOUS_CODON_IDX,
 )
-from netam.codon_table import CODON_AA_INDICATOR_MATRIX, build_stop_codon_indicator_tensor
+from netam.codon_table import (
+    CODON_AA_INDICATOR_MATRIX,
+    build_stop_codon_indicator_tensor,
+)
 
 
 class DASMDataset(DXSMDataset):
