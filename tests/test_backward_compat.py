@@ -51,7 +51,7 @@ def test_predictions_of_batch(fixed_ddsm_val_burrito):
         )
         predictions_list.append(predictions.detach().cpu())
     these_predictions = torch.cat(predictions_list, axis=0).double()
-    predictions = torch.load("tests/old_models/val_predictions.pt").double()
+    predictions = torch.load("tests/old_models/val_predictions.pt", weights_only=True).double()
     assert torch.allclose(predictions, these_predictions)
 
 

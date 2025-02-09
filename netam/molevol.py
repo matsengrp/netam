@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from torch import Tensor, optim
 
-from netam.sequences import CODON_AA_INDICATOR_MATRIX
+from netam.codon_table import CODON_AA_INDICATOR_MATRIX
 
 import netam.sequences as sequences
 

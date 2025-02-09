@@ -21,7 +21,7 @@ import copy
 
 import torch
 
-from netam.tokens import aa_idx_tensor_of_str_ambig, aa_mask_tensor_of
+from netam.sequences import aa_idx_tensor_of_str_ambig, aa_mask_tensor_of
 
 
 def reshape_tensor(tensor, head_count):

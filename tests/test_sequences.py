@@ -10,7 +10,6 @@ from netam.sequences import (
     RESERVED_TOKEN_REGEX,
     TOKEN_STR_SORTED,
     CODONS,
-    CODON_AA_INDICATOR_MATRIX,
     MAX_KNOWN_TOKEN_COUNT,
     AA_AMBIG_IDX,
     AMBIGUOUS_CODON_IDX,
@@ -22,10 +21,11 @@ from netam.sequences import (
     token_mask_of_aa_idxs,
     aa_idx_tensor_of_str,
     prepare_heavy_light_pair,
-    combine_and_pad_tensors,
     dataset_inputs_of_pcp_df,
     heavy_light_mask_of_aa_idxs,
 )
+from netam.codon_table import CODON_AA_INDICATOR_MATRIX
+from netam.common import combine_and_pad_tensors
 
 
 def test_token_order():

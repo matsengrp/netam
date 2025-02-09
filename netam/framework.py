@@ -19,16 +19,17 @@ from netam.common import (
     optimizer_of_name,
     tensor_to_np_if_needed,
     BIG,
-    VRC01_NT_SEQ,
     parallelize_function,
 )
-from netam.tokens import (
+from netam.sequences import (
+    BASES_AND_N_TO_INDEX,
+    BASES,
+    VRC01_NT_SEQ,
     generate_kmers,
     kmer_to_index_of,
     nt_mask_tensor_of,
     encode_sequences,
 )
-from netam.sequences import BASES_AND_N_TO_INDEX, BASES
 from netam import models
 import netam.molevol as molevol
 

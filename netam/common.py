@@ -15,18 +15,15 @@ import multiprocessing as mp
 BIG = 1e9
 SMALL_PROB = 1e-6
 
-# I needed some sequence to use to normalize the rate of mutation in the SHM model.
-# So, I chose perhaps the most famous antibody sequence, VRC01:
-# https://www.ncbi.nlm.nih.gov/nuccore/GU980702.1
-VRC01_NT_SEQ = (
-    "CAGGTGCAGCTGGTGCAGTCTGGGGGTCAGATGAAGAAGCCTGGCGAGTCGATGAGAATT"
-    "TCTTGTCGGGCTTCTGGATATGAATTTATTGATTGTACGCTAAATTGGATTCGTCTGGCC"
-    "CCCGGAAAAAGGCCTGAGTGGATGGGATGGCTGAAGCCTCGGGGGGGGGCCGTCAACTAC"
-    "GCACGTCCACTTCAGGGCAGAGTGACCATGACTCGAGACGTTTATTCCGACACAGCCTTT"
-    "TTGGAGCTGCGCTCGTTGACAGTAGACGACACGGCCGTCTACTTTTGTACTAGGGGAAAA"
-    "AACTGTGATTACAATTGGGACTTCGAACACTGGGGCCGGGGCACCCCGGTCATCGTCTCA"
-    "TCA"
-)
+def combine_and_pad_tensors(first, second, padding_idxs, fill=float("nan")):
+    res = torch.full(
+        (first.shape[0] + second.shape[0] + len(padding_idxs),) + first.shape[1:], fill
+    )
+    mask = torch.full((res.shape[0],), True, dtype=torch.bool)
+    if len(padding_idxs) > 0:
+        mask[torch.tensor(padding_idxs)] = False
+    res[mask] = torch.concat([first, second], dim=0)
+    return res
 
 
 def force_spawn():

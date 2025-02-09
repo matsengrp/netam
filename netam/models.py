@@ -16,15 +16,14 @@ from netam.common import (
     chunk_function,
     assume_single_sequence_is_heavy_chain,
 )
-from netam.tokens import (
+from netam.sequences import (
     generate_kmers,
     aa_mask_tensor_of,
     encode_sequences,
     aa_idx_tensor_of_str_ambig,
     PositionalEncoding,
+    set_wt_to_nan,
 )
-
-from netam.sequences import set_wt_to_nan
 
 from typing import Tuple
 

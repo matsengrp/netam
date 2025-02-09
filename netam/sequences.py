@@ -1,26 +1,41 @@
 """Code for handling sequences and sequence files."""
 
 import itertools
-import re
 
 import torch
-import numpy as np
+import re
+import math
 import pandas as pd
+import numpy as np
+
+from torch import nn, Tensor
 
 from Bio import SeqIO
 from Bio.Seq import Seq
 
+from netam.common import combine_and_pad_tensors
+
 BASES = ("A", "C", "G", "T")
 AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
-# Add additional tokens to this string:
-RESERVED_TOKENS = "^"
 
 
 NT_STR_SORTED = "".join(BASES)
 BASES_AND_N_TO_INDEX = {base: idx for idx, base in enumerate(NT_STR_SORTED + "N")}
+AA_AMBIG_IDX = len(AA_STR_SORTED)
+
+CODONS = ["".join(codon_list) for codon_list in itertools.product(BASES, repeat=3)]
+STOP_CODONS = ["TAA", "TAG", "TGA"]
+AMBIGUOUS_CODON_IDX = len(CODONS)
+
+
+# Add additional tokens to this string:
+RESERVED_TOKENS = "^"
+# Each token in RESERVED_TOKENS will appear once in aa strings, and three times
+# in nt strings.
+RESERVED_TOKEN_TRANSLATIONS = {token * 3: token for token in RESERVED_TOKENS}
+
 # Must add new tokens to the end of this string.
 TOKEN_STR_SORTED = AA_STR_SORTED + "X" + RESERVED_TOKENS
-AA_AMBIG_IDX = len(AA_STR_SORTED)
 
 RESERVED_TOKEN_AA_BOUNDS = (
     min(TOKEN_STR_SORTED.index(token) for token in RESERVED_TOKENS),
@@ -28,18 +43,157 @@ RESERVED_TOKEN_AA_BOUNDS = (
 )
 MAX_KNOWN_TOKEN_COUNT = len(TOKEN_STR_SORTED)
 MAX_AA_TOKEN_IDX = MAX_KNOWN_TOKEN_COUNT - 1
-CODONS = ["".join(codon_list) for codon_list in itertools.product(BASES, repeat=3)]
-STOP_CODONS = ["TAA", "TAG", "TGA"]
-AMBIGUOUS_CODON_IDX = len(CODONS)
 
-
-# Each token in RESERVED_TOKENS will appear once in aa strings, and three times
-# in nt strings.
-RESERVED_TOKEN_TRANSLATIONS = {token * 3: token for token in RESERVED_TOKENS}
 
 # Create a regex pattern
 RESERVED_TOKEN_REGEX = f"[{''.join(map(re.escape, list(RESERVED_TOKENS)))}]"
 HL_SEPARATOR_TOKEN_IDX = TOKEN_STR_SORTED.index("^")
+
+# I needed some sequence to use to normalize the rate of mutation in the SHM model.
+# So, I chose perhaps the most famous antibody sequence, VRC01:
+# https://www.ncbi.nlm.nih.gov/nuccore/GU980702.1
+VRC01_NT_SEQ = (
+    "CAGGTGCAGCTGGTGCAGTCTGGGGGTCAGATGAAGAAGCCTGGCGAGTCGATGAGAATT"
+    "TCTTGTCGGGCTTCTGGATATGAATTTATTGATTGTACGCTAAATTGGATTCGTCTGGCC"
+    "CCCGGAAAAAGGCCTGAGTGGATGGGATGGCTGAAGCCTCGGGGGGGGGCCGTCAACTAC"
+    "GCACGTCCACTTCAGGGCAGAGTGACCATGACTCGAGACGTTTATTCCGACACAGCCTTT"
+    "TTGGAGCTGCGCTCGTTGACAGTAGACGACACGGCCGTCTACTTTTGTACTAGGGGAAAA"
+    "AACTGTGATTACAATTGGGACTTCGAACACTGGGGCCGGGGCACCCCGGTCATCGTCTCA"
+    "TCA"
+)
+
+
+def idx_of_codon_allowing_ambiguous(codon):
+    if "N" in codon:
+        return AMBIGUOUS_CODON_IDX
+    else:
+        return CODONS.index(codon)
+
+
+def codon_idx_tensor_of_str_ambig(nt_str):
+    """Return the indices of the codons in a string."""
+    assert len(nt_str) % 3 == 0
+    return torch.tensor(
+        [idx_of_codon_allowing_ambiguous(codon) for codon in iter_codons(nt_str)]
+    )
+
+
+def generic_subs_indicator_tensor_of(ambig_symb, parent, child):
+    """Return a tensor indicating which positions in the parent sequence are substituted
+    in the child sequence."""
+    return torch.tensor(
+        [
+            0 if (p == ambig_symb or c == ambig_symb) else p != c
+            for p, c in zip(parent, child)
+        ],
+        dtype=torch.float,
+    )
+
+
+def nt_subs_indicator_tensor_of(parent, child):
+    """Return a tensor indicating which positions in the parent sequence are substituted
+    in the child sequence."""
+    return generic_subs_indicator_tensor_of("N", parent, child)
+
+
+def aa_subs_indicator_tensor_of(parent, child):
+    """Return a tensor indicating which positions in the parent sequence are substituted
+    in the child sequence."""
+    return generic_subs_indicator_tensor_of("X", parent, child)
+
+
+def read_fasta_sequences(file_path):
+    with open(file_path, "r") as handle:
+        sequences = [str(record.seq) for record in SeqIO.parse(handle, "fasta")]
+    return sequences
+
+
+def translate_codon(codon):
+    """Translate a codon to an amino acid."""
+    if codon in RESERVED_TOKEN_TRANSLATIONS:
+        return RESERVED_TOKEN_TRANSLATIONS[codon]
+    else:
+        return str(Seq(codon).translate())
+
+
+def translate_sequence(nt_sequence):
+    if len(nt_sequence) % 3 != 0:
+        raise ValueError(f"The sequence '{nt_sequence}' is not a multiple of 3.")
+    aa_seq = "".join(
+        translate_codon(nt_sequence[i : i + 3]) for i in range(0, len(nt_sequence), 3)
+    )
+    if "*" in aa_seq:
+        raise ValueError(f"The sequence '{nt_sequence}' contains a stop codon.")
+    return aa_seq
+
+
+def translate_sequences(nt_sequences):
+    return [translate_sequence(seq) for seq in nt_sequences]
+
+
+def generic_mutation_frequency(ambig_symb, parent, child):
+    """Return the fraction of sites that differ between the parent and child
+    sequences."""
+    return sum(
+        1
+        for p, c in zip(parent, child)
+        if p != c and p != ambig_symb and c != ambig_symb
+    ) / len(parent)
+
+
+def nt_mutation_frequency(parent, child):
+    """Return the fraction of nucleotide sites that differ between the parent and child
+    sequences."""
+    return generic_mutation_frequency("N", parent, child)
+
+
+def aa_mutation_frequency(parent, child):
+    """Return the fraction of amino acid sites that differ between the parent and child
+    sequences."""
+    return generic_mutation_frequency("X", parent, child)
+
+
+def assert_pcp_lengths(parent, child):
+    """Assert that the lengths of the parent and child sequences are the same and that
+    they are multiples of 3."""
+    if len(parent) != len(child):
+        raise ValueError(
+            f"The parent and child sequences are not the same length: "
+            f"{len(parent)} != {len(child)}"
+        )
+    if len(parent) % 3 != 0:
+        raise ValueError(f"Found a PCP with length not a multiple of 3: {len(parent)}")
+
+
+def pcp_criteria_check(parent, child, max_mut_freq=0.3):
+    """Check that parent child pair undergoes mutation at a reasonable rate."""
+    if parent == child:
+        return False
+    elif nt_mutation_frequency(parent, child) > max_mut_freq:
+        return False
+    else:
+        return True
+
+
+def assert_full_sequences(parent, child):
+    """Assert that the parent and child sequences full length, containing no ambiguous
+    bases (N)."""
+
+    if "N" in parent or "N" in child:
+        raise ValueError("Found ambiguous bases in the parent or child sequence.")
+
+
+def apply_aa_mask_to_nt_sequence(nt_seq, aa_mask):
+    """Apply an amino acid mask to a nucleotide sequence."""
+    return "".join(
+        nt for nt, mask_val in zip(nt_seq, aa_mask.repeat_interleave(3)) if mask_val
+    )
+
+
+def iter_codons(nt_seq):
+    """Iterate over the codons in a nucleotide sequence."""
+    for i in range(0, (len(nt_seq) // 3) * 3, 3):
+        yield nt_seq[i : i + 3]
 
 
 def prepare_heavy_light_pair(heavy_seq, light_seq, known_token_count, is_nt=True):
@@ -105,18 +259,6 @@ def heavy_light_mask_of_aa_idxs(aa_idxs):
 
     return aa_idxs < AA_AMBIG_IDX
 
-
-def combine_and_pad_tensors(first, second, padding_idxs, fill=float("nan")):
-    res = torch.full(
-        (first.shape[0] + second.shape[0] + len(padding_idxs),) + first.shape[1:], fill
-    )
-    mask = torch.full((res.shape[0],), True, dtype=torch.bool)
-    if len(padding_idxs) > 0:
-        mask[torch.tensor(padding_idxs)] = False
-    res[mask] = torch.concat([first, second], dim=0)
-    return res
-
-
 def dataset_inputs_of_pcp_df(pcp_df, known_token_count):
     parents = []
     children = []
@@ -154,12 +296,190 @@ def dataset_inputs_of_pcp_df(pcp_df, known_token_count):
     )
 
 
-def build_stop_codon_indicator_tensor():
-    """Return a tensor indicating the stop codons."""
-    stop_codon_indicator = torch.zeros(len(CODONS))
-    for stop_codon in STOP_CODONS:
-        stop_codon_indicator[CODONS.index(stop_codon)] = 1.0
-    return stop_codon_indicator
+
+def generate_kmers(kmer_length):
+    # Our strategy for kmers is to have a single representation for any kmer that isn't in ACGT.
+    # This is the first one, which is simply "N", and so this placeholder value is 0.
+    all_kmers = ["N"] + [
+        "".join(p) for p in itertools.product(BASES, repeat=kmer_length)
+    ]
+    assert len(all_kmers) < torch.iinfo(torch.int32).max
+    return all_kmers
+
+
+def kmer_to_index_of(all_kmers):
+    return {kmer: idx for idx, kmer in enumerate(all_kmers)}
+
+
+def aa_idx_tensor_of_str_ambig(aa_str):
+    """Return the indices of the amino acids in a string, allowing the ambiguous
+    character."""
+    try:
+        return torch.tensor(
+            [TOKEN_STR_SORTED.index(aa) for aa in aa_str], dtype=torch.int
+        )
+    except ValueError:
+        print(f"Found an invalid amino acid in the string: {aa_str}")
+        raise
+
+
+def generic_mask_tensor_of(ambig_symb, seq_str, length=None):
+    """Return a mask tensor indicating non-empty and non-ambiguous sites.
+
+    Sites beyond the length of the sequence are masked.
+    """
+    if length is None:
+        length = len(seq_str)
+    mask = torch.zeros(length, dtype=torch.bool)
+    if len(seq_str) < length:
+        seq_str += ambig_symb * (length - len(seq_str))
+    else:
+        seq_str = seq_str[:length]
+    mask[[c != ambig_symb for c in seq_str]] = 1
+    return mask
+
+
+def aa_strs_from_idx_tensor(idx_tensor):
+    """Convert a tensor of amino acid indices back to a list of amino acid strings.
+
+    Args:
+        idx_tensor (Tensor): A 2D tensor of shape (batch_size, seq_len) containing
+                             indices into TOKEN_STR_SORTED.
+
+    Returns:
+        List[str]: A list of amino acid strings with trailing 'X's removed.
+    """
+    idx_tensor = idx_tensor.cpu()
+
+    aa_str_list = []
+    for row in idx_tensor:
+        aa_str = "".join(TOKEN_STR_SORTED[idx] for idx in row.tolist())
+        aa_str_list.append(aa_str.rstrip("X"))
+
+    return aa_str_list
+
+
+def nt_mask_tensor_of(*args, **kwargs):
+    return generic_mask_tensor_of("N", *args, **kwargs)
+
+
+def aa_mask_tensor_of(*args, **kwargs):
+    return generic_mask_tensor_of("X", *args, **kwargs)
+
+
+def _consider_codon(codon):
+    """Return False if codon should be masked, True otherwise."""
+    if "N" in codon:
+        return False
+    elif codon in RESERVED_TOKEN_TRANSLATIONS:
+        return False
+    else:
+        return True
+
+
+def codon_mask_tensor_of(nt_parent, *other_nt_seqs, aa_length=None):
+    """Return a mask tensor indicating codons which contain at least one N.
+
+    Codons beyond the length of the sequence are masked. If other_nt_seqs are provided,
+    the "and" mask will be computed for all sequences. Codons containing marker tokens
+    are also masked.
+    """
+    if aa_length is None:
+        aa_length = len(nt_parent) // 3
+    sequences = (nt_parent,) + other_nt_seqs
+    mask = [
+        all(_consider_codon(codon) for codon in codons)
+        for codons in zip(*(iter_codons(sequence) for sequence in sequences))
+    ]
+    if len(mask) < aa_length:
+        mask += [False] * (aa_length - len(mask))
+    else:
+        mask = mask[:aa_length]
+    assert len(mask) == aa_length
+    return torch.tensor(mask, dtype=torch.bool)
+
+
+def assert_pcp_valid(parent, child, aa_mask=None):
+    """Check that the parent-child pairs are valid.
+
+    * The parent and child sequences must be the same length
+    * There must be unmasked codons
+    * The parent and child sequences must not match after masking codons containing
+      ambiguities.
+
+    Args:
+        parent: The parent sequence.
+        child: The child sequence.
+        aa_mask: The mask tensor for the amino acid sequence. If None, it will be
+            computed from the parent and child sequences.
+    """
+    if aa_mask is None:
+        aa_mask = codon_mask_tensor_of(parent, child)
+    if len(parent) != len(child):
+        raise ValueError("Parent and child sequences are not the same length.")
+    if not aa_mask.any():
+        raise ValueError("Parent-child pair is masked in all codons.")
+    if apply_aa_mask_to_nt_sequence(parent, aa_mask) == apply_aa_mask_to_nt_sequence(
+        child, aa_mask
+    ):
+        raise ValueError(
+            "Parent-child pair matches after masking codons containing ambiguities"
+        )
+
+
+# Reference: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        # assert that d_model is even
+        assert d_model % 2 == 0, "d_model must be even for PositionalEncoding"
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model)
+        )
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer("pe", pe)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Arguments:
+            x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
+        """
+        x = x + self.pe[: x.size(0)]
+        return self.dropout(x)
+
+
+def encode_sequences(sequences, encoder):
+    encoded_parents, wt_base_modifiers = zip(
+        *[encoder.encode_sequence(sequence) for sequence in sequences]
+    )
+    masks = [nt_mask_tensor_of(sequence, encoder.site_count) for sequence in sequences]
+    return (
+        torch.stack(encoded_parents),
+        torch.stack(masks),
+        torch.stack(wt_base_modifiers),
+    )
+
+
+def token_mask_of_aa_idxs(aa_idxs: torch.Tensor) -> torch.Tensor:
+    """Return a mask indicating which positions in an amino acid sequence contain
+    special indicator tokens.
+
+    The mask is True for positions that contain special tokens.
+    """
+    min_idx, max_idx = RESERVED_TOKEN_AA_BOUNDS
+    return (aa_idxs <= max_idx) & (aa_idxs >= min_idx)
+
+
+def aa_index_of_codon(codon):
+    """Return the index of the amino acid encoded by a codon."""
+    aa = translate_sequence(codon)
+    return TOKEN_STR_SORTED.index(aa)
 
 
 def nt_idx_array_of_str(nt_str):
@@ -198,21 +518,6 @@ def aa_idx_tensor_of_str(aa_str):
         raise
 
 
-def idx_of_codon_allowing_ambiguous(codon):
-    if "N" in codon:
-        return AMBIGUOUS_CODON_IDX
-    else:
-        return CODONS.index(codon)
-
-
-def codon_idx_tensor_of_str_ambig(nt_str):
-    """Return the indices of the codons in a string."""
-    assert len(nt_str) % 3 == 0
-    return torch.tensor(
-        [idx_of_codon_allowing_ambiguous(codon) for codon in iter_codons(nt_str)]
-    )
-
-
 def aa_onehot_tensor_of_str(aa_str):
     aa_onehot = torch.zeros((len(aa_str), 20))
     aa_indices_parent = aa_idx_array_of_str(aa_str)
@@ -220,152 +525,7 @@ def aa_onehot_tensor_of_str(aa_str):
     return aa_onehot
 
 
-def generic_subs_indicator_tensor_of(ambig_symb, parent, child):
-    """Return a tensor indicating which positions in the parent sequence are substituted
-    in the child sequence."""
-    return torch.tensor(
-        [
-            0 if (p == ambig_symb or c == ambig_symb) else p != c
-            for p, c in zip(parent, child)
-        ],
-        dtype=torch.float,
-    )
-
-
-def nt_subs_indicator_tensor_of(parent, child):
-    """Return a tensor indicating which positions in the parent sequence are substituted
-    in the child sequence."""
-    return generic_subs_indicator_tensor_of("N", parent, child)
-
-
-def aa_subs_indicator_tensor_of(parent, child):
-    """Return a tensor indicating which positions in the parent sequence are substituted
-    in the child sequence."""
-    return generic_subs_indicator_tensor_of("X", parent, child)
-
-
-def read_fasta_sequences(file_path):
-    with open(file_path, "r") as handle:
-        sequences = [str(record.seq) for record in SeqIO.parse(handle, "fasta")]
-    return sequences
-
-
-def translate_codon(codon):
-    """Translate a codon to an amino acid."""
-    if codon in RESERVED_TOKEN_TRANSLATIONS:
-        return RESERVED_TOKEN_TRANSLATIONS[codon]
-    else:
-        return str(Seq(codon).translate())
-
-
-def translate_sequence(nt_sequence):
-    if len(nt_sequence) % 3 != 0:
-        raise ValueError(f"The sequence '{nt_sequence}' is not a multiple of 3.")
-    aa_seq = "".join(
-        translate_codon(nt_sequence[i : i + 3]) for i in range(0, len(nt_sequence), 3)
-    )
-    if "*" in aa_seq:
-        raise ValueError(f"The sequence '{nt_sequence}' contains a stop codon.")
-    return aa_seq
-
-
-def translate_sequences(nt_sequences):
-    return [translate_sequence(seq) for seq in nt_sequences]
-
-
-def aa_index_of_codon(codon):
-    """Return the index of the amino acid encoded by a codon."""
-    aa = translate_sequence(codon)
-    return TOKEN_STR_SORTED.index(aa)
-
-
-def generic_mutation_frequency(ambig_symb, parent, child):
-    """Return the fraction of sites that differ between the parent and child
-    sequences."""
-    return sum(
-        1
-        for p, c in zip(parent, child)
-        if p != c and p != ambig_symb and c != ambig_symb
-    ) / len(parent)
-
-
-def nt_mutation_frequency(parent, child):
-    """Return the fraction of nucleotide sites that differ between the parent and child
-    sequences."""
-    return generic_mutation_frequency("N", parent, child)
-
-
-def aa_mutation_frequency(parent, child):
-    """Return the fraction of amino acid sites that differ between the parent and child
-    sequences."""
-    return generic_mutation_frequency("X", parent, child)
-
-
-def assert_pcp_lengths(parent, child):
-    """Assert that the lengths of the parent and child sequences are the same and that
-    they are multiples of 3."""
-    if len(parent) != len(child):
-        raise ValueError(
-            f"The parent and child sequences are not the same length: "
-            f"{len(parent)} != {len(child)}"
-        )
-    if len(parent) % 3 != 0:
-        raise ValueError(f"Found a PCP with length not a multiple of 3: {len(parent)}")
-
-
-def pcp_criteria_check(parent, child, max_mut_freq=0.3):
-    """Check that parent child pair undergoes mutation at a reasonable rate."""
-    if parent == child:
-        return False
-    elif nt_mutation_frequency(parent, child) > max_mut_freq:
-        return False
-    else:
-        return True
-
-
-def generate_codon_aa_indicator_matrix():
-    """Generate a matrix that maps codons (rows) to amino acids (columns)."""
-
-    matrix = np.zeros((len(CODONS), len(AA_STR_SORTED)))
-
-    for i, codon in enumerate(CODONS):
-        try:
-            aa = translate_sequences([codon])[0]
-        except ValueError:  # Handle STOP codon
-            pass
-        else:
-            aa_idx = AA_STR_SORTED.index(aa)
-            matrix[i, aa_idx] = 1
-
-    return matrix
-
-
-CODON_AA_INDICATOR_MATRIX = torch.tensor(
-    generate_codon_aa_indicator_matrix(), dtype=torch.float32
-)
-
-
-def assert_full_sequences(parent, child):
-    """Assert that the parent and child sequences full length, containing no ambiguous
-    bases (N)."""
-
-    if "N" in parent or "N" in child:
-        raise ValueError("Found ambiguous bases in the parent or child sequence.")
-
-
-def apply_aa_mask_to_nt_sequence(nt_seq, aa_mask):
-    """Apply an amino acid mask to a nucleotide sequence."""
-    return "".join(
-        nt for nt, mask_val in zip(nt_seq, aa_mask.repeat_interleave(3)) if mask_val
-    )
-
-
-def iter_codons(nt_seq):
-    """Iterate over the codons in a nucleotide sequence."""
-    for i in range(0, (len(nt_seq) // 3) * 3, 3):
-        yield nt_seq[i : i + 3]
-
-
+# TODO is this not the same as zap_wt_predictions?
 def set_wt_to_nan(predictions: torch.Tensor, aa_sequence: str) -> torch.Tensor:
     """Set the wild-type predictions to NaN.
 
@@ -379,13 +539,3 @@ def set_wt_to_nan(predictions: torch.Tensor, aa_sequence: str) -> torch.Tensor:
     )
     predictions[~token_mask] = float("nan")
     return predictions
-
-
-def token_mask_of_aa_idxs(aa_idxs: torch.Tensor) -> torch.Tensor:
-    """Return a mask indicating which positions in an amino acid sequence contain
-    special indicator tokens.
-
-    The mask is True for positions that contain special tokens.
-    """
-    min_idx, max_idx = RESERVED_TOKEN_AA_BOUNDS
-    return (aa_idxs <= max_idx) & (aa_idxs >= min_idx)

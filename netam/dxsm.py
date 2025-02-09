@@ -18,14 +18,12 @@ from netam.common import (
     stack_heterogeneous,
     BIG,
 )
-from netam.tokens import (
-    aa_idx_tensor_of_str_ambig,
-    codon_mask_tensor_of,
-    assert_pcp_valid,
-)
 import netam.framework as framework
 import netam.molevol as molevol
 from netam.sequences import (
+    aa_idx_tensor_of_str_ambig,
+    codon_mask_tensor_of,
+    assert_pcp_valid,
     aa_subs_indicator_tensor_of,
     translate_sequences,
     apply_aa_mask_to_nt_sequence,
