@@ -1,7 +1,8 @@
 import numpy as np
+import torch
 
 from Bio.Data import CodonTable
-from netam.sequences import AA_STR_SORTED
+from netam.sequences import AA_STR_SORTED, CODONS, STOP_CODONS, translate_sequences
 
 
 def single_mutant_aa_indices(codon):
@@ -41,3 +42,33 @@ def make_codon_neighbor_indicator(nt_seq):
         codon = nt_seq[i : i + 3]
         neighbor[single_mutant_aa_indices(codon), i // 3] = True
     return neighbor
+
+
+def generate_codon_aa_indicator_matrix():
+    """Generate a matrix that maps codons (rows) to amino acids (columns)."""
+
+    matrix = np.zeros((len(CODONS), len(AA_STR_SORTED)))
+
+    for i, codon in enumerate(CODONS):
+        try:
+            aa = translate_sequences([codon])[0]
+        except ValueError:  # Handle STOP codon
+            pass
+        else:
+            aa_idx = AA_STR_SORTED.index(aa)
+            matrix[i, aa_idx] = 1
+
+    return matrix
+
+
+CODON_AA_INDICATOR_MATRIX = torch.tensor(
+    generate_codon_aa_indicator_matrix(), dtype=torch.float32
+)
+
+
+def build_stop_codon_indicator_tensor():
+    """Return a tensor indicating the stop codons."""
+    stop_codon_indicator = torch.zeros(len(CODONS))
+    for stop_codon in STOP_CODONS:
+        stop_codon_indicator[CODONS.index(stop_codon)] = 1.0
+    return stop_codon_indicator

@@ -13,16 +13,17 @@ from netam.hit_class import apply_multihit_correction
 from netam import sequences
 from netam.sequences import MAX_AA_TOKEN_IDX
 from netam.common import (
-    aa_idx_tensor_of_str_ambig,
-    PositionalEncoding,
-    generate_kmers,
-    aa_mask_tensor_of,
-    encode_sequences,
     chunk_function,
     assume_single_sequence_is_heavy_chain,
 )
-
-from netam.sequences import set_wt_to_nan
+from netam.sequences import (
+    generate_kmers,
+    aa_mask_tensor_of,
+    encode_sequences,
+    aa_idx_tensor_of_str_ambig,
+    PositionalEncoding,
+    set_wt_to_nan,
+)
 
 from typing import Tuple
 

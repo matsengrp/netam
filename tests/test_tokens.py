@@ -1,11 +1,5 @@
 import torch
 
-from netam.common import (
-    nt_mask_tensor_of,
-    aa_mask_tensor_of,
-    codon_mask_tensor_of,
-    aa_strs_from_idx_tensor,
-)
 from netam.sequences import (
     AA_AMBIG_IDX,
     MAX_KNOWN_TOKEN_COUNT,
@@ -13,6 +7,10 @@ from netam.sequences import (
     translate_sequence,
     aa_idx_tensor_of_str,
     token_mask_of_aa_idxs,
+    nt_mask_tensor_of,
+    aa_mask_tensor_of,
+    codon_mask_tensor_of,
+    aa_strs_from_idx_tensor,
 )
 
 

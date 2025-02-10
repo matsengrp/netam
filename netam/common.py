@@ -1,6 +1,4 @@
-import math
 import inspect
-import itertools
 import resource
 import subprocess
 from tqdm import tqdm
@@ -10,32 +8,23 @@ from itertools import islice, repeat
 import numpy as np
 import torch
 import torch.optim as optim
-from torch import nn, Tensor
+from torch import Tensor
 import multiprocessing as mp
 
-from netam.sequences import (
-    iter_codons,
-    apply_aa_mask_to_nt_sequence,
-    RESERVED_TOKEN_TRANSLATIONS,
-    BASES,
-    TOKEN_STR_SORTED,
-)
 
 BIG = 1e9
 SMALL_PROB = 1e-6
 
-# I needed some sequence to use to normalize the rate of mutation in the SHM model.
-# So, I chose perhaps the most famous antibody sequence, VRC01:
-# https://www.ncbi.nlm.nih.gov/nuccore/GU980702.1
-VRC01_NT_SEQ = (
-    "CAGGTGCAGCTGGTGCAGTCTGGGGGTCAGATGAAGAAGCCTGGCGAGTCGATGAGAATT"
-    "TCTTGTCGGGCTTCTGGATATGAATTTATTGATTGTACGCTAAATTGGATTCGTCTGGCC"
-    "CCCGGAAAAAGGCCTGAGTGGATGGGATGGCTGAAGCCTCGGGGGGGGGCCGTCAACTAC"
-    "GCACGTCCACTTCAGGGCAGAGTGACCATGACTCGAGACGTTTATTCCGACACAGCCTTT"
-    "TTGGAGCTGCGCTCGTTGACAGTAGACGACACGGCCGTCTACTTTTGTACTAGGGGAAAA"
-    "AACTGTGATTACAATTGGGACTTCGAACACTGGGGCCGGGGCACCCCGGTCATCGTCTCA"
-    "TCA"
-)
+
+def combine_and_pad_tensors(first, second, padding_idxs, fill=float("nan")):
+    res = torch.full(
+        (first.shape[0] + second.shape[0] + len(padding_idxs),) + first.shape[1:], fill
+    )
+    mask = torch.full((res.shape[0],), True, dtype=torch.bool)
+    if len(padding_idxs) > 0:
+        mask[torch.tensor(padding_idxs)] = False
+    res[mask] = torch.concat([first, second], dim=0)
+    return res
 
 
 def force_spawn():
@@ -45,136 +34,6 @@ def force_spawn():
     PyTorch.
     """
     mp.set_start_method("spawn", force=True)
-
-
-def generate_kmers(kmer_length):
-    # Our strategy for kmers is to have a single representation for any kmer that isn't in ACGT.
-    # This is the first one, which is simply "N", and so this placeholder value is 0.
-    all_kmers = ["N"] + [
-        "".join(p) for p in itertools.product(BASES, repeat=kmer_length)
-    ]
-    assert len(all_kmers) < torch.iinfo(torch.int32).max
-    return all_kmers
-
-
-def kmer_to_index_of(all_kmers):
-    return {kmer: idx for idx, kmer in enumerate(all_kmers)}
-
-
-def aa_idx_tensor_of_str_ambig(aa_str):
-    """Return the indices of the amino acids in a string, allowing the ambiguous
-    character."""
-    try:
-        return torch.tensor(
-            [TOKEN_STR_SORTED.index(aa) for aa in aa_str], dtype=torch.int
-        )
-    except ValueError:
-        print(f"Found an invalid amino acid in the string: {aa_str}")
-        raise
-
-
-def generic_mask_tensor_of(ambig_symb, seq_str, length=None):
-    """Return a mask tensor indicating non-empty and non-ambiguous sites.
-
-    Sites beyond the length of the sequence are masked.
-    """
-    if length is None:
-        length = len(seq_str)
-    mask = torch.zeros(length, dtype=torch.bool)
-    if len(seq_str) < length:
-        seq_str += ambig_symb * (length - len(seq_str))
-    else:
-        seq_str = seq_str[:length]
-    mask[[c != ambig_symb for c in seq_str]] = 1
-    return mask
-
-
-def aa_strs_from_idx_tensor(idx_tensor):
-    """Convert a tensor of amino acid indices back to a list of amino acid strings.
-
-    Args:
-        idx_tensor (Tensor): A 2D tensor of shape (batch_size, seq_len) containing
-                             indices into TOKEN_STR_SORTED.
-
-    Returns:
-        List[str]: A list of amino acid strings with trailing 'X's removed.
-    """
-    idx_tensor = idx_tensor.cpu()
-
-    aa_str_list = []
-    for row in idx_tensor:
-        aa_str = "".join(TOKEN_STR_SORTED[idx] for idx in row.tolist())
-        aa_str_list.append(aa_str.rstrip("X"))
-
-    return aa_str_list
-
-
-def assert_pcp_valid(parent, child, aa_mask=None):
-    """Check that the parent-child pairs are valid.
-
-    * The parent and child sequences must be the same length
-    * There must be unmasked codons
-    * The parent and child sequences must not match after masking codons containing
-      ambiguities.
-
-    Args:
-        parent: The parent sequence.
-        child: The child sequence.
-        aa_mask: The mask tensor for the amino acid sequence. If None, it will be
-            computed from the parent and child sequences.
-    """
-    if aa_mask is None:
-        aa_mask = codon_mask_tensor_of(parent, child)
-    if len(parent) != len(child):
-        raise ValueError("Parent and child sequences are not the same length.")
-    if not aa_mask.any():
-        raise ValueError("Parent-child pair is masked in all codons.")
-    if apply_aa_mask_to_nt_sequence(parent, aa_mask) == apply_aa_mask_to_nt_sequence(
-        child, aa_mask
-    ):
-        raise ValueError(
-            "Parent-child pair matches after masking codons containing ambiguities"
-        )
-
-
-def nt_mask_tensor_of(*args, **kwargs):
-    return generic_mask_tensor_of("N", *args, **kwargs)
-
-
-def aa_mask_tensor_of(*args, **kwargs):
-    return generic_mask_tensor_of("X", *args, **kwargs)
-
-
-def _consider_codon(codon):
-    """Return False if codon should be masked, True otherwise."""
-    if "N" in codon:
-        return False
-    elif codon in RESERVED_TOKEN_TRANSLATIONS:
-        return False
-    else:
-        return True
-
-
-def codon_mask_tensor_of(nt_parent, *other_nt_seqs, aa_length=None):
-    """Return a mask tensor indicating codons which contain at least one N.
-
-    Codons beyond the length of the sequence are masked. If other_nt_seqs are provided,
-    the "and" mask will be computed for all sequences. Codons containing marker tokens
-    are also masked.
-    """
-    if aa_length is None:
-        aa_length = len(nt_parent) // 3
-    sequences = (nt_parent,) + other_nt_seqs
-    mask = [
-        all(_consider_codon(codon) for codon in codons)
-        for codons in zip(*(iter_codons(sequence) for sequence in sequences))
-    ]
-    if len(mask) < aa_length:
-        mask += [False] * (aa_length - len(mask))
-    else:
-        mask = mask[:aa_length]
-    assert len(mask) == aa_length
-    return torch.tensor(mask, dtype=torch.bool)
 
 
 def informative_site_count(seq_str):
@@ -359,33 +218,6 @@ def tensor_to_np_if_needed(x):
         return x
 
 
-# Reference: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
-
-        # assert that d_model is even
-        assert d_model % 2 == 0, "d_model must be even for PositionalEncoding"
-
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model)
-        )
-        pe = torch.zeros(max_len, 1, d_model)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-        self.register_buffer("pe", pe)
-
-    def forward(self, x: Tensor) -> Tensor:
-        """
-        Arguments:
-            x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
-        """
-        x = x + self.pe[: x.size(0)]
-        return self.dropout(x)
-
-
 def linear_bump_lr(epoch, warmup_epochs, total_epochs, max_lr, min_lr):
     """Linearly increase the learning rate from min_lr to max_lr over warmup_epochs,
     then linearly decrease the learning rate from max_lr to min_lr.
@@ -403,18 +235,6 @@ def linear_bump_lr(epoch, warmup_epochs, total_epochs, max_lr, min_lr):
             epoch - warmup_epochs
         )
     return lr
-
-
-def encode_sequences(sequences, encoder):
-    encoded_parents, wt_base_modifiers = zip(
-        *[encoder.encode_sequence(sequence) for sequence in sequences]
-    )
-    masks = [nt_mask_tensor_of(sequence, encoder.site_count) for sequence in sequences]
-    return (
-        torch.stack(encoded_parents),
-        torch.stack(masks),
-        torch.stack(wt_base_modifiers),
-    )
 
 
 # from https://docs.python.org/3.11/library/itertools.html#itertools-recipes

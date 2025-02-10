@@ -19,8 +19,8 @@ from netam.sequences import (
     AA_AMBIG_IDX,
     TOKEN_STR_SORTED,
     token_mask_of_aa_idxs,
-    CODON_AA_INDICATOR_MATRIX,
 )
+from netam.codon_table import CODON_AA_INDICATOR_MATRIX
 
 
 @pytest.fixture(scope="module", params=["pcp_df", "pcp_df_paired"])

@@ -7,10 +7,15 @@ from netam.framework import (
     crepe_exists,
     load_crepe,
 )
-from netam.common import aa_idx_tensor_of_str_ambig, force_spawn
+from netam.common import force_spawn
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dnsm import DNSMBurrito, DNSMDataset
-from netam.sequences import AA_AMBIG_IDX, MAX_KNOWN_TOKEN_COUNT, TOKEN_STR_SORTED
+from netam.sequences import (
+    AA_AMBIG_IDX,
+    MAX_KNOWN_TOKEN_COUNT,
+    TOKEN_STR_SORTED,
+    aa_idx_tensor_of_str_ambig,
+)
 
 
 def test_aa_idx_tensor_of_str_ambig():

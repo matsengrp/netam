@@ -13,11 +13,13 @@ from netam.dxsm import DXSMDataset, DXSMBurrito
 import netam.molevol as molevol
 
 from netam.sequences import (
-    build_stop_codon_indicator_tensor,
     nt_idx_tensor_of_str,
     codon_idx_tensor_of_str_ambig,
     AMBIGUOUS_CODON_IDX,
+)
+from netam.codon_table import (
     CODON_AA_INDICATOR_MATRIX,
+    build_stop_codon_indicator_tensor,
 )
 
 
