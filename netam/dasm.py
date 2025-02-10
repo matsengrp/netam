@@ -155,13 +155,20 @@ class DASMBurrito(DXSMBurrito):
 
     model_type = "dasm"
 
+    @property
+    def stop_codon_zapper(self):
+        return self._stop_codon_zapper.to(self.device)
+
+    @property
+    def aa_codon_indicator_matrix(self):
+        return CODON_AA_INDICATOR_MATRIX.T.to(self.device)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.xent_loss = torch.nn.CrossEntropyLoss()
-        self.stop_codon_zapper = (build_stop_codon_indicator_tensor() * -BIG).to(
+        self._stop_codon_zapper = (build_stop_codon_indicator_tensor() * -BIG).to(
             self.device
         )
-        self.aa_codon_indicator_matrix = CODON_AA_INDICATOR_MATRIX.to(self.device).T
 
     def prediction_pair_of_batch(self, batch):
         """Get log neutral codon substitution probabilities and log selection factors
