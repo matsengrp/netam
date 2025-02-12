@@ -1,3 +1,4 @@
+from collections import Counter
 import inspect
 import resource
 import subprocess
@@ -124,23 +125,100 @@ def optimizer_of_name(optimizer_name, model_parameters, **kwargs):
 
 
 def find_least_used_cuda_gpu():
-    """Find the least used CUDA GPU on the system using nvidia-smi.
+    """Use utilization, then allocated memory, then number of running processes to
+    determine the least used CUDA GPU.
 
-    If they are all idle, return None.
+    If all GPUs are idle, return None.
     """
+    device = None
+    for func in (
+        find_least_utilized_cuda_gpu,
+        find_least_memory_used_cuda_gpu,
+        find_cuda_gpu_with_fewest_processes,
+    ):
+        device = func()
+        if device is not None:
+            break
+    return device
+
+
+def find_least_used_cuda_gpu(mem_round_val=1300):
+    """Determine the least used CUDA GPU based on utilization, then allocated memory,
+    then number of running processes.
+
+    If all GPUs are idle, return None. When choosing the GPU by memory, memory usage is
+    rounded to the nearest multiple of mem_round_val.
+    """
+    # Query GPU utilization and memory usage in a single call
     result = subprocess.run(
-        ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,nounits,noheader"],
+        [
+            "nvidia-smi",
+            "--query-gpu=gpu_uuid,utilization.gpu,memory.used",
+            "--format=csv,nounits,noheader",
+        ],
         stdout=subprocess.PIPE,
         text=True,
     )
+
     if result.returncode != 0:
-        print(f"Error running nvidia-smi.")
+        print("Error running nvidia-smi.")
         return None
-    utilization = [int(x) for x in result.stdout.strip().split("\n")]
-    if max(utilization) == 0:
-        return None  # All GPUs are idle.
-    # else:
-    return utilization.index(min(utilization))
+
+    lines = result.stdout.strip().split("\n")
+    gpu_data = [line.split(", ") for line in lines]
+    uuids = [gpu[0] for gpu in gpu_data]
+
+    utilization = [int(gpu[1]) for gpu in gpu_data]
+    memory_used = [
+        int(gpu[2]) // mem_round_val for gpu in gpu_data
+    ]  # Round memory usage
+
+    # Query process count in a single call
+    result = subprocess.run(
+        [
+            "nvidia-smi",
+            "--query-compute-apps=gpu_uuid,name",
+            "--format=csv,nounits,noheader",
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        print("Error running nvidia-smi.")
+        return None
+
+    process_entries = [
+        line.split(", ") for line in result.stdout.strip().split("\n") if line
+    ]
+
+    # Count the number of processes per GPU
+    gpu_counts = Counter({uuid: 0 for uuid in uuids})
+    gpu_counts.update(
+        [uuid for uuid, proc_name in process_entries if proc_name != "[Not Found]"]
+    )
+
+    # Map UUIDs to GPU indices
+    uuid_to_index = {uuid: idx for idx, uuid in enumerate(uuids)}
+
+    # Check prioritization order:
+    if max(utilization) > 0:
+        print("used utilization")
+        return utilization.index(min(utilization))  # Least utilized GPU
+
+    if max(memory_used) > 0:
+        print("used memory")
+        return memory_used.index(min(memory_used))  # Least memory used GPU
+
+    if len(set(gpu_counts.values())) > 1:
+        print("used processes")
+        return min(
+            uuid_to_index[uuid]
+            for uuid, count in gpu_counts.items()
+            if count == min(gpu_counts.values())
+        )
+
+    return None  # All GPUs are idle
 
 
 def pick_device(gpu_preference=None):
@@ -176,7 +254,9 @@ def pick_device(gpu_preference=None):
             else:
                 which_gpu = gpu_preference % torch.cuda.device_count()
         print(f"Using CUDA GPU {which_gpu}")
-        return torch.device(f"cuda:{which_gpu}")
+        dev = torch.device(f"cuda:{which_gpu}")
+        torch.ones(1).to(dev)
+        return dev
     elif torch.backends.mps.is_available():
         print("Using Metal Performance Shaders")
         return torch.device("mps")
