@@ -124,24 +124,6 @@ def optimizer_of_name(optimizer_name, model_parameters, **kwargs):
         )
 
 
-def find_least_used_cuda_gpu():
-    """Use utilization, then allocated memory, then number of running processes to
-    determine the least used CUDA GPU.
-
-    If all GPUs are idle, return None.
-    """
-    device = None
-    for func in (
-        find_least_utilized_cuda_gpu,
-        find_least_memory_used_cuda_gpu,
-        find_cuda_gpu_with_fewest_processes,
-    ):
-        device = func()
-        if device is not None:
-            break
-    return device
-
-
 def find_least_used_cuda_gpu(mem_round_val=1300):
     """Determine the least used CUDA GPU based on utilization, then allocated memory,
     then number of running processes.
