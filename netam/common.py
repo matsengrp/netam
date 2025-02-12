@@ -123,12 +123,19 @@ def optimizer_of_name(optimizer_name, model_parameters, **kwargs):
             f"Optimizer '{optimizer_name}' is not recognized in torch.optim"
         )
 
-def find_least_used_cuda_gpu():
-    """Use utilization, then allocated memory, then number of running processes to determine the least used CUDA GPU.
 
-    If all GPUs are idle, return None."""
+def find_least_used_cuda_gpu():
+    """Use utilization, then allocated memory, then number of running processes to
+    determine the least used CUDA GPU.
+
+    If all GPUs are idle, return None.
+    """
     device = None
-    for func in (find_least_utilized_cuda_gpu, find_least_memory_used_cuda_gpu, find_cuda_gpu_with_fewest_processes):
+    for func in (
+        find_least_utilized_cuda_gpu,
+        find_least_memory_used_cuda_gpu,
+        find_cuda_gpu_with_fewest_processes,
+    ):
         device = func()
         if device is not None:
             break
@@ -136,14 +143,19 @@ def find_least_used_cuda_gpu():
 
 
 def find_least_used_cuda_gpu(mem_round_val=1300):
-    """Determine the least used CUDA GPU based on utilization, then allocated memory, then number of running processes.
+    """Determine the least used CUDA GPU based on utilization, then allocated memory,
+    then number of running processes.
 
-    If all GPUs are idle, return None.
-    When choosing the GPU by memory, memory usage is rounded to the nearest multiple of mem_round_val.
+    If all GPUs are idle, return None. When choosing the GPU by memory, memory usage is
+    rounded to the nearest multiple of mem_round_val.
     """
     # Query GPU utilization and memory usage in a single call
     result = subprocess.run(
-        ["nvidia-smi", "--query-gpu=gpu_uuid,utilization.gpu,memory.used", "--format=csv,nounits,noheader"],
+        [
+            "nvidia-smi",
+            "--query-gpu=gpu_uuid,utilization.gpu,memory.used",
+            "--format=csv,nounits,noheader",
+        ],
         stdout=subprocess.PIPE,
         text=True,
     )
@@ -157,11 +169,17 @@ def find_least_used_cuda_gpu(mem_round_val=1300):
     uuids = [gpu[0] for gpu in gpu_data]
 
     utilization = [int(gpu[1]) for gpu in gpu_data]
-    memory_used = [int(gpu[2]) // mem_round_val for gpu in gpu_data]  # Round memory usage
+    memory_used = [
+        int(gpu[2]) // mem_round_val for gpu in gpu_data
+    ]  # Round memory usage
 
     # Query process count in a single call
     result = subprocess.run(
-        ["nvidia-smi", "--query-compute-apps=gpu_uuid,name", "--format=csv,nounits,noheader"],
+        [
+            "nvidia-smi",
+            "--query-compute-apps=gpu_uuid,name",
+            "--format=csv,nounits,noheader",
+        ],
         stdout=subprocess.PIPE,
         text=True,
     )
@@ -170,11 +188,15 @@ def find_least_used_cuda_gpu(mem_round_val=1300):
         print("Error running nvidia-smi.")
         return None
 
-    process_entries = [line.split(", ") for line in result.stdout.strip().split("\n") if line]
+    process_entries = [
+        line.split(", ") for line in result.stdout.strip().split("\n") if line
+    ]
 
     # Count the number of processes per GPU
     gpu_counts = Counter({uuid: 0 for uuid in uuids})
-    gpu_counts.update([uuid for uuid, proc_name in process_entries if proc_name != "[Not Found]"])
+    gpu_counts.update(
+        [uuid for uuid, proc_name in process_entries if proc_name != "[Not Found]"]
+    )
 
     # Map UUIDs to GPU indices
     uuid_to_index = {uuid: idx for idx, uuid in enumerate(uuids)}
@@ -190,7 +212,11 @@ def find_least_used_cuda_gpu(mem_round_val=1300):
 
     if len(set(gpu_counts.values())) > 1:
         print("used processes")
-        return min(uuid_to_index[uuid] for uuid, count in gpu_counts.items() if count == min(gpu_counts.values()))
+        return min(
+            uuid_to_index[uuid]
+            for uuid, count in gpu_counts.items()
+            if count == min(gpu_counts.values())
+        )
 
     return None  # All GPUs are idle
 
