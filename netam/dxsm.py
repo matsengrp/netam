@@ -17,6 +17,7 @@ from tqdm import tqdm
 from netam.common import (
     stack_heterogeneous,
     BIG,
+    zap_predictions_along_diagonal,
 )
 import netam.framework as framework
 import netam.molevol as molevol
@@ -449,25 +450,3 @@ def worker_optimize_branch_length(burrito_class, model, dataset, optimization_kw
     """The worker used for parallel branch length optimization."""
     burrito = burrito_class(None, dataset, copy.deepcopy(model))
     return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
-
-
-def zap_predictions_along_diagonal(predictions, aa_parents_idxs, fill=-BIG):
-    """Set the diagonal (i.e. no amino acid change) of the predictions tensor to -BIG,
-    except where aa_parents_idxs >= 20, which indicates no update should be done."""
-
-    device = predictions.device
-    batch_size, L, _ = predictions.shape
-    batch_indices = torch.arange(batch_size, device=device)[:, None].expand(-1, L)
-    sequence_indices = torch.arange(L, device=device)[None, :].expand(batch_size, -1)
-
-    # Create a mask for valid positions (where aa_parents_idxs is less than 20)
-    valid_mask = aa_parents_idxs < 20
-
-    # Only update the predictions for valid positions
-    predictions[
-        batch_indices[valid_mask],
-        sequence_indices[valid_mask],
-        aa_parents_idxs[valid_mask],
-    ] = fill
-
-    return predictions

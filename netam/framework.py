@@ -269,6 +269,13 @@ class Crepe:
             sequences, encoder=self.encoder, **kwargs
         )
 
+    def represent_sequences(self, sequences):
+        if isinstance(sequences, str):
+            raise ValueError(
+                "Expected a list of sequences for call on crepe, but got a single string instead."
+            )
+        return tuple(self.model.represent_aa_str(seq) for seq in sequences)
+
     @property
     def device(self):
         return next(self.model.parameters()).device

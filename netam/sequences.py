@@ -260,6 +260,23 @@ def heavy_light_mask_of_aa_idxs(aa_idxs):
     return aa_idxs < AA_AMBIG_IDX
 
 
+def split_heavy_light_model_outputs(result, aa_idxs):
+    """Split a tensor whose first dimension corresponds to amino acid positions into heavy chain and light chain components
+
+    Args:
+        result: The tensor to split.
+        aa_idxs: The amino acid indices corresponding to the tensor, as presented to the model (including any special tokens).
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: The heavy chain and light chain components of the input tensor.
+    """
+    # Now split into heavy and light chain results:
+    heavy_mask, light_mask = heavy_light_mask_of_aa_idxs(aa_idxs).values()
+    heavy_chain = result[heavy_mask]
+    light_chain = result[light_mask]
+    return heavy_chain, light_chain
+
+
 def dataset_inputs_of_pcp_df(pcp_df, known_token_count):
     parents = []
     children = []
@@ -517,25 +534,8 @@ def aa_idx_tensor_of_str(aa_str):
         print(f"Found an invalid amino acid in the string: {aa_str}")
         raise
 
-
 def aa_onehot_tensor_of_str(aa_str):
     aa_onehot = torch.zeros((len(aa_str), 20))
     aa_indices_parent = aa_idx_array_of_str(aa_str)
     aa_onehot[torch.arange(len(aa_str)), aa_indices_parent] = 1
     return aa_onehot
-
-
-# TODO is this not the same as zap_wt_predictions?
-def set_wt_to_nan(predictions: torch.Tensor, aa_sequence: str) -> torch.Tensor:
-    """Set the wild-type predictions to NaN.
-
-    Modifies the supplied predictions tensor in-place and returns it. For sites
-    containing special tokens, all predictions are set to NaN.
-    """
-    wt_idxs = aa_idx_tensor_of_str(aa_sequence)
-    token_mask = wt_idxs < AA_AMBIG_IDX
-    predictions[token_mask][torch.arange(token_mask.sum()), wt_idxs[token_mask]] = (
-        float("nan")
-    )
-    predictions[~token_mask] = float("nan")
-    return predictions

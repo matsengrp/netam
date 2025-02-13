@@ -14,7 +14,7 @@ from netam import sequences
 from netam.sequences import MAX_AA_TOKEN_IDX
 from netam.common import (
     chunk_function,
-    assume_single_sequence_is_heavy_chain,
+    zap_predictions_along_diagonal,
 )
 from netam.sequences import (
     generate_kmers,
@@ -22,7 +22,7 @@ from netam.sequences import (
     encode_sequences,
     aa_idx_tensor_of_str_ambig,
     PositionalEncoding,
-    set_wt_to_nan,
+    split_heavy_light_model_outputs,
 )
 
 from typing import Tuple
@@ -576,16 +576,36 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         predictions for wildtype amino acids are unconstrained in training and therefore
         meaningless.
         """
-        res = self.evaluate_sequences(sequences, **kwargs)
-        if self.hyperparameters["output_dim"] >= 20:
-            return [set_wt_to_nan(pred, seq) for pred, seq in zip(res, sequences)]
-        else:
-            return res
+        return self.evaluate_sequences(sequences, **kwargs)
 
     def evaluate_sequences(self, sequences: list[str], **kwargs) -> Tensor:
         return tuple(self.selection_factors_of_aa_str(seq) for seq in sequences)
 
-    @assume_single_sequence_is_heavy_chain(1)
+    def prepare_aa_str(self, heavy_chain, light_chain):
+        aa_str, added_indices = sequences.prepare_heavy_light_pair(
+            heavy_chain, light_chain, self.hyperparameters["known_token_count"], is_nt=False
+        )
+        aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
+        if torch.any(aa_idxs >= self.hyperparameters["known_token_count"]):
+            raise ValueError(
+                "Provided sequence contains tokens unrecognized by the model. Provide unmodified heavy and/or light chain sequences."
+            )
+        aa_idxs = aa_idxs.to(self.device)
+        # This makes the expected mask because of
+        # test_common.py::test_compare_mask_tensors.
+        mask = aa_mask_tensor_of(aa_str)
+        mask = mask.to(self.device)
+        return aa_idxs.unsqueeze(0), mask.unsqueeze(0)
+
+    def represent_aa_str(self, aa_sequence):
+        if not isinstance(aa_sequence, tuple):
+            raise ValueError(
+                "aa_sequence must be a tuple of strings, with the first element being the heavy chain sequence and the second element being the light chain sequence."
+            )
+        inputs = self.prepare_aa_str(*aa_sequence)
+        with torch.no_grad():
+            return self.represent(*inputs).squeeze(0)
+
     def selection_factors_of_aa_str(self, aa_sequence: Tuple[str, str]) -> Tensor:
         """Do the forward method then exponentiation without gradients from an amino
         acid string.
@@ -600,39 +620,18 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
             A tuple of numpy arrays of the same length as the input strings representing
             the level of selection for each amino acid at each site.
         """
-
-        aa_str, added_indices = sequences.prepare_heavy_light_pair(
-            *aa_sequence, self.hyperparameters["known_token_count"], is_nt=False
-        )
-        aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
-        if torch.any(aa_idxs >= self.hyperparameters["known_token_count"]):
+        if not isinstance(aa_sequence, tuple):
             raise ValueError(
-                "Provided sequence contains tokens unrecognized by the model. Provide unmodified heavy and/or light chain sequences."
+                "aa_sequence must be a tuple of strings, with the first element being the heavy chain sequence and the second element being the light chain sequence."
             )
-        aa_idxs = aa_idxs.to(self.device)
-        # This makes the expected mask because of
-        # test_common.py::test_compare_mask_tensors.
-        mask = aa_mask_tensor_of(aa_str)
-        mask = mask.to(self.device)
-
+        idx_seq, mask = self.prepare_aa_str(*aa_sequence)
         with torch.no_grad():
-            model_out = (
-                self(
-                    aa_idxs.unsqueeze(0),
-                    mask.unsqueeze(0),
-                )
-                .squeeze(0)
-                .exp()
-            )
-
-        # Now split into heavy and light chain results:
-        sequence_mask = torch.ones(len(model_out), dtype=bool)
-        if len(added_indices) > 0:
-            sequence_mask[torch.tensor(added_indices)] = False
-        masked_model_out = model_out[sequence_mask]
-        heavy_chain = masked_model_out[: len(aa_sequence[0])]
-        light_chain = masked_model_out[len(aa_sequence[0]) :]
-        return heavy_chain, light_chain
+            result = torch.exp(self.forward(idx_seq, mask))
+        if self.hyperparameters["output_dim"] >= 20:
+            result = zap_predictions_along_diagonal(result, idx_seq, fill=float("nan")).squeeze(0)
+        else:
+            result = result.squeeze(0)
+        return split_heavy_light_model_outputs(result, idx_seq.squeeze(0))
 
 
 class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
@@ -707,7 +706,8 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
         ).permute(1, 0, 2)
 
         # To learn about src_key_padding_mask, see https://stackoverflow.com/q/62170439
-        return self.encoder(embedded_amino_acids, src_key_padding_mask=~mask)
+        res = self.encoder(embedded_amino_acids, src_key_padding_mask=~mask)
+        return res
 
     def predict(self, representation: Tensor) -> Tensor:
         """Predict selection from the model embedding of a parent sequence.
