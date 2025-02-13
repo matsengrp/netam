@@ -261,7 +261,8 @@ def heavy_light_mask_of_aa_idxs(aa_idxs):
 
 
 def split_heavy_light_model_outputs(result, aa_idxs):
-    """Split a tensor whose first dimension corresponds to amino acid positions into heavy chain and light chain components
+    """Split a tensor whose first dimension corresponds to amino acid positions into
+    heavy chain and light chain components.
 
     Args:
         result: The tensor to split.
@@ -533,6 +534,7 @@ def aa_idx_tensor_of_str(aa_str):
     except ValueError:
         print(f"Found an invalid amino acid in the string: {aa_str}")
         raise
+
 
 def aa_onehot_tensor_of_str(aa_str):
     aa_onehot = torch.zeros((len(aa_str), 20))

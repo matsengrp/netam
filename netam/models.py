@@ -583,7 +583,10 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
 
     def prepare_aa_str(self, heavy_chain, light_chain):
         aa_str, added_indices = sequences.prepare_heavy_light_pair(
-            heavy_chain, light_chain, self.hyperparameters["known_token_count"], is_nt=False
+            heavy_chain,
+            light_chain,
+            self.hyperparameters["known_token_count"],
+            is_nt=False,
         )
         aa_idxs = aa_idx_tensor_of_str_ambig(aa_str)
         if torch.any(aa_idxs >= self.hyperparameters["known_token_count"]):
@@ -628,7 +631,9 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         with torch.no_grad():
             result = torch.exp(self.forward(idx_seq, mask))
         if self.hyperparameters["output_dim"] >= 20:
-            result = zap_predictions_along_diagonal(result, idx_seq, fill=float("nan")).squeeze(0)
+            result = zap_predictions_along_diagonal(
+                result, idx_seq, fill=float("nan")
+            ).squeeze(0)
         else:
             result = result.squeeze(0)
         return split_heavy_light_model_outputs(result, idx_seq.squeeze(0))

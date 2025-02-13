@@ -16,6 +16,7 @@ import multiprocessing as mp
 BIG = 1e9
 SMALL_PROB = 1e-6
 
+
 def zap_predictions_along_diagonal(predictions, aa_parents_idxs, fill=-BIG):
     """Set the diagonal (i.e. no amino acid change) of the predictions tensor to -BIG,
     except where aa_parents_idxs >= 20, which indicates no update should be done."""

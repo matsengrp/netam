@@ -16,7 +16,6 @@ from tqdm import tqdm
 
 from netam.common import (
     stack_heterogeneous,
-    BIG,
     zap_predictions_along_diagonal,
 )
 import netam.framework as framework
