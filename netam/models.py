@@ -723,8 +723,7 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
         ).permute(1, 0, 2)
 
         # To learn about src_key_padding_mask, see https://stackoverflow.com/q/62170439
-        res = self.encoder(embedded_amino_acids, src_key_padding_mask=~mask)
-        return res
+        return self.encoder(embedded_amino_acids, src_key_padding_mask=~mask)
 
     def predict(self, representation: Tensor) -> Tensor:
         """Predict selection from the model embedding of a parent sequence.
