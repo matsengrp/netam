@@ -6,7 +6,7 @@ from netam.common import force_spawn
 from tqdm import tqdm
 
 from netam.framework import load_crepe
-from netam.sequences import set_wt_to_nan
+from netam.sequences import aa_idx_tensor_of_str_ambig
 
 
 @pytest.fixture(scope="module")
@@ -68,14 +68,16 @@ def test_old_crepe_outputs():
     dnsm_crepe = load_crepe("tests/old_models/dnsm_13k-v1jaffe+v1tang-joint")
 
     ddsm_vals = torch.nan_to_num(
-        set_wt_to_nan(
-            torch.load("tests/old_models/ddsm_output", weights_only=True), example_seq
-        ),
+        zap_predictions_along_diagonal(
+            torch.load("tests/old_models/ddsm_output", weights_only=True).unsqueeze(0),
+            aa_idx_tensor_of_str_ambig(example_seq).unsqueeze(0),
+            fill=float("nan"),
+        ).squeeze(0),
         0.0,
     )
     dnsm_vals = torch.load("tests/old_models/dnsm_output", weights_only=True)
 
-    ddsm_result = torch.nan_to_num(ddsm_crepe([example_seq])[0], 0.0)
-    dnsm_result = dnsm_crepe([example_seq])[0]
+    ddsm_result = torch.nan_to_num(ddsm_crepe([(example_seq, "")])[0][0], 0.0)
+    dnsm_result = dnsm_crepe([(example_seq, "")])[0][0]
     assert torch.allclose(ddsm_result, ddsm_vals)
     assert torch.allclose(dnsm_result, dnsm_vals)

@@ -17,6 +17,28 @@ BIG = 1e9
 SMALL_PROB = 1e-6
 
 
+def zap_predictions_along_diagonal(predictions, aa_parents_idxs, fill=-BIG):
+    """Set the diagonal (i.e. no amino acid change) of the predictions tensor to -BIG,
+    except where aa_parents_idxs >= 20, which indicates no update should be done."""
+
+    device = predictions.device
+    batch_size, L, _ = predictions.shape
+    batch_indices = torch.arange(batch_size, device=device)[:, None].expand(-1, L)
+    sequence_indices = torch.arange(L, device=device)[None, :].expand(batch_size, -1)
+
+    # Create a mask for valid positions (where aa_parents_idxs is less than 20)
+    valid_mask = aa_parents_idxs < 20
+
+    # Only update the predictions for valid positions
+    predictions[
+        batch_indices[valid_mask],
+        sequence_indices[valid_mask],
+        aa_parents_idxs[valid_mask],
+    ] = fill
+
+    return predictions
+
+
 def combine_and_pad_tensors(first, second, padding_idxs, fill=float("nan")):
     res = torch.full(
         (first.shape[0] + second.shape[0] + len(padding_idxs),) + first.shape[1:], fill

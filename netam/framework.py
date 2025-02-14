@@ -269,6 +269,17 @@ class Crepe:
             sequences, encoder=self.encoder, **kwargs
         )
 
+    def represent_sequences(self, sequences):
+        """Represent a list of sequences in the model's embedding space.
+
+        This is implemented only for D*SM models.
+        """
+        if isinstance(sequences, str):
+            raise ValueError(
+                "Expected a list of sequences for call on crepe, but got a single string instead."
+            )
+        return list(self.model.represent_aa_str(seq) for seq in sequences)
+
     @property
     def device(self):
         return next(self.model.parameters()).device
