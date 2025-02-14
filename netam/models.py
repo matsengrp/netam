@@ -87,6 +87,9 @@ class ModelBase(nn.Module):
             outputs = self(encoded_parents, masks, wt_base_modifiers)
             return tuple(t.detach().cpu() for t in outputs)
 
+    def represent_aa_str(self, *args, **kwargs):
+        raise NotImplementedError("represent_aa_str is implemented on D*SM models only")
+
 
 class KmerModel(ModelBase):
     def __init__(self, kmer_length):
@@ -582,6 +585,14 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         return tuple(self.selection_factors_of_aa_str(seq) for seq in sequences)
 
     def prepare_aa_str(self, heavy_chain, light_chain):
+        """Prepare a pair of amino acid sequences for input to the model.
+
+        Returns:
+            A tuple of two tensors, the first being the index-encoded parent amino acid
+            sequences and the second being the mask tensor.
+            Although both represent a single sequence, they include a per-sequence first
+            dimension for direct ingestion by the model.
+        """
         aa_str, added_indices = sequences.prepare_heavy_light_pair(
             heavy_chain,
             light_chain,
@@ -601,6 +612,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         return aa_idxs.unsqueeze(0), mask.unsqueeze(0)
 
     def represent_aa_str(self, aa_sequence):
+        """Call the forward method of the model on the provided heavy, light pair of AA sequences."""
         if not isinstance(aa_sequence, tuple):
             raise ValueError(
                 "aa_sequence must be a tuple of strings, with the first element being the heavy chain sequence and the second element being the light chain sequence."
@@ -616,8 +628,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         Insertion of model tokens will be done automatically.
 
         Args:
-            aa_str: A string of amino acids. If a string, we assume this is a light chain sequence.
-                Otherwise it should be a tuple, with the first element being the heavy chain and the second element being the light chain sequence.
+            aa_str: A heavy, light chain pair of amino acid sequences.
 
         Returns:
             A tuple of numpy arrays of the same length as the input strings representing

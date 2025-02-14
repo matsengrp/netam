@@ -270,6 +270,10 @@ class Crepe:
         )
 
     def represent_sequences(self, sequences):
+        """Represent a list of sequences in the model's embedding space.
+
+        This is implemented only for D*SM models.
+        """
         if isinstance(sequences, str):
             raise ValueError(
                 "Expected a list of sequences for call on crepe, but got a single string instead."
