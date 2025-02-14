@@ -612,7 +612,8 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         return aa_idxs.unsqueeze(0), mask.unsqueeze(0)
 
     def represent_aa_str(self, aa_sequence):
-        """Call the forward method of the model on the provided heavy, light pair of AA sequences."""
+        """Call the forward method of the model on the provided heavy, light pair of AA
+        sequences."""
         if not isinstance(aa_sequence, tuple):
             raise ValueError(
                 "aa_sequence must be a tuple of strings, with the first element being the heavy chain sequence and the second element being the light chain sequence."
