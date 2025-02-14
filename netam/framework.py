@@ -278,7 +278,7 @@ class Crepe:
             raise ValueError(
                 "Expected a list of sequences for call on crepe, but got a single string instead."
             )
-        return tuple(self.model.represent_aa_str(seq) for seq in sequences)
+        return list(self.model.represent_aa_str(seq) for seq in sequences)
 
     @property
     def device(self):

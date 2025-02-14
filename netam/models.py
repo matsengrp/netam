@@ -582,7 +582,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         return self.evaluate_sequences(sequences, **kwargs)
 
     def evaluate_sequences(self, sequences: list[str], **kwargs) -> Tensor:
-        return tuple(self.selection_factors_of_aa_str(seq) for seq in sequences)
+        return list(self.selection_factors_of_aa_str(seq) for seq in sequences)
 
     def prepare_aa_str(self, heavy_chain, light_chain):
         """Prepare a pair of amino acid sequences for input to the model.
@@ -614,9 +614,9 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
     def represent_aa_str(self, aa_sequence):
         """Call the forward method of the model on the provided heavy, light pair of AA
         sequences."""
-        if not isinstance(aa_sequence, tuple):
+        if isinstance(aa_sequence, str) or len(aa_sequence) != 2:
             raise ValueError(
-                "aa_sequence must be a tuple of strings, with the first element being the heavy chain sequence and the second element being the light chain sequence."
+                "aa_sequence must be a pair of strings, with the first element being the heavy chain sequence and the second element being the light chain sequence."
             )
         inputs = self.prepare_aa_str(*aa_sequence)
         with torch.no_grad():
@@ -635,9 +635,9 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
             A tuple of numpy arrays of the same length as the input strings representing
             the level of selection for each amino acid at each site.
         """
-        if not isinstance(aa_sequence, tuple):
+        if isinstance(aa_sequence, str) or len(aa_sequence) != 2:
             raise ValueError(
-                "aa_sequence must be a tuple of strings, with the first element being the heavy chain sequence and the second element being the light chain sequence."
+                "aa_sequence must be a pair of strings, with the first element being the heavy chain sequence and the second element being the light chain sequence."
             )
         idx_seq, mask = self.prepare_aa_str(*aa_sequence)
         with torch.no_grad():
