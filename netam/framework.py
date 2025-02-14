@@ -768,8 +768,8 @@ class Burrito(ABC):
             dataset.branch_lengths = self.find_optimal_branch_lengths(
                 dataset, **optimization_kwargs
             )
-            dataset.to(device)
         self.model.to(device)
+        dataset.to(device)
 
     def standardize_and_use_yun_approx_branch_lengths(self):
         """Yun Song's approximation to the branch lengths.
