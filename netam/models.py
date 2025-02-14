@@ -814,30 +814,38 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
         self.dim_feedforward = dim_feedforward
         # Forward direction components
         self.forward_pos_encoder = PositionalEncoding(self.d_model, dropout_prob)
-        self.forward_amino_acid_embedding = nn.Embedding(self.known_token_count, self.d_model)
+        self.forward_amino_acid_embedding = nn.Embedding(
+            self.known_token_count, self.d_model
+        )
         self.forward_encoder_layer = nn.TransformerEncoderLayer(
             d_model=self.d_model,
             nhead=nhead,
             dim_feedforward=dim_feedforward,
             batch_first=True,
         )
-        self.forward_encoder = nn.TransformerEncoder(self.forward_encoder_layer, layer_count)
-        
+        self.forward_encoder = nn.TransformerEncoder(
+            self.forward_encoder_layer, layer_count
+        )
+
         # Reverse direction components
         self.reverse_pos_encoder = PositionalEncoding(self.d_model, dropout_prob)
-        self.reverse_amino_acid_embedding = nn.Embedding(self.known_token_count, self.d_model)
+        self.reverse_amino_acid_embedding = nn.Embedding(
+            self.known_token_count, self.d_model
+        )
         self.reverse_encoder_layer = nn.TransformerEncoderLayer(
             d_model=self.d_model,
             nhead=nhead,
             dim_feedforward=dim_feedforward,
             batch_first=True,
         )
-        self.reverse_encoder = nn.TransformerEncoder(self.reverse_encoder_layer, layer_count)
-        
+        self.reverse_encoder = nn.TransformerEncoder(
+            self.reverse_encoder_layer, layer_count
+        )
+
         # Output layers
         self.combine_features = nn.Linear(2 * self.d_model, self.d_model)
         self.output = nn.Linear(self.d_model, output_dim)
-        
+
         self.init_weights()
 
     def init_weights(self) -> None:
@@ -847,9 +855,14 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
         self.output.bias.data.zero_()
         self.output.weight.data.uniform_(-initrange, initrange)
 
-    def represent_sequence(self, indices: Tensor, mask: Tensor, 
-                         embedding: nn.Embedding, pos_encoder: PositionalEncoding, 
-                         encoder: nn.TransformerEncoder) -> Tensor:
+    def represent_sequence(
+        self,
+        indices: Tensor,
+        mask: Tensor,
+        embedding: nn.Embedding,
+        pos_encoder: PositionalEncoding,
+        encoder: nn.TransformerEncoder,
+    ) -> Tensor:
         """Process sequence through one direction of the model."""
         embedded = embedding(indices) * math.sqrt(self.d_model)
         embedded = pos_encoder(embedded.permute(1, 0, 2)).permute(1, 0, 2)
@@ -858,42 +871,44 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         batch_size, seq_len = amino_acid_indices.shape
         seq_lengths = mask.sum(dim=1)
-        
+
         # Forward direction - normal processing
         forward_repr = self.represent_sequence(
-            amino_acid_indices, mask,
+            amino_acid_indices,
+            mask,
             self.forward_amino_acid_embedding,
             self.forward_pos_encoder,
-            self.forward_encoder
+            self.forward_encoder,
         )
-        
+
         # Reverse direction - flip sequences and masks
         reversed_indices = torch.zeros_like(amino_acid_indices)
         reversed_mask = torch.zeros_like(mask)
-        
+
         for i in range(batch_size):
             length = seq_lengths[i]
             # Reverse and left-pad the sequence
             reversed_indices[i, -length:] = amino_acid_indices[i, :length].flip(0)
             reversed_mask[i, -length:] = mask[i, :length].flip(0)
-            
+
         reverse_repr = self.represent_sequence(
-            reversed_indices, reversed_mask,
+            reversed_indices,
+            reversed_mask,
             self.reverse_amino_acid_embedding,
             self.reverse_pos_encoder,
-            self.reverse_encoder
+            self.reverse_encoder,
         )
-        
+
         # Un-reverse the representations to align with forward direction
         aligned_reverse_repr = torch.zeros_like(reverse_repr)
         for i in range(batch_size):
             length = seq_lengths[i]
             aligned_reverse_repr[i, :length] = reverse_repr[i, -length:].flip(0)
-            
+
         # Combine features
         combined = torch.cat([forward_repr, aligned_reverse_repr], dim=-1)
         combined = self.combine_features(combined)
-        
+
         # Output layer
         return self.output(combined).squeeze(-1)
 
@@ -908,6 +923,7 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
             "output_dim": self.output.out_features,
             "known_token_count": self.known_token_count,
         }
+
 
 class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
     """A one parameter selection model as a baseline."""
