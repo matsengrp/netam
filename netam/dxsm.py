@@ -409,6 +409,9 @@ class DXSMBurrito(framework.Burrito, ABC):
             )
         self.val_dataset.load_branch_lengths(in_csv_prefix + ".val_branch_lengths.csv")
 
+    def to(self, device):
+        self.device = device
+
     def to_crepe(self):
         training_hyperparameters = {
             key: self.__dict__[key]
