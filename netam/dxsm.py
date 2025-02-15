@@ -284,6 +284,9 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         self._branch_lengths = new_branch_lengths
         self.update_neutral_probs()
 
+    def to(self, device):
+        self.device = device
+
     @abstractmethod
     def update_neutral_probs(self):
         pass
@@ -408,9 +411,6 @@ class DXSMBurrito(framework.Burrito, ABC):
                 in_csv_prefix + ".train_branch_lengths.csv"
             )
         self.val_dataset.load_branch_lengths(in_csv_prefix + ".val_branch_lengths.csv")
-
-    def to(self, device):
-        self.device = device
 
     def to_crepe(self):
         training_hyperparameters = {
