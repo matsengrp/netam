@@ -23,6 +23,7 @@ from netam.sequences import (
     aa_idx_tensor_of_str_ambig,
     PositionalEncoding,
     split_heavy_light_model_outputs,
+    AA_AMBIG_IDX,
 )
 
 from typing import Tuple
@@ -795,6 +796,49 @@ class TransformerBinarySelectionModelTrainableWiggleAct(
         return wiggle(super().predict(representation), beta)
 
 
+# TODO it's bad practice to hard code the AA_AMBIG_IDX as the padding
+# value here.
+def reverse_padded_seqs_and_mask(amino_acid_indices, mask, seq_lengths):
+    batch_size, _seq_len = amino_acid_indices.shape
+    reversed_indices = torch.full_like(amino_acid_indices, AA_AMBIG_IDX)
+    reversed_mask = torch.zeros_like(mask)
+
+    for i in range(batch_size):
+        length = seq_lengths[i]
+        # Reverse and left-pad the sequence
+        reversed_indices[i, :length] = amino_acid_indices[i, :length].flip(0)
+        reversed_mask[i, :length] = mask[i, :length].flip(0)
+    return reversed_indices, reversed_mask
+
+def reverse_padded_output(reverse_repr, seq_lengths):
+    # Un-reverse the representations to align with forward direction
+    # TODO it may not matter, but I don't think the masked outputs are
+    # necessarily zero.
+    batch_size, _seq_len, _d_model = reverse_repr.shape
+    aligned_reverse_repr = torch.zeros_like(reverse_repr)
+    for i in range(batch_size):
+        length = seq_lengths[i]
+        aligned_reverse_repr[i, :length] = reverse_repr[i, :length].flip(0)
+    return aligned_reverse_repr
+
+
+class SymmetricTransformerBinarySelectionModelLinAct(TransformerBinarySelectionModelLinAct):
+    def represent(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        seq_lengths = mask.sum(dim=1)
+        reversed_indices, reversed_mask = reverse_padded_seqs_and_mask(
+            amino_acid_indices, mask, seq_lengths
+        )
+        reversed_outputs = super().represent(reversed_indices, reversed_mask)
+        aligned_reverse_outputs = reverse_padded_output(reversed_outputs, seq_lengths)
+        outputs = super().represent(amino_acid_indices, mask)
+        return (outputs + aligned_reverse_outputs) / 2
+
+class SymmetricTransformerBinarySelectionModelWiggleAct(SymmetricTransformerBinarySelectionModelLinAct):
+    """Here the beta parameter is fixed at 0.3."""
+
+    def predict(self, representation: Tensor):
+        return wiggle(super().predict(representation), 0.3)
+
 class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel):
     def __init__(
         self,
@@ -855,7 +899,7 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
         self.output.bias.data.zero_()
         self.output.weight.data.uniform_(-initrange, initrange)
 
-    def represent_sequence(
+    def single_direction_represent_sequence(
         self,
         indices: Tensor,
         mask: Tensor,
@@ -868,12 +912,14 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
         embedded = pos_encoder(embedded.permute(1, 0, 2)).permute(1, 0, 2)
         return encoder(embedded, src_key_padding_mask=~mask)
 
-    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        batch_size, seq_len = amino_acid_indices.shape
+    def represent(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        batch_size, _seq_len = amino_acid_indices.shape
+        # This is okay, as long as there are no masked ambiguities in the
+        # interior of the sequence... Otherwise it should work for paired seqs.
         seq_lengths = mask.sum(dim=1)
 
         # Forward direction - normal processing
-        forward_repr = self.represent_sequence(
+        forward_repr = self.single_direction_represent_sequence(
             amino_acid_indices,
             mask,
             self.forward_amino_acid_embedding,
@@ -882,16 +928,11 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
         )
 
         # Reverse direction - flip sequences and masks
-        reversed_indices = torch.zeros_like(amino_acid_indices)
-        reversed_mask = torch.zeros_like(mask)
+        reverse_indices, reversed_mask = reverse_padded_seqs_and_mask(
+            amino_acid_indices, mask, seq_lengths
+        )
 
-        for i in range(batch_size):
-            length = seq_lengths[i]
-            # Reverse and left-pad the sequence
-            reversed_indices[i, -length:] = amino_acid_indices[i, :length].flip(0)
-            reversed_mask[i, -length:] = mask[i, :length].flip(0)
-
-        reverse_repr = self.represent_sequence(
+        reverse_repr = self.single_direction_represent_sequence(
             reversed_indices,
             reversed_mask,
             self.reverse_amino_acid_embedding,
@@ -899,18 +940,19 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
             self.reverse_encoder,
         )
 
-        # Un-reverse the representations to align with forward direction
-        aligned_reverse_repr = torch.zeros_like(reverse_repr)
-        for i in range(batch_size):
-            length = seq_lengths[i]
-            aligned_reverse_repr[i, :length] = reverse_repr[i, -length:].flip(0)
+        aligned_reverse_repr = reverse_padded_output(reverse_repr, seq_lengths)
 
         # Combine features
         combined = torch.cat([forward_repr, aligned_reverse_repr], dim=-1)
-        combined = self.combine_features(combined)
+        return self.combine_features(combined)
 
+    def predict(self, representation: Tensor) -> Tensor:
         # Output layer
-        return self.output(combined).squeeze(-1)
+        return self.output(representation).squeeze(-1)
+
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        return self.predict(self.represent(amino_acid_indices, mask))
+
 
     @property
     def hyperparameters(self):
