@@ -799,10 +799,9 @@ class TransformerBinarySelectionModelTrainableWiggleAct(
 # TODO it's bad practice to hard code the AA_AMBIG_IDX as the padding
 # value here.
 def reverse_padded_seqs_and_mask(amino_acid_indices, mask, seq_lengths):
-    """
-    Reverse the provided left-aligned amino acid sequences and masks,
-    but move the padding to the right of the reversed sequence.
-    Equivalent to right-aligning the sequences then reversing them.
+    """Reverse the provided left-aligned amino acid sequences and masks, but move the
+    padding to the right of the reversed sequence. Equivalent to right-aligning the
+    sequences then reversing them.
 
     Args:
         amino_acid_indices: (B, L) tensor of amino acid indices
@@ -826,8 +825,9 @@ def reverse_padded_seqs_and_mask(amino_acid_indices, mask, seq_lengths):
 # TODO it may not matter, but I don't think the masked outputs are
 # necessarily zero.
 def reverse_padded_output(reverse_repr, seq_lengths):
-    """Companion to `reverse_padded_seqs_and_mask` that reverses a model's representation
-    so that it aligns with the forward direction of that function's input sequence."""
+    """Companion to `reverse_padded_seqs_and_mask` that reverses a model's
+    representation so that it aligns with the forward direction of that function's input
+    sequence."""
     batch_size, _seq_len, _d_model = reverse_repr.shape
     aligned_reverse_repr = torch.zeros_like(reverse_repr)
     for i in range(batch_size):
