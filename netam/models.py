@@ -810,6 +810,7 @@ def reverse_padded_seqs_and_mask(amino_acid_indices, mask, seq_lengths):
         reversed_mask[i, :length] = mask[i, :length].flip(0)
     return reversed_indices, reversed_mask
 
+
 def reverse_padded_output(reverse_repr, seq_lengths):
     # Un-reverse the representations to align with forward direction
     # TODO it may not matter, but I don't think the masked outputs are
@@ -822,7 +823,9 @@ def reverse_padded_output(reverse_repr, seq_lengths):
     return aligned_reverse_repr
 
 
-class SymmetricTransformerBinarySelectionModelLinAct(TransformerBinarySelectionModelLinAct):
+class SymmetricTransformerBinarySelectionModelLinAct(
+    TransformerBinarySelectionModelLinAct
+):
     def represent(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         seq_lengths = mask.sum(dim=1)
         reversed_indices, reversed_mask = reverse_padded_seqs_and_mask(
@@ -833,11 +836,15 @@ class SymmetricTransformerBinarySelectionModelLinAct(TransformerBinarySelectionM
         outputs = super().represent(amino_acid_indices, mask)
         return (outputs + aligned_reverse_outputs) / 2
 
-class SymmetricTransformerBinarySelectionModelWiggleAct(SymmetricTransformerBinarySelectionModelLinAct):
+
+class SymmetricTransformerBinarySelectionModelWiggleAct(
+    SymmetricTransformerBinarySelectionModelLinAct
+):
     """Here the beta parameter is fixed at 0.3."""
 
     def predict(self, representation: Tensor):
         return wiggle(super().predict(representation), 0.3)
+
 
 class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel):
     def __init__(
@@ -952,7 +959,6 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         return self.predict(self.represent(amino_acid_indices, mask))
-
 
     @property
     def hyperparameters(self):
