@@ -359,6 +359,28 @@ def assume_single_sequence_is_heavy_chain(seq_arg_idx=0):
     return decorator
 
 
+def heavy_chain_shim(paired_evaluator):
+    """Returns a function that evaluates only heavy chains given a paired evaluator."""
+
+    def evaluate_heavy_chains(sequences):
+        paired_seqs = [[h, ""] for h in sequences]
+        paired_outputs = paired_evaluator(paired_seqs)
+        return [output[0] for output in paired_outputs]
+
+    return evaluate_heavy_chains
+
+
+def light_chain_shim(paired_evaluator):
+    """Returns a function that evaluates only light chains given a paired evaluator."""
+
+    def evaluate_light_chains(sequences):
+        paired_seqs = [["", l] for l in sequences]
+        paired_outputs = paired_evaluator(paired_seqs)
+        return [output[1] for output in paired_outputs]
+
+    return evaluate_light_chains
+
+
 def chunk_function(
     first_chunkable_idx=0, default_chunk_size=2048, progress_bar_name=None
 ):
