@@ -8,7 +8,6 @@ from netam.dxsm import DXSMDataset, DXSMBurrito, zap_predictions_along_diagonal
 import netam.framework as framework
 import netam.molevol as molevol
 import netam.sequences as sequences
-import copy
 from typing import Tuple
 
 
@@ -42,7 +41,7 @@ class DDSMDataset(DXSMDataset):
             )
 
             if not torch.isfinite(neutral_aa_probs).all():
-                print(f"Found a non-finite neutral_aa_probs")
+                print("Found a non-finite neutral_aa_probs")
                 print(f"nt_parent: {nt_parent}")
                 print(f"mask: {mask}")
                 print(f"nt_rates: {nt_rates}")

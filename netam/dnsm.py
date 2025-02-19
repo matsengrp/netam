@@ -1,7 +1,5 @@
 """Defining the deep natural selection model (DNSM)."""
 
-import copy
-
 import torch
 import torch.nn.functional as F
 
@@ -57,7 +55,7 @@ class DNSMDataset(DXSMDataset):
             )
 
             if not torch.isfinite(neutral_aa_mut_probs).all():
-                print(f"Found a non-finite neutral_aa_mut_prob")
+                print("Found a non-finite neutral_aa_mut_prob")
                 print(f"nt_parent: {nt_parent}")
                 print(f"mask: {mask}")
                 print(f"nt_rates: {nt_rates}")
