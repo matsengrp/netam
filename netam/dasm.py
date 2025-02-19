@@ -54,7 +54,6 @@ class DASMDataset(DXSMDataset):
                 codon_idx_tensor_of_str_ambig(nt_child)
             )
         assert torch.max(self.codon_parents_idxss) <= AMBIGUOUS_CODON_IDX
-        self.move_all_to_device("cpu")
 
     def update_neutral_probs(self):
         """Update the neutral mutation probabilities for the dataset.
@@ -138,7 +137,7 @@ class DASMDataset(DXSMDataset):
             "nt_csps": self.nt_cspss[idx],
         }
 
-    def move_all_to_device(self, device):
+    def move_data_to_device(self, device):
         self.codon_parents_idxss = self.codon_parents_idxss.to(device)
         self.codon_children_idxss = self.codon_children_idxss.to(device)
         self.aa_parents_idxss = self.aa_parents_idxss.to(device)

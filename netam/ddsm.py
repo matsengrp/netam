@@ -85,7 +85,7 @@ class DDSMDataset(DXSMDataset):
             "nt_csps": self.nt_cspss[idx],
         }
 
-    def to(self, device):
+    def move_data_to_device(self, device):
         self.aa_parents_idxss = self.aa_parents_idxss.to(device)
         self.aa_children_idxss = self.aa_children_idxss.to(device)
         self.aa_subs_indicators = self.aa_subs_indicators.to(device)

@@ -84,6 +84,14 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         self._branch_lengths = branch_lengths
         self.update_neutral_probs()
 
+    def __post_init__(self):
+        self.move_data_to_device("cpu")
+
+    @abstractmethod
+    def move_data_to_device(self, device):
+        """Move all tensors stored by the dataset to the given device."""
+        pass
+
     @classmethod
     def of_seriess(
         cls,
