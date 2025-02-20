@@ -798,54 +798,46 @@ class TransformerBinarySelectionModelTrainableWiggleAct(
 
 # TODO it's bad practice to hard code the AA_AMBIG_IDX as the padding
 # value here.
-def reverse_padded_seqs_and_mask(amino_acid_indices, mask, seq_lengths):
-    """Reverse the provided left-aligned amino acid sequences and masks, but move the
-    padding to the right of the reversed sequence. Equivalent to right-aligning the
-    sequences then reversing them.
+def reverse_padded_tensors(padded_tensors, padding_mask, padding_value, reversed_dim=1):
+    """Reverse the valid values in provided padded_tensors along the specified
+    dimension, keeping padding in the same place. For example, if the input is left-
+    aligned amino acid sequences and masks, move the padding to the right of the
+    reversed sequence. Equivalent to right-aligning the sequences then reversing them. A
+    sequence `123456XXXXX` becomes `654321XXXXX`.
+
+    The original padding mask remains valid for the returned tensor.
 
     Args:
-        amino_acid_indices: (B, L) tensor of amino acid indices
-        mask: (B, L) tensor of masks
-        seq_lengths: (B,) tensor of sequence lengths
+        padded_tensors: (B, L) tensor of amino acid indices
+        padding_mask: (B, L) tensor of masks, with True indicating valid values, and False indicating padding values.
+        padding_value: The value to fill returned tensor where padding_mask is False.
+        reversed_dim: The dimension along which to reverse the tensor. When input is a batch of sequences to be reversed, the default value of 1 is the correct choice.
     Returns:
-        A tuple of the reversed amino acid indices and mask.
+        The reversed tensor, with the same shape as padded_tensors, and with padding still specified by padding_mask.
     """
-    batch_size, _seq_len = amino_acid_indices.shape
-    reversed_indices = torch.full_like(amino_acid_indices, AA_AMBIG_IDX)
-    reversed_mask = torch.zeros_like(mask)
-
-    for i in range(batch_size):
-        length = seq_lengths[i]
-        # Reverse and left-pad the sequence
-        reversed_indices[i, :length] = amino_acid_indices[i, :length].flip(0)
-        reversed_mask[i, :length] = mask[i, :length].flip(0)
-    return reversed_indices, reversed_mask
-
-
-# TODO it may not matter, but I don't think the masked outputs are
-# necessarily zero.
-def reverse_padded_output(reverse_repr, seq_lengths):
-    """Companion to `reverse_padded_seqs_and_mask` that reverses a model's
-    representation so that it aligns with the forward direction of that function's input
-    sequence."""
-    batch_size, _seq_len, _d_model = reverse_repr.shape
-    aligned_reverse_repr = torch.zeros_like(reverse_repr)
-    for i in range(batch_size):
-        length = seq_lengths[i]
-        aligned_reverse_repr[i, :length] = reverse_repr[i, :length].flip(0)
-    return aligned_reverse_repr
+    reversed_indices = torch.full_like(padded_tensors, padding_value)
+    reversed_indices[padding_mask] = padded_tensors.flip(reversed_dim)[
+        padding_mask.flip(reversed_dim)
+    ]
+    return reversed_indices
 
 
 class SymmetricTransformerBinarySelectionModelLinAct(
     TransformerBinarySelectionModelLinAct
 ):
     def represent(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        seq_lengths = mask.sum(dim=1)
-        reversed_indices, reversed_mask = reverse_padded_seqs_and_mask(
-            amino_acid_indices, mask, seq_lengths
+        reversed_indices = reverse_padded_tensors(
+            amino_acid_indices, mask, AA_AMBIG_IDX
         )
-        reversed_outputs = super().represent(reversed_indices, reversed_mask)
-        aligned_reverse_outputs = reverse_padded_output(reversed_outputs, seq_lengths)
+        # This assumes that the mask is True on all sites in the interior of
+        # the sequence, and False on padding. This assumption is not met for
+        # sequences with masked ambiguities in the interior.
+        # We convert a padded sequence `123456XXXXX` to `654321XXXXX`, so the
+        # mask does not need to be reversed.
+        reversed_outputs = super().represent(reversed_indices, mask)
+        # TODO it may not matter, but I don't think the masked outputs are
+        # necessarily zero.
+        aligned_reverse_outputs = reverse_padded_tensors(reversed_outputs, mask, 0.0)
         outputs = super().represent(amino_acid_indices, mask)
         return (outputs + aligned_reverse_outputs) / 2
 
@@ -948,20 +940,20 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
         )
 
         # Reverse direction - flip sequences and masks
-        reverse_indices, reversed_mask = reverse_padded_seqs_and_mask(
-            amino_acid_indices, mask, seq_lengths
+        reversed_indices = reverse_padded_tensors(
+            amino_acid_indices, mask, AA_AMBIG_IDX
         )
 
         reverse_repr = self.single_direction_represent_sequence(
             reversed_indices,
-            reversed_mask,
+            mask,
             self.reverse_amino_acid_embedding,
             self.reverse_pos_encoder,
             self.reverse_encoder,
         )
 
         # un-reverse to align with forward representation
-        aligned_reverse_repr = reverse_padded_output(reverse_repr, seq_lengths)
+        aligned_reverse_repr = reverse_padded_tensors(reverse_repr, mask, 0.0)
 
         # Combine features
         combined = torch.cat([forward_repr, aligned_reverse_repr], dim=-1)
