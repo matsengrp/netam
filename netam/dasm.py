@@ -1,7 +1,5 @@
 """Defining the deep natural selection model (DNSM)."""
 
-import copy
-
 import torch
 import torch.nn.functional as F
 
@@ -72,13 +70,6 @@ class DASMDataset(DXSMDataset):
             self.nt_cspss,
             self._branch_lengths,
         ):
-            mask = mask.to("cpu")
-            nt_rates = nt_rates.to("cpu")
-            nt_csps = nt_csps.to("cpu")
-            if self.multihit_model is not None:
-                multihit_model = copy.deepcopy(self.multihit_model).to("cpu")
-            else:
-                multihit_model = None
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
             parent_idxs = nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
@@ -93,11 +84,11 @@ class DASMDataset(DXSMDataset):
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
                 nt_csps.reshape(-1, 3, 4),
-                multihit_model=multihit_model,
+                multihit_model=self.multihit_model,
             )
 
             if not torch.isfinite(neutral_codon_probs).all():
-                print(f"Found a non-finite neutral_codon_prob")
+                print("Found a non-finite neutral_codon_prob")
                 print(f"nt_parent: {nt_parent}")
                 print(f"mask: {mask}")
                 print(f"nt_rates: {nt_rates}")
@@ -137,7 +128,7 @@ class DASMDataset(DXSMDataset):
             "nt_csps": self.nt_cspss[idx],
         }
 
-    def to(self, device):
+    def move_data_to_device(self, device):
         self.codon_parents_idxss = self.codon_parents_idxss.to(device)
         self.codon_children_idxss = self.codon_children_idxss.to(device)
         self.aa_parents_idxss = self.aa_parents_idxss.to(device)

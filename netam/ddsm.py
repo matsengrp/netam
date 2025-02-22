@@ -8,7 +8,6 @@ from netam.dxsm import DXSMDataset, DXSMBurrito, zap_predictions_along_diagonal
 import netam.framework as framework
 import netam.molevol as molevol
 import netam.sequences as sequences
-import copy
 from typing import Tuple
 
 
@@ -24,13 +23,6 @@ class DDSMDataset(DXSMDataset):
             self.nt_cspss,
             self._branch_lengths,
         ):
-            mask = mask.to("cpu")
-            nt_rates = nt_rates.to("cpu")
-            nt_csps = nt_csps.to("cpu")
-            if self.multihit_model is not None:
-                multihit_model = copy.deepcopy(self.multihit_model).to("cpu")
-            else:
-                multihit_model = None
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
             parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
@@ -45,11 +37,11 @@ class DDSMDataset(DXSMDataset):
                 parent_idxs.reshape(-1, 3),
                 mut_probs.reshape(-1, 3),
                 nt_csps.reshape(-1, 3, 4),
-                multihit_model=multihit_model,
+                multihit_model=self.multihit_model,
             )
 
             if not torch.isfinite(neutral_aa_probs).all():
-                print(f"Found a non-finite neutral_aa_probs")
+                print("Found a non-finite neutral_aa_probs")
                 print(f"nt_parent: {nt_parent}")
                 print(f"mask: {mask}")
                 print(f"nt_rates: {nt_rates}")
@@ -85,7 +77,7 @@ class DDSMDataset(DXSMDataset):
             "nt_csps": self.nt_cspss[idx],
         }
 
-    def to(self, device):
+    def move_data_to_device(self, device):
         self.aa_parents_idxss = self.aa_parents_idxss.to(device)
         self.aa_children_idxss = self.aa_children_idxss.to(device)
         self.aa_subs_indicators = self.aa_subs_indicators.to(device)

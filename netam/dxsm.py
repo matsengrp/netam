@@ -67,9 +67,10 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         self.masks = masks
         self.aa_subs_indicators = aa_subs_indicators
         self.multihit_model = copy.deepcopy(multihit_model)
-        if multihit_model is not None:
+        if self.multihit_model is not None:
             # We want these parameters to act like fixed data. This is essential
             # for multithreaded branch length optimization to work.
+            self.multihit_model = self.multihit_model.to("cpu")
             self.multihit_model.values.requires_grad_(False)
 
         assert len(self.nt_parents) == len(self.nt_children)
@@ -83,6 +84,14 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
 
         self._branch_lengths = branch_lengths
         self.update_neutral_probs()
+
+    def __post_init__(self):
+        self.move_data_to_device("cpu")
+
+    @abstractmethod
+    def move_data_to_device(self, device):
+        """Move all tensors stored by the dataset to the given device."""
+        pass
 
     @classmethod
     def of_seriess(
@@ -283,6 +292,9 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         assert torch.all(torch.isfinite(new_branch_lengths) & (new_branch_lengths > 0))
         self._branch_lengths = new_branch_lengths
         self.update_neutral_probs()
+
+    def to(self, device):
+        self.device = device
 
     @abstractmethod
     def update_neutral_probs(self):
