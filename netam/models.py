@@ -894,10 +894,8 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
         return encoder(embedded, src_key_padding_mask=~mask)
 
     def represent(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        batch_size, _seq_len = amino_acid_indices.shape
         # This is okay, as long as there are no masked ambiguities in the
-        # interior of the sequence... Otherwise it should work for paired seqs.
-        seq_lengths = mask.sum(dim=1)
+        # interior of the sequence... Otherwise it should also work for paired seqs.
 
         # Forward direction - normal processing
         forward_repr = self.single_direction_represent_sequence(
