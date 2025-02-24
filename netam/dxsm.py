@@ -32,7 +32,7 @@ from netam.sequences import (
     token_mask_of_aa_idxs,
     MAX_AA_TOKEN_IDX,
     RESERVED_TOKEN_REGEX,
-    AA_AMBIG_IDX,
+    AA_PADDING_TOKEN,
 )
 
 
@@ -134,7 +134,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         # We have sequences of varying length, so we start with all tensors set
         # to the ambiguous amino acid, and then will fill in the actual values
         # below.
-        aa_parents_idxss = torch.full((pcp_count, max_aa_seq_len), AA_AMBIG_IDX)
+        aa_parents_idxss = torch.full((pcp_count, max_aa_seq_len), AA_PADDING_TOKEN)
         aa_children_idxss = aa_parents_idxss.clone()
         aa_subs_indicators = torch.zeros((pcp_count, max_aa_seq_len))
 

@@ -23,7 +23,7 @@ from netam.sequences import (
     aa_idx_tensor_of_str_ambig,
     PositionalEncoding,
     split_heavy_light_model_outputs,
-    AA_AMBIG_IDX,
+    AA_PADDING_TOKEN,
 )
 
 from typing import Tuple
@@ -796,8 +796,6 @@ class TransformerBinarySelectionModelTrainableWiggleAct(
         return wiggle(super().predict(representation), beta)
 
 
-# TODO it's bad practice to hard code the AA_AMBIG_IDX as the padding
-# value here.
 def reverse_padded_tensors(padded_tensors, padding_mask, padding_value, reversed_dim=1):
     """Reverse the valid values in provided padded_tensors along the specified
     dimension, keeping padding in the same place. For example, if the input is left-
@@ -820,35 +818,6 @@ def reverse_padded_tensors(padded_tensors, padding_mask, padding_value, reversed
         padding_mask.flip(reversed_dim)
     ]
     return reversed_indices
-
-
-class SymmetricTransformerBinarySelectionModelLinAct(
-    TransformerBinarySelectionModelLinAct
-):
-    def represent(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        reversed_indices = reverse_padded_tensors(
-            amino_acid_indices, mask, AA_AMBIG_IDX
-        )
-        # This assumes that the mask is True on all sites in the interior of
-        # the sequence, and False on padding. This assumption is not met for
-        # sequences with masked ambiguities in the interior.
-        # We convert a padded sequence `123456XXXXX` to `654321XXXXX`, so the
-        # mask does not need to be reversed.
-        reversed_outputs = super().represent(reversed_indices, mask)
-        # TODO it may not matter, but I don't think the masked outputs are
-        # necessarily zero.
-        aligned_reverse_outputs = reverse_padded_tensors(reversed_outputs, mask, 0.0)
-        outputs = super().represent(amino_acid_indices, mask)
-        return (outputs + aligned_reverse_outputs) / 2
-
-
-class SymmetricTransformerBinarySelectionModelWiggleAct(
-    SymmetricTransformerBinarySelectionModelLinAct
-):
-    """Here the beta parameter is fixed at 0.3."""
-
-    def predict(self, representation: Tensor):
-        return wiggle(super().predict(representation), 0.3)
 
 
 class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel):
@@ -941,7 +910,7 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
 
         # Reverse direction - flip sequences and masks
         reversed_indices = reverse_padded_tensors(
-            amino_acid_indices, mask, AA_AMBIG_IDX
+            amino_acid_indices, mask, AA_PADDING_TOKEN
         )
 
         reverse_repr = self.single_direction_represent_sequence(
@@ -977,6 +946,13 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
             "output_dim": self.output.out_features,
             "known_token_count": self.known_token_count,
         }
+
+
+class BidirectionalTransformerBinarySelectionModelWiggleAct(BidirectionalTransformerBinarySelectionModel):
+    """Here the beta parameter is fixed at 0.3."""
+
+    def predict(self, representation: Tensor):
+        return wiggle(super().predict(representation), 0.3)
 
 
 class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
