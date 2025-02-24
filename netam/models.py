@@ -948,7 +948,9 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
         }
 
 
-class BidirectionalTransformerBinarySelectionModelWiggleAct(BidirectionalTransformerBinarySelectionModel):
+class BidirectionalTransformerBinarySelectionModelWiggleAct(
+    BidirectionalTransformerBinarySelectionModel
+):
     """Here the beta parameter is fixed at 0.3."""
 
     def predict(self, representation: Tensor):
