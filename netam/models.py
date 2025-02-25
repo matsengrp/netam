@@ -23,6 +23,7 @@ from netam.sequences import (
     aa_idx_tensor_of_str_ambig,
     PositionalEncoding,
     split_heavy_light_model_outputs,
+    AA_PADDING_TOKEN,
 )
 
 from typing import Tuple
@@ -793,6 +794,165 @@ class TransformerBinarySelectionModelTrainableWiggleAct(
         # Apply sigmoid to transform logit_beta back to the range (0, 1)
         beta = torch.sigmoid(self.logit_beta)
         return wiggle(super().predict(representation), beta)
+
+
+def reverse_padded_tensors(padded_tensors, padding_mask, padding_value, reversed_dim=1):
+    """Reverse the valid values in provided padded_tensors along the specified
+    dimension, keeping padding in the same place. For example, if the input is left-
+    aligned amino acid sequences and masks, move the padding to the right of the
+    reversed sequence. Equivalent to right-aligning the sequences then reversing them. A
+    sequence `123456XXXXX` becomes `654321XXXXX`.
+
+    The original padding mask remains valid for the returned tensor.
+
+    Args:
+        padded_tensors: (B, L) tensor of amino acid indices
+        padding_mask: (B, L) tensor of masks, with True indicating valid values, and False indicating padding values.
+        padding_value: The value to fill returned tensor where padding_mask is False.
+        reversed_dim: The dimension along which to reverse the tensor. When input is a batch of sequences to be reversed, the default value of 1 is the correct choice.
+    Returns:
+        The reversed tensor, with the same shape as padded_tensors, and with padding still specified by padding_mask.
+    """
+    reversed_indices = torch.full_like(padded_tensors, padding_value)
+    reversed_indices[padding_mask] = padded_tensors.flip(reversed_dim)[
+        padding_mask.flip(reversed_dim)
+    ]
+    return reversed_indices
+
+
+class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel):
+    def __init__(
+        self,
+        nhead: int,
+        d_model_per_head: int,
+        dim_feedforward: int,
+        layer_count: int,
+        dropout_prob: float = 0.5,
+        output_dim: int = 1,
+        known_token_count: int = MAX_AA_TOKEN_IDX + 1,
+    ):
+        super().__init__()
+        self.known_token_count = known_token_count
+        self.d_model_per_head = d_model_per_head
+        self.d_model = d_model_per_head * nhead
+        self.nhead = nhead
+        self.dim_feedforward = dim_feedforward
+        # Forward direction components
+        self.forward_pos_encoder = PositionalEncoding(self.d_model, dropout_prob)
+        self.forward_amino_acid_embedding = nn.Embedding(
+            self.known_token_count, self.d_model
+        )
+        self.forward_encoder_layer = nn.TransformerEncoderLayer(
+            d_model=self.d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            batch_first=True,
+        )
+        self.forward_encoder = nn.TransformerEncoder(
+            self.forward_encoder_layer, layer_count
+        )
+
+        # Reverse direction components
+        self.reverse_pos_encoder = PositionalEncoding(self.d_model, dropout_prob)
+        self.reverse_amino_acid_embedding = nn.Embedding(
+            self.known_token_count, self.d_model
+        )
+        self.reverse_encoder_layer = nn.TransformerEncoderLayer(
+            d_model=self.d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            batch_first=True,
+        )
+        self.reverse_encoder = nn.TransformerEncoder(
+            self.reverse_encoder_layer, layer_count
+        )
+
+        # Output layers
+        self.combine_features = nn.Linear(2 * self.d_model, self.d_model)
+        self.output = nn.Linear(self.d_model, output_dim)
+
+        self.init_weights()
+
+    def init_weights(self) -> None:
+        initrange = 0.1
+        self.combine_features.bias.data.zero_()
+        self.combine_features.weight.data.uniform_(-initrange, initrange)
+        self.output.bias.data.zero_()
+        self.output.weight.data.uniform_(-initrange, initrange)
+
+    def single_direction_represent_sequence(
+        self,
+        indices: Tensor,
+        mask: Tensor,
+        embedding: nn.Embedding,
+        pos_encoder: PositionalEncoding,
+        encoder: nn.TransformerEncoder,
+    ) -> Tensor:
+        """Process sequence through one direction of the model."""
+        embedded = embedding(indices) * math.sqrt(self.d_model)
+        embedded = pos_encoder(embedded.permute(1, 0, 2)).permute(1, 0, 2)
+        return encoder(embedded, src_key_padding_mask=~mask)
+
+    def represent(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        # This is okay, as long as there are no masked ambiguities in the
+        # interior of the sequence... Otherwise it should also work for paired seqs.
+
+        # Forward direction - normal processing
+        forward_repr = self.single_direction_represent_sequence(
+            amino_acid_indices,
+            mask,
+            self.forward_amino_acid_embedding,
+            self.forward_pos_encoder,
+            self.forward_encoder,
+        )
+
+        # Reverse direction - flip sequences and masks
+        reversed_indices = reverse_padded_tensors(
+            amino_acid_indices, mask, AA_PADDING_TOKEN
+        )
+
+        reverse_repr = self.single_direction_represent_sequence(
+            reversed_indices,
+            mask,
+            self.reverse_amino_acid_embedding,
+            self.reverse_pos_encoder,
+            self.reverse_encoder,
+        )
+
+        # un-reverse to align with forward representation
+        aligned_reverse_repr = reverse_padded_tensors(reverse_repr, mask, 0.0)
+
+        # Combine features
+        combined = torch.cat([forward_repr, aligned_reverse_repr], dim=-1)
+        return self.combine_features(combined)
+
+    def predict(self, representation: Tensor) -> Tensor:
+        # Output layer
+        return self.output(representation).squeeze(-1)
+
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        return self.predict(self.represent(amino_acid_indices, mask))
+
+    @property
+    def hyperparameters(self):
+        return {
+            "nhead": self.nhead,
+            "d_model_per_head": self.d_model_per_head,
+            "dim_feedforward": self.dim_feedforward,
+            "layer_count": self.forward_encoder.num_layers,
+            "dropout_prob": self.forward_pos_encoder.dropout.p,
+            "output_dim": self.output.out_features,
+            "known_token_count": self.known_token_count,
+        }
+
+
+class BidirectionalTransformerBinarySelectionModelWiggleAct(
+    BidirectionalTransformerBinarySelectionModel
+):
+    """Here the beta parameter is fixed at 0.3."""
+
+    def predict(self, representation: Tensor):
+        return wiggle(super().predict(representation), 0.3)
 
 
 class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):

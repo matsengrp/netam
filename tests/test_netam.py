@@ -8,7 +8,12 @@ import torch
 import netam.framework as framework
 from netam.common import BIG
 from netam.framework import SHMoofDataset, SHMBurrito, RSSHMBurrito
-from netam.models import SHMoofModel, RSSHMoofModel, IndepRSCNNModel
+from netam.models import (
+    SHMoofModel,
+    RSSHMoofModel,
+    IndepRSCNNModel,
+    reverse_padded_tensors,
+)
 
 
 @pytest.fixture
@@ -114,3 +119,32 @@ def test_standardize_model_rates(mini_rsburrito):
     mini_rsburrito.standardize_model_rates()
     vrc01_rate_14 = mini_rsburrito.vrc01_site_14_model_rate()
     assert np.isclose(vrc01_rate_14, 1.0)
+
+
+def test_reverse_padded_tensors():
+    # Here we just test that we can apply the function twice and get the
+    # original input back.
+    test_tensor = torch.tensor(
+        [
+            [1, 2, 3, 4, 0, 0],
+            [1, 2, 0, 0, 0, 0],
+            [1, 0, 0, 0, 0, 0],
+            [1, 2, 3, 4, 5, 0],
+            [1, 2, 3, 4, 5, 6],
+            [1, 2, 0, 0, 0, 0],
+        ]
+    )
+    true_reversed = torch.tensor(
+        [
+            [4, 3, 2, 1, 0, 0],
+            [2, 1, 0, 0, 0, 0],
+            [1, 0, 0, 0, 0, 0],
+            [5, 4, 3, 2, 1, 0],
+            [6, 5, 4, 3, 2, 1],
+            [2, 1, 0, 0, 0, 0],
+        ]
+    )
+    mask = test_tensor > 0
+    reversed_tensor = reverse_padded_tensors(test_tensor, mask, 0)
+    assert torch.equal(true_reversed, reversed_tensor)
+    assert torch.equal(test_tensor, reverse_padded_tensors(reversed_tensor, mask, 0))

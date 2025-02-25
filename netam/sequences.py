@@ -22,6 +22,9 @@ AA_STR_SORTED = "ACDEFGHIKLMNPQRSTVWY"
 NT_STR_SORTED = "".join(BASES)
 BASES_AND_N_TO_INDEX = {base: idx for idx, base in enumerate(NT_STR_SORTED + "N")}
 AA_AMBIG_IDX = len(AA_STR_SORTED)
+# Used for padding amino acid sequences to the same length. Differentiated by
+# name in case we add a padding token other than AA_AMBIG_IDX later.
+AA_PADDING_TOKEN = AA_AMBIG_IDX
 
 CODONS = ["".join(codon_list) for codon_list in itertools.product(BASES, repeat=3)]
 STOP_CODONS = ["TAA", "TAG", "TGA"]
