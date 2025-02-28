@@ -375,20 +375,10 @@ def standardize_heavy_light_columns(pcp_df):
     """Ensure that heavy and light chain columns are present, and fill missing ones with
     placeholder values.
 
-    If only `parent` and `child` column is present, we assume these are heavy chain sequences.
+    If only `parent` and `child` column is present, we assume this is bulk data and determine heavy/light chain from
+    V gene family.
     """
-    cols = pcp_df.columns
-    # Do some checking first:
-    if "parent_h" in cols:
-        assert "child_h" in cols, "child_h column missing!"
-        assert "v_gene_h" in cols, "v_gene_h column missing!"
-    elif "parent" in cols:
-        assert "child" in cols, "child column missing!"
-        assert "v_gene" in cols, "v_gene column missing!"
-    if "parent_l" in cols:
-        assert "child_l" in cols, "child_l column missing!"
-        assert "v_gene_l" in cols, "v_gene_l column missing!"
-
+    light_names = {"IGK", "IGL"}
     differentiated_columns = [
         "parent",
         "child",
@@ -400,33 +390,37 @@ def standardize_heavy_light_columns(pcp_df):
         "cdr3_codon_start",
         "cdr3_codon_end",
     ]
-    for diff_colname in differentiated_columns:
-        diff_colname_h = diff_colname + "_h"
-        diff_colname_l = diff_colname + "_l"
-
-        # Look for heavy chain, assuming undifferentiated name means heavy
-        # chain
-        if diff_colname + "_h" in cols:
-            pass
-        elif diff_colname in cols:
-            pcp_df[diff_colname_h] = pcp_df[diff_colname]
-        else:
-            pcp_df[diff_colname_h] = ""
-
-        # Look for light chain
-        if diff_colname_l in cols:
-            pass
-        else:
-            pcp_df[diff_colname_l] = ""
+    cols = pcp_df.columns
+    # Do some checking first:
+    if "parent_h" in cols:
+        for col in differentiated_columns:
+            assert col + "_h" in cols, f"{col}_h column missing from pcp file!"
+            assert col + "_l" in cols, f"{col}_l column missing from pcp file!"
+        pcp_df["v_family_h"] = pcp_df["v_gene_h"].str.split("-").str[0]
+        pcp_df["v_family_l"] = pcp_df["v_gene_l"].str.split("-").str[0]
+    elif "parent" in cols:
+        for col in differentiated_columns:
+            assert col in cols, f"{col} column missing from pcp file!"
+        pcp_df["v_family"] = pcp_df["v_gene"].str.split("-").str[0]
+        is_heavy_chain = pcp_df["v_family"].str[:3] == "IGH"
+        _non_heavy_names = pcp_df[~is_heavy_chain]["v_family"]
+        if not _non_heavy_names.str[:3].isin(light_names).all():
+            raise ValueError(
+                f"V gene families not recognized: {_non_heavy_names[~_non_heavy_names.str[:3].isin(light_names)].unique()}"
+            )
+        # Make _h and _l versions of all columns and transfer data from
+        # undifferentiated columns to the correct version using is_heavy_chain
+        for col in differentiated_columns + ["v_gene"]:
+            pcp_df[col + "_h"] = pcp_df[col]
+            pcp_df[col + "_l"] = pcp_df[col]
+            pcp_df.loc[is_heavy_chain, col + "_l"] = ""
+            pcp_df.loc[~is_heavy_chain, col + "_h"] = ""
 
     if (pcp_df["parent_h"].str.len() + pcp_df["parent_l"].str.len()).min() < 3:
         raise ValueError("At least one PCP has fewer than three nucleotides.")
 
-    pcp_df["v_family_h"] = pcp_df["v_gene_h"].str.split("-").str[0]
-    pcp_df["v_family_l"] = pcp_df["v_gene_l"].str.split("-").str[0]
-
     pcp_df.drop(
-        columns=differentiated_columns,
+        columns=differentiated_columns + ["v_gene"],
         inplace=True,
         errors="ignore",
     )
