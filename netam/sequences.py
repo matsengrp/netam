@@ -444,7 +444,8 @@ def assert_pcp_valid(parent, child, aa_mask=None):
         child, aa_mask
     ):
         raise ValueError(
-            "Parent-child pair matches after masking codons containing ambiguities"
+            "Parent-child nucleotide sequence pair matches after masking codons containing ambiguities. "
+            "To avoid this try filtering data using `netam.sequences.assert_pcp_valid`."
         )
 
 

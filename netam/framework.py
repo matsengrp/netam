@@ -379,6 +379,7 @@ def standardize_heavy_light_columns(pcp_df):
     V gene family.
     """
     light_names = {"IGK", "IGL"}
+    required_columns = ["parent", "child", "v_gene"]
     differentiated_columns = [
         "parent",
         "child",
@@ -393,7 +394,7 @@ def standardize_heavy_light_columns(pcp_df):
     cols = pcp_df.columns
     # Do some checking first:
     if "parent_h" in cols:
-        for col in differentiated_columns:
+        for col in required_columns:
             assert col + "_h" in cols, f"{col}_h column missing from pcp file!"
             assert col + "_l" in cols, f"{col}_l column missing from pcp file!"
         pcp_df["v_family_h"] = pcp_df["v_gene_h"].str.split("-").str[0]
@@ -414,7 +415,7 @@ def standardize_heavy_light_columns(pcp_df):
                 f"Unexpected heavy chain V gene families: {_non_heavy_names}"
             )
     elif "parent" in cols:
-        for col in differentiated_columns:
+        for col in required_columns:
             assert col in cols, f"{col} column missing from pcp file!"
         pcp_df["v_family"] = pcp_df["v_gene"].str.split("-").str[0]
         is_heavy_chain = pcp_df["v_family"].str[:3] == "IGH"
@@ -425,21 +426,22 @@ def standardize_heavy_light_columns(pcp_df):
             )
         # Make _h and _l versions of all columns and transfer data from
         # undifferentiated columns to the correct version using is_heavy_chain
-        for col in differentiated_columns + ["v_gene"]:
-            pcp_df[col + "_h"] = pcp_df[col]
-            pcp_df[col + "_l"] = pcp_df[col]
-            if pd.api.types.is_string_dtype(pcp_df[col]):
-                fill_value = ""
-            else:
-                fill_value = pd.NA
-            pcp_df.loc[is_heavy_chain, col + "_l"] = fill_value
-            pcp_df.loc[~is_heavy_chain, col + "_h"] = fill_value
+        for col in differentiated_columns + ["v_family"]:
+            if col in pcp_df.columns:
+                pcp_df[col + "_h"] = pcp_df[col]
+                pcp_df[col + "_l"] = pcp_df[col]
+                if pd.api.types.is_string_dtype(pcp_df[col]):
+                    fill_value = ""
+                else:
+                    fill_value = pd.NA
+                pcp_df.loc[is_heavy_chain, col + "_l"] = fill_value
+                pcp_df.loc[~is_heavy_chain, col + "_h"] = fill_value
 
     if (pcp_df["parent_h"].str.len() + pcp_df["parent_l"].str.len()).min() < 3:
         raise ValueError("At least one PCP has fewer than three nucleotides.")
 
     pcp_df.drop(
-        columns=differentiated_columns + ["v_gene"],
+        columns=differentiated_columns + ["v_family"],
         inplace=True,
         errors="ignore",
     )

@@ -145,15 +145,9 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
                 nt_parents[i], nt_children[i], aa_length=max_aa_seq_len
             )
             aa_seq_len = len(aa_parent)
-            try:
-                assert_pcp_valid(
-                    nt_parents[i], nt_children[i], aa_mask=masks[i][:aa_seq_len]
-                )
-            except ValueError as e:
-                raise ValueError(
-                    "Parent and child nucleotide sequences are identical after masking codons containing N's. "
-                    "You may want to filter your data by this condition using `netam.sequences.assert_pcp_valid`."
-                ) from e
+            assert_pcp_valid(
+                nt_parents[i], nt_children[i], aa_mask=masks[i][:aa_seq_len]
+            )
 
             aa_parents_idxss[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(aa_parent)
             aa_children_idxss[i, :aa_seq_len] = aa_idx_tensor_of_str_ambig(aa_child)
