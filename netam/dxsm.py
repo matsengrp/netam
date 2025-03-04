@@ -82,8 +82,8 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         assert torch.max(self.aa_parents_idxss) <= MAX_AA_TOKEN_IDX
         assert torch.max(self.aa_children_idxss) <= MAX_AA_TOKEN_IDX
 
-        self._branch_lengths = branch_lengths
-        self.update_neutral_probs()
+        # Setting branch lengths updates neutral probs.
+        self.branch_lengths = branch_lengths
 
     def __post_init__(self):
         self.move_data_to_device("cpu")
@@ -239,7 +239,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             self.nt_children,
             self.nt_ratess.copy(),
             self.nt_cspss.copy(),
-            self._branch_lengths.copy(),
+            self.branch_lengths.copy(),
             self.aa_parents_idxss.copy(),
             self.aa_children_idxss.copy(),
             self.masks.copy(),
@@ -261,7 +261,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             self.nt_children[indices].reset_index(drop=True),
             self.nt_ratess[indices],
             self.nt_cspss[indices],
-            self._branch_lengths[indices],
+            self.branch_lengths[indices],
             self.aa_parents_idxss[indices],
             self.aa_children_idxss[indices],
             self.masks[indices],

@@ -145,3 +145,8 @@ def test_hit_class_tensor():
                                 compute_hit_class(codon1, codon2)
                             )
     assert torch.allclose(hit_class.hit_class_tensor, true_hit_class_tensor)
+
+def test_multihit_branch_lengths():
+    df = pd.DataFrame({"parent": ["ATGTACTTA"] * 4, "child": ["ATGTACTCA", "ATGTTGTCA", "ATGGTGTCA"], "v_gene": ["IGHV1-00"] * 3})
+    pcp_df = standardize_heavy_light_columns(df)
+

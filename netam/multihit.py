@@ -143,14 +143,14 @@ class HitClassDataset(Dataset):
         self.codon_mask = self.observed_hcs > -1
 
         # Make initial branch lengths (will get optimized later).
-        self._branch_lengths = torch.tensor(
+        # Setting branch lengths calls update_hit_class_probs.
+        self.branch_lengths = torch.tensor(
             [
                 sequences.nt_mutation_frequency(parent, child)
                 * branch_length_multiplier
                 for parent, child in zip(trimmed_parents, trimmed_children)
             ]
         )
-        self.update_hit_class_probs()
 
     @property
     def branch_lengths(self):
