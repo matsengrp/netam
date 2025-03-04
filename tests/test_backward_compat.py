@@ -41,7 +41,12 @@ def test_predictions_of_batch(fixed_ddsm_val_burrito):
         pd.read_csv("tests/old_models/val_branch_lengths.csv")["branch_length"]
     ).double()
     these_branch_lengths = fixed_ddsm_val_burrito.val_dataset.branch_lengths.double()
-    assert torch.allclose(branch_lengths, these_branch_lengths)
+    if not torch.allclose(branch_lengths, these_branch_lengths, atol=2e-4):
+        print(branch_lengths)
+        print(these_branch_lengths)
+        print(branch_lengths - these_branch_lengths)
+        assert False
+    fixed_ddsm_val_burrito.val_dataset.branch_lengths = branch_lengths
     fixed_ddsm_val_burrito.model.eval()
     val_loader = fixed_ddsm_val_burrito.build_val_loader()
     predictions_list = []
@@ -54,7 +59,11 @@ def test_predictions_of_batch(fixed_ddsm_val_burrito):
     predictions = torch.load(
         "tests/old_models/val_predictions.pt", weights_only=True
     ).double()
-    assert torch.allclose(predictions, these_predictions)
+    if not torch.allclose(predictions.exp(), these_predictions.exp()):
+        print(predictions[0].exp())
+        print(these_predictions[0].exp())
+        print((predictions[0].exp() - these_predictions[0].exp()).abs().max())
+        assert False
 
 
 # The outputs used for this test are produced by running

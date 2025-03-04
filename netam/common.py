@@ -14,7 +14,7 @@ import multiprocessing as mp
 
 
 BIG = 1e9
-SMALL_PROB = 1e-6
+SMALL_PROB = 1e-10
 
 
 def zap_predictions_along_diagonal(predictions, aa_parents_idxs, fill=-BIG):

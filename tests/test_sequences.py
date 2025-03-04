@@ -23,6 +23,9 @@ from netam.sequences import (
     prepare_heavy_light_pair,
     dataset_inputs_of_pcp_df,
     heavy_light_mask_of_aa_idxs,
+    unflatten_codon_idxs,
+    flatten_codon_idxs,
+    nt_idx_tensor_of_str,
 )
 from netam.codon_table import CODON_AA_INDICATOR_MATRIX
 from netam.common import combine_and_pad_tensors
@@ -198,3 +201,31 @@ def test_dataset_inputs_of_pcp_df(pcp_df, pcp_df_paired):
                 if parent[idx] in RESERVED_TOKENS:
                     assert torch.allclose(nt_rates[idx], torch.tensor(1.0))
                     assert torch.allclose(nt_csps[idx], torch.tensor(0.0))
+
+
+def test_codon_indices():
+    seq = "ATGCGTACGTAG"
+    true_codon_indices = codon_idx_tensor_of_str_ambig(seq)
+    true_nt_codon_indices = nt_idx_tensor_of_str(seq).view(-1, 3)
+
+    test_codon_idxs = flatten_codon_idxs(true_nt_codon_indices)
+    assert torch.allclose(test_codon_idxs, true_codon_indices)
+
+    test_nt_codon_idxs = unflatten_codon_idxs(true_codon_indices)
+    assert torch.allclose(test_nt_codon_idxs, true_nt_codon_indices)
+
+    # Now see if they work with extra dimensions
+    true_codon_indices = true_codon_indices.unsqueeze(0)
+    true_nt_codon_indices = true_nt_codon_indices.unsqueeze(0)
+
+    test_nt_codon_idxs = unflatten_codon_idxs(true_codon_indices)
+    assert torch.allclose(test_nt_codon_idxs, true_nt_codon_indices)
+
+    test_codon_idxs = flatten_codon_idxs(true_nt_codon_indices)
+
+    print(test_codon_idxs)
+    print(true_codon_indices)
+    if not torch.allclose(test_codon_idxs, true_codon_indices):
+        print(test_codon_idxs)
+        print(true_codon_indices)
+        assert False

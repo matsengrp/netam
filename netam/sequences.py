@@ -65,6 +65,41 @@ VRC01_NT_SEQ = (
     "TCA"
 )
 
+CODON_TO_NT_TENSOR = torch.arange(64).reshape(4, 4, 4)
+
+# Create the reverse mapping: from codon indices to nt indices
+NT_TO_CODON_TENSOR = torch.zeros((64, 3), dtype=torch.long)
+for i in range(4):
+    for j in range(4):
+        for k in range(4):
+            codon_idx = CODON_TO_NT_TENSOR[i, j, k]
+            NT_TO_CODON_TENSOR[codon_idx, 0] = i
+            NT_TO_CODON_TENSOR[codon_idx, 1] = j
+            NT_TO_CODON_TENSOR[codon_idx, 2] = k
+
+
+def unflatten_codon_idxs(codon_idx_tensor):
+    """Convert tensor of codon indices to tensor of shape (L, 3) containing nucleotide
+    indices.
+
+    Args:
+        codon_idx_tensor: Tensor of shape (L,) containing codon indices (0-63)
+
+    Returns:
+        Tensor of shape (L, 3) containing the corresponding nucleotide indices
+    """
+    return NT_TO_CODON_TENSOR[codon_idx_tensor]
+
+
+def flatten_codon_idxs(nt_codon_tensor):
+    """Convert codon index tensor of shape (L, 3) containing nucleotide indices to
+    tensor of length L containing codon indices."""
+    original_shape = nt_codon_tensor.shape
+    flat_codon_tensor = nt_codon_tensor.view(-1, 3)
+    return CODON_TO_NT_TENSOR[
+        flat_codon_tensor[:, 0], flat_codon_tensor[:, 1], flat_codon_tensor[:, 2]
+    ].reshape(*original_shape[:-1])
+
 
 def idx_of_codon_allowing_ambiguous(codon):
     if "N" in codon:

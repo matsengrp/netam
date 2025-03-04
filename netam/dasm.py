@@ -68,7 +68,7 @@ class DASMDataset(DXSMDataset):
             self.masks,
             self.nt_ratess,
             self.nt_cspss,
-            self._branch_lengths,
+            self.branch_lengths,
         ):
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
@@ -211,32 +211,13 @@ class DASMBurrito(DXSMBurrito):
         assert torch.isnan(log_preds).sum() == 0
 
         parent_indices = batch["codon_parents_idxs"].to(self.device)  # Shape: [B, L]
-        valid_mask = parent_indices != AMBIGUOUS_CODON_IDX  # Shape: [B, L]
 
-        # Convert to linear space so we can add probabilities.
-        preds = torch.exp(log_preds)
-
-        # Zero out the parent indices in preds, while keeping the computation
-        # graph intact.
-        preds_zeroer = torch.ones_like(preds)
-        preds_zeroer[valid_mask, parent_indices[valid_mask]] = 0.0
-        preds = preds * preds_zeroer
-
-        # Calculate the non-parent sum after zeroing out the parent indices.
-        non_parent_sum = preds[valid_mask, :].sum(dim=-1)
-
-        # Add these parent values back in, again keeping the computation graph intact.
-        preds_parent = torch.zeros_like(preds)
-        preds_parent[valid_mask, parent_indices[valid_mask]] = 1.0 - non_parent_sum
-        preds = preds + preds_parent
+        preds = molevol.set_parent_codon_prob(torch.exp(log_preds), parent_indices)
 
         # We have to clamp the predictions to avoid log(0) issues.
-        preds = torch.clamp(preds, min=torch.finfo(preds.dtype).eps)
+        preds = clamp_probability(preds)
 
         log_preds = torch.log(preds)
-
-        # Set ambiguous codons to nan to make sure that we handle them correctly downstream.
-        log_preds[~valid_mask, :] = float("nan")
 
         return log_preds
 
