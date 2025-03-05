@@ -8,7 +8,10 @@ from netam.molevol import (
     reshape_for_codons,
 )
 from netam import pretrained
-from netam.sequences import nt_idx_tensor_of_str
+from netam.sequences import nt_idx_tensor_of_str, MAX_KNOWN_TOKEN_COUNT
+from netam.models import SingleValueBinarySelectionModel, HitClassModel
+from netam.dasm import DASMDataset, DASMBurrito
+from netam.dnsm import DNSMDataset, DNSMBurrito
 import pytest
 import pandas as pd
 import torch
@@ -146,7 +149,110 @@ def test_hit_class_tensor():
                             )
     assert torch.allclose(hit_class.hit_class_tensor, true_hit_class_tensor)
 
-def test_multihit_branch_lengths():
-    df = pd.DataFrame({"parent": ["ATGTACTTA"] * 4, "child": ["ATGTACTCA", "ATGTTGTCA", "ATGGTGTCA"], "v_gene": ["IGHV1-00"] * 3})
-    pcp_df = standardize_heavy_light_columns(df)
 
+def make_dasm_burrito(multihit_model, pcp_df):
+    dataset = DASMDataset.of_pcp_df(pcp_df, MAX_KNOWN_TOKEN_COUNT, multihit_model=multihit_model)
+    model = SingleValueBinarySelectionModel(
+        output_dim=20,
+        known_token_count=MAX_KNOWN_TOKEN_COUNT,
+    )
+    model.single_value = torch.nn.Parameter(torch.tensor(0.0))
+    burrito = DASMBurrito(dataset, dataset, model, batch_size=2, learning_rate=0.001, min_learning_rate=0.0001)
+    return burrito
+
+def make_dnsm_burrito(multihit_model, pcp_df):
+    dataset = DNSMDataset.of_pcp_df(pcp_df, MAX_KNOWN_TOKEN_COUNT, multihit_model=multihit_model)
+    model = SingleValueBinarySelectionModel()
+    model.single_value = torch.nn.Parameter(torch.tensor(0.0))
+    burrito = DNSMBurrito(dataset, dataset, model, batch_size=2, learning_rate=0.001, min_learning_rate=0.0001)
+    return burrito
+
+
+def test_multihit_branch_lengths_dasm():
+    # Here we have a hit class 0 codon and a hit class 1 codon in each pair,
+    # and one pair each with a 0, 1, , 2, and 3 hit class codon.
+    parent_seq = "ATGTACTTA"
+    child_seqs = ["ATGTACTCA", "ATGTATTCA", "ATGTTGTCA", "ATGGTGTCA"]
+    df = pd.DataFrame({"parent": [parent_seq] * 4, "child": child_seqs, "v_gene": ["IGHV1-39*01"] * 4})
+    for child in child_seqs:
+        print(sum(c1 != c2 for c1, c2 in zip(parent_seq, child)))
+    # df = pd.DataFrame({"parent": ["ATGTAC"] * 3, "child": ["ATGTAT", "ATGTTG", "ATGGTG"], "v_gene": ["IGHV1-39*01"] * 3})
+    pcp_df = framework.standardize_heavy_light_columns(df)
+    pcp_df = framework.add_shm_model_outputs_to_pcp_df(pcp_df, pretrained.load("ThriftyHumV0.2-45"))
+    # Neutralize neutral rates
+    pcp_df["nt_rates_h"] = [torch.tensor([1.0] * 9)] * len(pcp_df)
+    nt_csps = list(pcp_df["nt_csps_h"])
+    for i in range(len(nt_csps)):
+        val = nt_csps[i]
+        val[val > 0.0] = 1.0 / 3.0
+    pcp_df["nt_csps_h"] = nt_csps
+
+    print(list(pcp_df["nt_rates_h"]))
+    print(list(pcp_df["nt_csps_h"]))
+
+    no_mh_burrito = make_dasm_burrito(None, pcp_df)
+    optimization_kwargs = {"learning_rate": 0.01, "optimization_tol": 1e-3}
+    lengths = no_mh_burrito.serial_find_optimal_branch_lengths(no_mh_burrito.train_dataset, **optimization_kwargs)
+
+    print(no_mh_burrito.train_dataset.log_neutral_codon_probss)
+    null_mh_model = HitClassModel()
+    null_mh_burrito = make_dasm_burrito(null_mh_model, pcp_df)
+    null_mh_lengths = null_mh_burrito.serial_find_optimal_branch_lengths(null_mh_burrito.train_dataset, **optimization_kwargs)
+    assert torch.allclose(lengths, null_mh_lengths)
+
+    mh_model = HitClassModel()
+    mh_model.values = torch.nn.Parameter(torch.tensor([1.0,  2.0,  5]).log())
+    mh_burrito = make_dasm_burrito(mh_model, pcp_df)
+    mh_lengths = mh_burrito.serial_find_optimal_branch_lengths(mh_burrito.train_dataset, **optimization_kwargs)
+    print(lengths)
+    print(mh_lengths)
+    # Strange things: Applying the multihit model above decreases the
+    # branch length for all sequences. I'd expect it to increase slightly for
+    # the sequence with only one mutation.
+    # When I look at the neutral codon probs, it seems that there are more
+    # than four distinct values, and I would expect there to be exactly four
+    # (one for each hit class).
+    # Finally, I compute ML branch lengths of [0.1178, 0.2513, 0.405, 0.588]
+    # without the multihit correction. These don't quite match the
+    # branch lengths computed by the uncorrected model.
+    assert not torch.allclose(lengths, mh_lengths)
+
+
+def test_multihit_branch_lengths_dnsm():
+    # Here we have a hit class 0 codon and a hit class 1 codon in each pair,
+    # and one pair each with a 0, 1, , 2, and 3 hit class codon.
+    parent_seq = "ATGTACTTA"
+    child_seqs = ["ATGTACTCA", "ATGTATTCA", "ATGTTGTCA", "ATGGTGTCA"]
+    df = pd.DataFrame({"parent": [parent_seq] * 4, "child": child_seqs, "v_gene": ["IGHV1-39*01"] * 4})
+    for child in child_seqs:
+        print(sum(c1 != c2 for c1, c2 in zip(parent_seq, child)))
+    # df = pd.DataFrame({"parent": ["ATGTAC"] * 3, "child": ["ATGTAT", "ATGTTG", "ATGGTG"], "v_gene": ["IGHV1-39*01"] * 3})
+    pcp_df = framework.standardize_heavy_light_columns(df)
+    pcp_df = framework.add_shm_model_outputs_to_pcp_df(pcp_df, pretrained.load("ThriftyHumV0.2-45"))
+    # Neutralize neutral rates
+    pcp_df["nt_rates_h"] = [torch.tensor([1.0] * 9)] * len(pcp_df)
+    nt_csps = list(pcp_df["nt_csps_h"])
+    for i in range(len(nt_csps)):
+        val = nt_csps[i]
+        val[val > 0.0] = 1.0 / 3.0
+    pcp_df["nt_csps_h"] = nt_csps
+
+    print(list(pcp_df["nt_rates_h"]))
+    print(list(pcp_df["nt_csps_h"]))
+
+    no_mh_burrito = make_dnsm_burrito(None, pcp_df)
+    optimization_kwargs = {"learning_rate": 0.01, "optimization_tol": 1e-3}
+    lengths = no_mh_burrito.serial_find_optimal_branch_lengths(no_mh_burrito.train_dataset, **optimization_kwargs)
+
+    null_mh_model = HitClassModel()
+    null_mh_burrito = make_dnsm_burrito(null_mh_model, pcp_df)
+    null_mh_lengths = null_mh_burrito.serial_find_optimal_branch_lengths(null_mh_burrito.train_dataset, **optimization_kwargs)
+    assert torch.allclose(lengths, null_mh_lengths)
+
+    mh_model = HitClassModel()
+    mh_model.values = torch.nn.Parameter(torch.tensor([1.0,  2.0,  5]).log())
+    mh_burrito = make_dnsm_burrito(mh_model, pcp_df)
+    mh_lengths = mh_burrito.serial_find_optimal_branch_lengths(mh_burrito.train_dataset, **optimization_kwargs)
+    print(lengths)
+    print(mh_lengths)
+    assert not torch.allclose(lengths, mh_lengths)
