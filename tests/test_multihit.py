@@ -211,9 +211,6 @@ def test_multihit_branch_lengths_dasm():
     # Strange things: Applying the multihit model above decreases the
     # branch length for all sequences. I'd expect it to increase slightly for
     # the sequence with only one mutation.
-    # When I look at the neutral codon probs, it seems that there are more
-    # than four distinct values, and I would expect there to be exactly four
-    # (one for each hit class).
     # Finally, I compute ML branch lengths of [0.1178, 0.2513, 0.405, 0.588]
     # without the multihit correction. These don't quite match the
     # branch lengths computed by the uncorrected model.
