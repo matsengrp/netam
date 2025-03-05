@@ -1,4 +1,5 @@
 import os
+from collections import Counter
 
 import netam.multihit as multihit
 import netam.framework as framework
@@ -194,7 +195,8 @@ def test_multihit_branch_lengths_dasm():
     optimization_kwargs = {"learning_rate": 0.01, "optimization_tol": 1e-3}
     lengths = no_mh_burrito.serial_find_optimal_branch_lengths(no_mh_burrito.train_dataset, **optimization_kwargs)
 
-    print(no_mh_burrito.train_dataset.log_neutral_codon_probss)
+    # There should be four distinct values here, and it seems that there are.
+    print(Counter(no_mh_burrito.train_dataset.log_neutral_codon_probss[0].numpy().flatten()))
     null_mh_model = HitClassModel()
     null_mh_burrito = make_dasm_burrito(null_mh_model, pcp_df)
     null_mh_lengths = null_mh_burrito.serial_find_optimal_branch_lengths(null_mh_burrito.train_dataset, **optimization_kwargs)

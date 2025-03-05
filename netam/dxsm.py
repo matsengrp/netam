@@ -82,7 +82,6 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         assert torch.max(self.aa_parents_idxss) <= MAX_AA_TOKEN_IDX
         assert torch.max(self.aa_children_idxss) <= MAX_AA_TOKEN_IDX
 
-        # Setting branch lengths updates neutral probs.
         self._branch_lengths = branch_lengths
         self.update_neutral_probs()
 
