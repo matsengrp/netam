@@ -207,15 +207,15 @@ def find_least_used_cuda_gpu(mem_round_val=1300):
 
     # Check prioritization order:
     if max(utilization) > 0:
-        print("used utilization")
+        print("GPU chosen via utilization")
         return utilization.index(min(utilization))  # Least utilized GPU
 
     if max(memory_used) > 0:
-        print("used memory")
+        print("GPU chosen via memory")
         return memory_used.index(min(memory_used))  # Least memory used GPU
 
     if len(set(gpu_counts.values())) > 1:
-        print("used processes")
+        print("GPU chosen via process count")
         return min(
             uuid_to_index[uuid]
             for uuid, count in gpu_counts.items()
