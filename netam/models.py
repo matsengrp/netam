@@ -649,7 +649,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
             ).squeeze(0)
         else:
             result = result.squeeze(0)
-        return split_heavy_light_model_outputs(result, idx_seq.squeeze(0))
+        return split_heavy_light_model_outputs(result.cpu(), idx_seq.squeeze(0).cpu())
 
 
 class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
