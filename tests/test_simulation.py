@@ -24,6 +24,8 @@ from netam.sequences import (
     token_mask_of_aa_idxs,
 )
 from netam.codon_table import CODON_AA_INDICATOR_MATRIX
+
+
 @pytest.fixture()
 def dasm_pred_burrito(pcp_df):
     force_spawn()
@@ -56,22 +58,21 @@ def dasm_pred_burrito(pcp_df):
     # )
     return burrito
 
+
 # Test that the dasm burrito computes the same predictions as
 # framework.codon_probs_of_parent_seq:
 
-def test_dasm_predictions(
-        pcp_df,
-        dasm_pred_burrito
-):
-    """Test that the DASM burrito computes the same predictions as codon_probs_of_parent_seq."""
-    # Get a subset of PCPs
+
+def test_dasm_predictions(pcp_df, dasm_pred_burrito):
+    """Test that the DASM burrito computes the same predictions as
+    codon_probs_of_parent_seq."""
     parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
 
     # Get the predictions from the DASM burrito
     dasm_pred_burrito.batch_size = 500
     val_loader = dasm_pred_burrito.build_val_loader()
     # There should be exactly one batch
-    (batch, ) = val_loader
+    (batch,) = val_loader
     burrito_preds = dasm_pred_burrito.predictions_of_batch(batch)
 
     branch_lengths = dasm_pred_burrito.val_dataset.branch_lengths
@@ -79,9 +80,16 @@ def test_dasm_predictions(
     # Get the predictions from codon_probs_of_parent_seq
     dasm_crepe = dasm_pred_burrito.to_crepe()
     neutral_crepe = pretrained.load("ThriftyHumV0.2-45")
-    codon_probs = list(codon_probs_of_parent_seq(
-        dasm_crepe, parent_seq, branch_length, neutral_crepe=neutral_crepe, multihit_model=None
-    ) for parent_seq, branch_length in zip(parent_seqs, branch_lengths))
+    codon_probs = list(
+        codon_probs_of_parent_seq(
+            dasm_crepe,
+            parent_seq,
+            branch_length,
+            neutral_crepe=neutral_crepe,
+            multihit_model=None,
+        )
+        for parent_seq, branch_length in zip(parent_seqs, branch_lengths)
+    )
 
     # Check that the predictions match
     for pred, (heavy_codon_prob, _) in zip(burrito_preds, codon_probs):
@@ -90,4 +98,6 @@ def test_dasm_predictions(
         print(pred[0].logsumexp(0))
         print(heavy_codon_prob[0].logsumexp(0))
         print((pred[0] - heavy_codon_prob[0]).detach().numpy())
-        assert torch.allclose(pred[:len(heavy_codon_prob)], heavy_codon_prob), "Predictions should match"
+        assert torch.allclose(
+            pred[: len(heavy_codon_prob)], heavy_codon_prob
+        ), "Predictions should match"

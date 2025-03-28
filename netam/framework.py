@@ -1152,7 +1152,9 @@ def codon_probs_of_parent_seq(
     rates, csps = trimmed_shm_model_outputs_of_crepe(neutral_crepe, nt_sequence)
     # TODO used to be this, but this zaps the diagonal and we can't apply that as a correction to codon probs:
     # log_selection_factors = selection_crepe([aa_seqs])[0]
-    log_selection_factors = selection_crepe.model.selection_factors_of_aa_str(aa_seqs, zap_diagonal=False)
+    log_selection_factors = selection_crepe.model.selection_factors_of_aa_str(
+        aa_seqs, zap_diagonal=False
+    )
     parent_codon_idxs = tuple(
         codon_idx_tensor_of_str_ambig(nt_chain_seq) for nt_chain_seq in nt_sequence
     )
