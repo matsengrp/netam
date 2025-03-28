@@ -22,6 +22,8 @@ from netam.common import (
     parallelize_function,
 )
 from netam.sequences import (
+    aa_mask_tensor_of,
+    codon_idx_tensor_of_str_ambig,
     BASES_AND_N_TO_INDEX,
     BASES,
     VRC01_NT_SEQ,
@@ -29,6 +31,7 @@ from netam.sequences import (
     kmer_to_index_of,
     nt_mask_tensor_of,
     encode_sequences,
+    translate_sequences,
 )
 from netam import models
 import netam.molevol as molevol
@@ -1121,3 +1124,59 @@ def burrito_class_of_model(model):
         return RSSHMBurrito
     else:
         return SHMBurrito
+
+
+def codon_probs_of_parent_seq(
+    selection_crepe, nt_sequence, branch_length, neutral_crepe=None, multihit_model=None
+):
+    """Calculate the predicted model probabilities of each codon at each site.
+
+    Args:
+        nt_sequence: A tuple of two strings, the heavy and light chain nucleotide
+            sequences.
+        branch_length: The branch length of the tree.
+    Returns:
+        a tuple of tensors of shape (L, 64) representing the predicted probabilities of each
+        codon at each site.
+    """
+    if neutral_crepe is None:
+        raise NotImplementedError("neutral_crepe is required.")
+
+    if isinstance(nt_sequence, str) or len(nt_sequence) != 2:
+        raise ValueError(
+            "nt_sequence must be a pair of strings, with the first element being the heavy chain sequence and the second element being the light chain sequence."
+        )
+
+    aa_seqs = tuple(translate_sequences(nt_sequence))
+    mask = tuple(aa_mask_tensor_of(chain_aa_seq) for chain_aa_seq in aa_seqs)
+    rates, csps = trimmed_shm_model_outputs_of_crepe(neutral_crepe, nt_sequence)
+    # TODO used to be this, but this zaps the diagonal and we can't apply that as a correction to codon probs:
+    # log_selection_factors = selection_crepe([aa_seqs])[0]
+    log_selection_factors = selection_crepe.model.selection_factors_of_aa_str(aa_seqs, zap_diagonal=False)
+    parent_codon_idxs = tuple(
+        codon_idx_tensor_of_str_ambig(nt_chain_seq) for nt_chain_seq in nt_sequence
+    )
+    log_codon_probs = tuple(
+        molevol.neutral_codon_probs_of_seq(
+            chain_nt_parent,
+            chain_mask,
+            chain_rates,
+            chain_csps,
+            branch_length,
+            multihit_model=multihit_model,
+        ).log()
+        for chain_nt_parent, chain_mask, chain_rates, chain_csps in zip(
+            nt_sequence, mask, rates, csps
+        )
+    )
+
+    return tuple(
+        molevol.adjust_codon_probs_by_aa_selection_factors(
+            chain_parent_codon_idxs,
+            chain_log_codon_probs,
+            chain_log_aa_selection_factors,
+        )
+        for chain_parent_codon_idxs, chain_log_codon_probs, chain_log_aa_selection_factors in zip(
+            parent_codon_idxs, log_codon_probs, log_selection_factors
+        )
+    )

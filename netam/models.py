@@ -623,7 +623,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         with torch.no_grad():
             return self.represent(*inputs).squeeze(0)
 
-    def selection_factors_of_aa_str(self, aa_sequence: Tuple[str, str]) -> Tensor:
+    def selection_factors_of_aa_str(self, aa_sequence: Tuple[str, str], zap_diagonal=True) -> Tensor:
         """Do the forward method then exponentiation without gradients from an amino
         acid string.
 
@@ -643,7 +643,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         idx_seq, mask = self.prepare_aa_str(*aa_sequence)
         with torch.no_grad():
             result = torch.exp(self.forward(idx_seq, mask))
-        if self.hyperparameters["output_dim"] >= 20:
+        if zap_diagonal and self.hyperparameters["output_dim"] >= 20:
             result = zap_predictions_along_diagonal(
                 result, idx_seq, fill=float("nan")
             ).squeeze(0)

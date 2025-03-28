@@ -3,6 +3,7 @@ import torch
 
 from Bio.Data import CodonTable
 from netam.sequences import AA_STR_SORTED, CODONS, STOP_CODONS, translate_sequences
+from netam.common import BIG
 
 
 def single_mutant_aa_indices(codon):
@@ -72,3 +73,8 @@ def build_stop_codon_indicator_tensor():
     for stop_codon in STOP_CODONS:
         stop_codon_indicator[CODONS.index(stop_codon)] = 1.0
     return stop_codon_indicator
+
+
+STOP_CODON_INDICATOR = build_stop_codon_indicator_tensor()
+
+STOP_CODON_ZAPPER = STOP_CODON_INDICATOR * -BIG
