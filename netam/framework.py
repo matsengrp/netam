@@ -24,6 +24,8 @@ from netam.common import (
     parallelize_function,
 )
 from netam.sequences import (
+    aa_mask_tensor_of,
+    codon_idx_tensor_of_str_ambig,
     BASES_AND_N_TO_INDEX,
     BASES,
     VRC01_NT_SEQ,
@@ -31,6 +33,9 @@ from netam.sequences import (
     kmer_to_index_of,
     nt_mask_tensor_of,
     encode_sequences,
+    translate_sequences,
+    CODONS,
+    aa_idx_tensor_of_str,
 )
 from netam import models
 import netam.molevol as molevol
@@ -1162,3 +1167,103 @@ def worker_optimize_branch_length(burrito_class, model, dataset, optimization_kw
     """The worker used for parallel branch length optimization."""
     burrito = burrito_class(None, dataset, copy.deepcopy(model))
     return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)
+
+
+def codon_probs_of_parent_seq(
+    selection_crepe, nt_sequence, branch_length, neutral_crepe=None, multihit_model=None
+):
+    """Calculate the predicted model probabilities of each codon at each site.
+
+    Args:
+        nt_sequence: A tuple of two strings, the heavy and light chain nucleotide
+            sequences.
+        branch_length: The branch length of the tree.
+    Returns:
+        a tuple of tensors of shape (L, 64) representing the predicted probabilities of each
+        codon at each site.
+    """
+    if neutral_crepe is None:
+        raise NotImplementedError("neutral_crepe is required.")
+
+    if isinstance(nt_sequence, str) or len(nt_sequence) != 2:
+        raise ValueError(
+            "nt_sequence must be a pair of strings, with the first element being the heavy chain sequence and the second element being the light chain sequence."
+        )
+
+    aa_seqs = tuple(translate_sequences(nt_sequence))
+    mask = tuple(aa_mask_tensor_of(chain_aa_seq) for chain_aa_seq in aa_seqs)
+    rates, csps = trimmed_shm_model_outputs_of_crepe(neutral_crepe, nt_sequence)
+    log_selection_factors = selection_crepe([aa_seqs])[0]
+    log_selection_factors = tuple(
+        map(
+            torch.log,
+            selection_crepe([aa_seqs])[0],
+        )
+    )
+    if selection_crepe.model.hyperparameters["output_dim"] == 1:
+        # Need to upgrade single selection factor to 20 selection factors, all
+        # equal except for the one for the parent sequence, which should be
+        # 1 (0 in log space).
+        new_selection_factors = []
+        for aa_seq, old_selection_factors in zip(aa_seqs, log_selection_factors):
+            chain_factors = old_selection_factors.unsqueeze(1).repeat(1, 20)
+            parent_indices = aa_idx_tensor_of_str(aa_seq)
+            if len(parent_indices) > 0:
+                chain_factors[torch.arange(len(parent_indices)), parent_indices] = 0.0
+            new_selection_factors.append(chain_factors)
+        log_selection_factors = tuple(new_selection_factors)
+
+    parent_codon_idxs = tuple(
+        codon_idx_tensor_of_str_ambig(nt_chain_seq) for nt_chain_seq in nt_sequence
+    )
+    log_codon_probs = tuple(
+        molevol.neutral_codon_probs_of_seq(
+            chain_nt_parent,
+            chain_mask,
+            chain_rates,
+            chain_csps,
+            branch_length,
+            multihit_model=multihit_model,
+        ).log()
+        for chain_nt_parent, chain_mask, chain_rates, chain_csps in zip(
+            nt_sequence, mask, rates, csps
+        )
+    )
+
+    return tuple(
+        molevol.zero_stop_codon_probs(
+            molevol.adjust_codon_probs_by_aa_selection_factors(
+                chain_parent_codon_idxs,
+                chain_log_codon_probs,
+                chain_log_aa_selection_factors,
+            ).exp()
+        )
+        for chain_parent_codon_idxs, chain_log_codon_probs, chain_log_aa_selection_factors in zip(
+            parent_codon_idxs, log_codon_probs, log_selection_factors
+        )
+    )
+
+
+def sample_sequence_from_codon_probs(codon_probs):
+    """Mutate the parent sequence according to the provided codon probabilities. The
+    target sequence is chosen by sampling IID from the codon probabilities at each site.
+
+    For reproducibility, use `torch.manual_seed` before calling this function.
+
+    Args:
+        codon_probs: A tensor of shape (L, 64) representing the
+            probabilities of each codon at each site.
+    Returns:
+        A string representing the mutated sequence.
+    """
+
+    # Sample codon indices based on probabilities at each position
+    sampled_codon_indices = torch.multinomial(codon_probs, num_samples=1).squeeze()
+
+    # Convert codon indices to codon strings
+    sampled_codons = [CODONS[idx.item()] for idx in sampled_codon_indices]
+
+    # Join the codons to form the complete sequence
+    mutated_sequence = "".join(sampled_codons)
+
+    return mutated_sequence

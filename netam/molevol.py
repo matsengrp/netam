@@ -11,9 +11,10 @@ import torch
 from torch import Tensor
 from warnings import warn
 
-from netam.codon_table import CODON_AA_INDICATOR_MATRIX
+from netam.codon_table import CODON_AA_INDICATOR_MATRIX, STOP_CODON_ZAPPER
 
 import netam.sequences as sequences
+from netam.common import clamp_probability
 
 
 def check_csps(parent_idxs: Tensor, csps: Tensor) -> Tensor:
@@ -27,6 +28,8 @@ def check_csps(parent_idxs: Tensor, csps: Tensor) -> Tensor:
             to states (e.g. nucleotides).
     """
 
+    if len(parent_idxs) == 0:
+        raise ValueError("Parent indices must not be empty")
     # Assert that sub_probs are within the range [0, 1] modulo rounding error
     assert torch.all(csps >= -1e-6), "Substitution probabilities must be non-negative"
     assert torch.all(
@@ -414,6 +417,81 @@ def neutral_aa_probs(
     aa_probs = codon_probs @ CODON_AA_INDICATOR_MATRIX
 
     return aa_probs
+
+
+def neutral_codon_probs_of_seq(
+    nt_parent: str,
+    mask: Tensor,
+    nt_rates: Tensor,
+    nt_csps: Tensor,
+    branch_length: float,
+    multihit_model=None,
+):
+    if len(nt_parent) == 0:
+        return torch.empty((0, 64)).float()
+    # Note we are replacing all Ns with As, which means that we need to be careful
+    # with masking out these positions later. We do this below.
+    parent_idxs = sequences.nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
+    parent_len = len(nt_parent)
+
+    mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
+    nt_csps = nt_csps[:parent_len, :]
+    nt_mask = mask.repeat_interleave(3)[: len(nt_parent)]
+    check_csps(parent_idxs[nt_mask], nt_csps[: len(nt_parent)][nt_mask])
+
+    neutral_probs = neutral_codon_probs(
+        parent_idxs.reshape(-1, 3),
+        mut_probs.reshape(-1, 3),
+        nt_csps.reshape(-1, 3, 4),
+        multihit_model=multihit_model,
+    )
+
+    if not torch.isfinite(neutral_probs).all():
+        print("Found a non-finite neutral_codon_prob")
+        print(f"nt_parent: {nt_parent}")
+        print(f"mask: {mask}")
+        print(f"nt_rates: {nt_rates}")
+        print(f"nt_csps: {nt_csps}")
+        print(f"branch_length: {branch_length}")
+        raise ValueError(f"neutral_probs is not finite: {neutral_probs}")
+    # Ensure that all values are positive before taking the log later
+    neutral_probs = clamp_probability(neutral_probs)
+
+    # Here we zero out masked positions.
+    neutral_probs *= mask[: len(neutral_probs), None]
+    return neutral_probs
+
+
+def zero_stop_codon_probs(codon_probs: Tensor):
+    """Set stop codon probabilities to zero."""
+    return codon_probs * STOP_CODON_ZAPPER.exp()
+
+
+def adjust_codon_probs_by_aa_selection_factors(
+    parent_codon_idxs: Tensor, log_codon_probs: Tensor, log_aa_selection_factors: Tensor
+):
+    if len(log_codon_probs) == 0:
+        return log_codon_probs
+    device = parent_codon_idxs.device
+    # The aa_codon_indicator_matrix lifts things up from aa land to codon land.
+    log_preds = (
+        log_codon_probs
+        + log_aa_selection_factors @ CODON_AA_INDICATOR_MATRIX.T.to(device)
+        + STOP_CODON_ZAPPER.to(device)
+    )
+    assert torch.isnan(log_preds).sum() == 0
+
+    # Convert to linear space so we can add probabilities.
+    preds = torch.exp(log_preds)
+
+    preds = set_parent_codon_prob(preds, parent_codon_idxs)
+
+    # We have to clamp the predictions to avoid log(0) issues.
+    preds = clamp_probability(preds)
+
+    log_preds = torch.log(preds)
+
+    return log_preds
 
 
 def mut_probs_of_aa_probs(

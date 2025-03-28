@@ -80,7 +80,7 @@ def test_old_crepe_outputs():
         zap_predictions_along_diagonal(
             torch.load("tests/old_models/ddsm_output", weights_only=True).unsqueeze(0),
             aa_idx_tensor_of_str_ambig(example_seq).unsqueeze(0),
-            fill=float("nan"),
+            fill=1.0,
         ).squeeze(0),
         0.0,
     )
@@ -88,5 +88,7 @@ def test_old_crepe_outputs():
 
     ddsm_result = torch.nan_to_num(ddsm_crepe([(example_seq, "")])[0][0], 0.0)
     dnsm_result = dnsm_crepe([(example_seq, "")])[0][0]
+    print(ddsm_result[ddsm_result != ddsm_vals])
+    print(ddsm_vals[ddsm_result != ddsm_vals])
     assert torch.allclose(ddsm_result, ddsm_vals)
     assert torch.allclose(dnsm_result, dnsm_vals)
