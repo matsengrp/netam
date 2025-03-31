@@ -8,7 +8,11 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from ete3 import Tree
 
-from netam.framework import load_crepe, codon_probs_of_parent_seq, trimmed_shm_model_outputs_of_crepe
+from netam.framework import (
+    load_crepe,
+    codon_probs_of_parent_seq,
+    trimmed_shm_model_outputs_of_crepe,
+)
 from netam import pretrained
 from netam.common import force_spawn
 from netam.dasm import (
@@ -66,6 +70,7 @@ def dasm_pred_burrito(pcp_df):
 # Test that the dasm burrito computes the same predictions as
 # framework.codon_probs_of_parent_seq:
 
+
 def test_neutral_probs(pcp_df, dasm_pred_burrito):
     """Test that the DASM burrito computes the same predictions as
     codon_probs_of_parent_seq."""
@@ -107,6 +112,7 @@ def test_neutral_probs(pcp_df, dasm_pred_burrito):
         assert torch.allclose(
             pred[: len(heavy_codon_prob)], heavy_codon_prob
         ), "Predictions should match"
+
 
 def test_selection_probs(pcp_df, dasm_pred_burrito):
     """Test that the DASM burrito computes the same predictions as
