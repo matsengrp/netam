@@ -1,15 +1,9 @@
-"""Pytest tests for the simulation module."""
+"""Pytest tests for simulation-related functions"""
 
 import pytest
 import torch
-import random
-import numpy as np
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-from ete3 import Tree
 
 from netam.framework import (
-    load_crepe,
     codon_probs_of_parent_seq,
     trimmed_shm_model_outputs_of_crepe,
     sample_sequence_from_codon_probs,
@@ -25,14 +19,10 @@ from netam.molevol import neutral_codon_probs_of_seq
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.sequences import (
     MAX_KNOWN_TOKEN_COUNT,
-    AA_AMBIG_IDX,
-    TOKEN_STR_SORTED,
-    token_mask_of_aa_idxs,
     aa_mask_tensor_of,
     translate_sequence,
     translate_sequences,
 )
-from netam.codon_table import CODON_AA_INDICATOR_MATRIX
 
 
 @pytest.fixture(scope="module")
