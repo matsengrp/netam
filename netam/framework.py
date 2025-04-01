@@ -32,6 +32,7 @@ from netam.sequences import (
     nt_mask_tensor_of,
     encode_sequences,
     translate_sequences,
+    CODONS,
 )
 from netam import models
 import netam.molevol as molevol
@@ -1136,7 +1137,7 @@ def codon_probs_of_parent_seq(
             sequences.
         branch_length: The branch length of the tree.
     Returns:
-        a tuple of tensors of shape (L, 64) representing the predicted probabilities of each
+        a tuple of tensors of shape (L, 64) representing the predicted log probabilities of each
         codon at each site.
     """
     if neutral_crepe is None:
@@ -1152,8 +1153,13 @@ def codon_probs_of_parent_seq(
     rates, csps = trimmed_shm_model_outputs_of_crepe(neutral_crepe, nt_sequence)
     # TODO used to be this, but this zaps the diagonal and we can't apply that as a correction to codon probs:
     # log_selection_factors = selection_crepe([aa_seqs])[0]
-    log_selection_factors = selection_crepe.model.selection_factors_of_aa_str(
-        aa_seqs, zap_diagonal=False
+    log_selection_factors = tuple(
+        map(
+            torch.log,
+            selection_crepe.model.selection_factors_of_aa_str(
+                aa_seqs, zap_diagonal=False
+            ),
+        )
     )
     parent_codon_idxs = tuple(
         codon_idx_tensor_of_str_ambig(nt_chain_seq) for nt_chain_seq in nt_sequence
@@ -1182,3 +1188,26 @@ def codon_probs_of_parent_seq(
             parent_codon_idxs, log_codon_probs, log_selection_factors
         )
     )
+
+
+def sample_sequence_from_codon_probs(codon_probs):
+    """Mutate the parent sequence according to the provided codon probabilities. The
+    target sequence is chosen by sampling IID from the codon probabilities at each site.
+
+    Args:
+        codon_probs: A tensor of shape (L, 64) representing the
+            probabilities of each codon at each site.
+    Returns:
+        A string representing the mutated sequence.
+    """
+
+    # Sample codon indices based on probabilities at each position
+    sampled_codon_indices = torch.multinomial(codon_probs, num_samples=1).squeeze()
+
+    # Convert codon indices to codon strings
+    sampled_codons = [CODONS[idx.item()] for idx in sampled_codon_indices]
+
+    # Join the codons to form the complete sequence
+    mutated_sequence = "".join(sampled_codons)
+
+    return mutated_sequence
