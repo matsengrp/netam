@@ -33,6 +33,7 @@ from netam.sequences import (
     encode_sequences,
     translate_sequences,
     CODONS,
+    aa_idx_tensor_of_str,
 )
 from netam import models
 import netam.molevol as molevol
@@ -1161,6 +1162,19 @@ def codon_probs_of_parent_seq(
             ),
         )
     )
+    if selection_crepe.model.hyperparameters["output_dim"] == 1:
+        # Need to upgrade single selection factor to 20 selection factors, all
+        # equal except for the one for the parent sequence, which should be
+        # 1 (0 in log space).
+        new_selection_factors = []
+        for aa_seq, old_selection_factors in zip(aa_seqs, log_selection_factors):
+            chain_factors = old_selection_factors.unsqueeze(1).repeat(1, 20)
+            parent_indices = aa_idx_tensor_of_str(aa_seq)
+            if len(parent_indices) > 0:
+                chain_factors[torch.arange(len(parent_indices)), parent_indices] = 0.0
+            new_selection_factors.append(chain_factors)
+        log_selection_factors = tuple(new_selection_factors)
+
     parent_codon_idxs = tuple(
         codon_idx_tensor_of_str_ambig(nt_chain_seq) for nt_chain_seq in nt_sequence
     )

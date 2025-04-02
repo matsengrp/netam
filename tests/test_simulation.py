@@ -1,4 +1,4 @@
-"""Pytest tests for simulation-related functions"""
+"""Pytest tests for simulation-related functions."""
 
 import pytest
 import torch
@@ -23,6 +23,7 @@ from netam.sequences import (
     translate_sequence,
     translate_sequences,
 )
+from test_dnsm import dnsm_burrito
 
 
 @pytest.fixture(scope="module")
@@ -255,7 +256,6 @@ def test_sequence_sampling(pcp_df, dasm_pred_burrito):
 def test_selection_factors(pcp_df, dasm_pred_burrito):
     """Test that the DASM burrito computes the same selection factors as the crepe
     model."""
-    pcp_df = pcp_df.head(10)
     parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
 
     print("recomputing branch lengths")
@@ -295,3 +295,30 @@ def test_selection_factors(pcp_df, dasm_pred_burrito):
             crepe_log_selection_factors,
             burrito_log_selection_factors[: len(crepe_log_selection_factors)],
         ), f"Selection factors don't match for sequence {i}"
+
+
+def test_sequence_sample_dnsm(pcp_df, dnsm_burrito):
+    """Test that the DASM burrito can sample sequences with mutation counts similar to
+    real data."""
+    # Check that on average, the difference in Hamming distance between
+    # sampled sequences and actual sequences to their parents is close to 0
+    parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
+    branch_lengths = dnsm_burrito.val_dataset.branch_lengths
+
+    # Get the predictions from codon_probs_of_parent_seq
+    dnsm_crepe = dnsm_burrito.to_crepe()
+    neutral_crepe = pretrained.load("ThriftyHumV0.2-45")
+
+    for i, (parent_seq, branch_length) in enumerate(zip(parent_seqs, branch_lengths)):
+        heavy_codon_probs, _ = codon_probs_of_parent_seq(
+            dnsm_crepe,
+            parent_seq,
+            branch_length,
+            neutral_crepe=neutral_crepe,
+            multihit_model=None,
+        )
+
+        # Use only the heavy chain for sampling
+        heavy_parent_seq = parent_seq[0]
+
+        sample_sequence_from_codon_probs(heavy_codon_probs.exp())
