@@ -446,6 +446,11 @@ def neutral_codon_probs_of_seq(
     return neutral_probs
 
 
+def zero_stop_codon_probs(codon_probs: Tensor):
+    """Set stop codon probabilities to zero"""
+    return codon_probs * STOP_CODON_ZAPPER.exp()
+
+
 def adjust_codon_probs_by_aa_selection_factors(
     parent_codon_idxs: Tensor, log_codon_probs: Tensor, log_aa_selection_factors: Tensor
 ):

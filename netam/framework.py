@@ -1138,7 +1138,7 @@ def codon_probs_of_parent_seq(
             sequences.
         branch_length: The branch length of the tree.
     Returns:
-        a tuple of tensors of shape (L, 64) representing the predicted log probabilities of each
+        a tuple of tensors of shape (L, 64) representing the predicted probabilities of each
         codon at each site.
     """
     if neutral_crepe is None:
@@ -1193,10 +1193,12 @@ def codon_probs_of_parent_seq(
     )
 
     return tuple(
-        molevol.adjust_codon_probs_by_aa_selection_factors(
-            chain_parent_codon_idxs,
-            chain_log_codon_probs,
-            chain_log_aa_selection_factors,
+        molevol.zero_stop_codon_probs(
+            molevol.adjust_codon_probs_by_aa_selection_factors(
+                chain_parent_codon_idxs,
+                chain_log_codon_probs,
+                chain_log_aa_selection_factors,
+            ).exp()
         )
         for chain_parent_codon_idxs, chain_log_codon_probs, chain_log_aa_selection_factors in zip(
             parent_codon_idxs, log_codon_probs, log_selection_factors

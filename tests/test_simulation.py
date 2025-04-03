@@ -14,7 +14,7 @@ from netam.dasm import (
     DASMBurrito,
     DASMDataset,
 )
-from netam.molevol import neutral_codon_probs_of_seq
+from netam.molevol import neutral_codon_probs_of_seq, zero_stop_codon_probs
 
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.sequences import (
@@ -24,6 +24,7 @@ from netam.sequences import (
     translate_sequences,
 )
 from test_dnsm import dnsm_burrito
+from netam.codon_table import STOP_CODON_INDICATOR
 
 
 @pytest.fixture(scope="module")
@@ -138,14 +139,22 @@ def test_selection_probs(pcp_df, dasm_pred_burrito):
 
     # Check that the predictions match
     for pred, (heavy_codon_prob, _) in zip(burrito_preds, codon_probs):
+        heavy_codon_prob = heavy_codon_prob.log().type_as(pred)
         print(pred[0].detach().numpy())
         print(heavy_codon_prob[0].detach().numpy())
         print(pred[0].logsumexp(0))
         print(heavy_codon_prob[0].logsumexp(0))
         print((pred[0] - heavy_codon_prob[0]).detach().numpy())
         assert torch.allclose(
-            pred[: len(heavy_codon_prob)], heavy_codon_prob
+            zero_stop_codon_probs(pred[: len(heavy_codon_prob)].exp()), heavy_codon_prob.exp()
         ), "Predictions should match"
+        # Check that stop codons are zeroed out
+        # netam.codon_table.STOP_CODON_INDICATOR is a length 64 tensor with 1s at stop codon indices
+        if not torch.allclose(
+            pred[:, STOP_CODON_INDICATOR == 1].exp(), torch.tensor(0.0)
+        ):
+            print(f"Stop codon probabilities are not zeroed out!")
+            print(pred[:, STOP_CODON_INDICATOR == 1].exp())
 
 
 def test_sequence_sampling(pcp_df, dasm_pred_burrito):
@@ -188,7 +197,7 @@ def test_sequence_sampling(pcp_df, dasm_pred_burrito):
         # Sample multiple sequences for this parent
         num_samples = 40
         sampled_seqs = [
-            sample_sequence_from_codon_probs(heavy_codon_probs.exp())
+            sample_sequence_from_codon_probs(heavy_codon_probs)
             for _ in range(num_samples)
         ]
 
@@ -321,4 +330,4 @@ def test_sequence_sample_dnsm(pcp_df, dnsm_burrito):
         # Use only the heavy chain for sampling
         heavy_parent_seq = parent_seq[0]
 
-        sample_sequence_from_codon_probs(heavy_codon_probs.exp())
+        sample_sequence_from_codon_probs(heavy_codon_probs)
