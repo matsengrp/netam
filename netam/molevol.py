@@ -447,7 +447,7 @@ def neutral_codon_probs_of_seq(
 
 
 def zero_stop_codon_probs(codon_probs: Tensor):
-    """Set stop codon probabilities to zero"""
+    """Set stop codon probabilities to zero."""
     return codon_probs * STOP_CODON_ZAPPER.exp()
 
 

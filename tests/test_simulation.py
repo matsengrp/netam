@@ -146,7 +146,8 @@ def test_selection_probs(pcp_df, dasm_pred_burrito):
         print(heavy_codon_prob[0].logsumexp(0))
         print((pred[0] - heavy_codon_prob[0]).detach().numpy())
         assert torch.allclose(
-            zero_stop_codon_probs(pred[: len(heavy_codon_prob)].exp()), heavy_codon_prob.exp()
+            zero_stop_codon_probs(pred[: len(heavy_codon_prob)].exp()),
+            heavy_codon_prob.exp(),
         ), "Predictions should match"
         # Check that stop codons are zeroed out
         # netam.codon_table.STOP_CODON_INDICATOR is a length 64 tensor with 1s at stop codon indices
