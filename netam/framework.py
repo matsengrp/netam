@@ -477,13 +477,14 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
     return pcp_df
 
 
-def add_shm_model_outputs_to_pcp_df(pcp_df, crepe):
+def add_shm_model_outputs_to_pcp_df(pcp_df, crepe, light_chain_rate_adjustment=0.63):
     pcp_df["nt_rates_h"], pcp_df["nt_csps_h"] = trimmed_shm_model_outputs_of_crepe(
         crepe, pcp_df["parent_h"]
     )
-    pcp_df["nt_rates_l"], pcp_df["nt_csps_l"] = trimmed_shm_model_outputs_of_crepe(
+    light_rates, pcp_df["nt_csps_l"] = trimmed_shm_model_outputs_of_crepe(
         crepe, pcp_df["parent_l"]
     )
+    pcp_df["nt_rates_l"] = light_chain_rate_adjustment * light_rates
     return pcp_df
 
 
