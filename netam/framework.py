@@ -484,7 +484,9 @@ def add_shm_model_outputs_to_pcp_df(pcp_df, crepe, light_chain_rate_adjustment=0
     light_rates, pcp_df["nt_csps_l"] = trimmed_shm_model_outputs_of_crepe(
         crepe, pcp_df["parent_l"]
     )
-    pcp_df["nt_rates_l"] = light_chain_rate_adjustment * light_rates
+    pcp_df["nt_rates_l"] = [
+        rates * light_chain_rate_adjustment for rates in light_rates
+    ]
     return pcp_df
 
 
