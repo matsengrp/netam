@@ -291,7 +291,7 @@ def test_selection_factors(pcp_df, dasm_pred_burrito):
     for i, parent_seq in enumerate(parent_seqs):
         aa_seq = tuple(translate_sequences(parent_seq))
         crepe_log_selection_factors = dasm_crepe.model.selection_factors_of_aa_str(
-            aa_seq, zap_diagonal=False
+            aa_seq
         )[0].log()
 
         # Get the corresponding selection factors from the burrito
@@ -327,8 +327,5 @@ def test_sequence_sample_dnsm(pcp_df, dnsm_burrito):
             neutral_crepe=neutral_crepe,
             multihit_model=None,
         )
-
-        # Use only the heavy chain for sampling
-        heavy_parent_seq = parent_seq[0]
 
         sample_sequence_from_codon_probs(heavy_codon_probs)

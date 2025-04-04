@@ -623,9 +623,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         with torch.no_grad():
             return self.represent(*inputs).squeeze(0)
 
-    def selection_factors_of_aa_str(
-        self, aa_sequence: Tuple[str, str], zap_diagonal=True
-    ) -> Tensor:
+    def selection_factors_of_aa_str(self, aa_sequence: Tuple[str, str]) -> Tensor:
         """Do the forward method then exponentiation without gradients from an amino
         acid string.
 
@@ -644,14 +642,29 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
             )
         idx_seq, mask = self.prepare_aa_str(*aa_sequence)
         with torch.no_grad():
-            result = torch.exp(self.forward(idx_seq, mask))
-        if zap_diagonal and self.hyperparameters["output_dim"] >= 20:
-            result = zap_predictions_along_diagonal(
-                result, idx_seq, fill=float("nan")
-            ).squeeze(0)
-        else:
-            result = result.squeeze(0)
+            result = torch.exp(self.forward(idx_seq, mask)).squeeze(0)
         return split_heavy_light_model_outputs(result.cpu(), idx_seq.squeeze(0).cpu())
+
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        """Build a binary log selection matrix from an index-encoded parent sequence.
+
+        Because we're predicting log of the selection factor, we don't use an
+        activation function after the transformer.
+
+        Args:
+            amino_acid_indices: A tensor of shape (B, L) containing the indices of parent AA sequences.
+            mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.
+
+        Returns:
+            A tensor of shape (B, L, out_features) representing the log level
+            of selection for each possible amino acid at each site.
+        """
+        result = self.predict(self.represent(amino_acid_indices, mask))
+        if self.hyperparameters["output_dim"] >= 20:
+            result = zap_predictions_along_diagonal(
+                result, amino_acid_indices, fill=0.0
+            )
+        return result
 
 
 class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
@@ -739,22 +752,6 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
             of selection for each amino acid site.
         """
         return self.linear(representation).squeeze(-1)
-
-    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        """Build a binary log selection matrix from an index-encoded parent sequence.
-
-        Because we're predicting log of the selection factor, we don't use an
-        activation function after the transformer.
-
-        Args:
-            amino_acid_indices: A tensor of shape (B, L) containing the indices of parent AA sequences.
-            mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.
-
-        Returns:
-            A tensor of shape (B, L, out_features) representing the log level
-            of selection for each possible amino acid at each site.
-        """
-        return self.predict(self.represent(amino_acid_indices, mask))
 
 
 def wiggle(x, beta):
@@ -931,9 +928,6 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
     def predict(self, representation: Tensor) -> Tensor:
         # Output layer
         return self.output(representation).squeeze(-1)
-
-    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        return self.predict(self.represent(amino_acid_indices, mask))
 
     @property
     def hyperparameters(self):

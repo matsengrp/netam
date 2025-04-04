@@ -1152,14 +1152,11 @@ def codon_probs_of_parent_seq(
     aa_seqs = tuple(translate_sequences(nt_sequence))
     mask = tuple(aa_mask_tensor_of(chain_aa_seq) for chain_aa_seq in aa_seqs)
     rates, csps = trimmed_shm_model_outputs_of_crepe(neutral_crepe, nt_sequence)
-    # TODO used to be this, but this zaps the diagonal and we can't apply that as a correction to codon probs:
-    # log_selection_factors = selection_crepe([aa_seqs])[0]
+    log_selection_factors = selection_crepe([aa_seqs])[0]
     log_selection_factors = tuple(
         map(
             torch.log,
-            selection_crepe.model.selection_factors_of_aa_str(
-                aa_seqs, zap_diagonal=False
-            ),
+            selection_crepe([aa_seqs])[0],
         )
     )
     if selection_crepe.model.hyperparameters["output_dim"] == 1:
