@@ -1207,6 +1207,8 @@ def sample_sequence_from_codon_probs(codon_probs):
     """Mutate the parent sequence according to the provided codon probabilities. The
     target sequence is chosen by sampling IID from the codon probabilities at each site.
 
+    For reproducibility, use `torch.manual_seed` before calling this function.
+
     Args:
         codon_probs: A tensor of shape (L, 64) representing the
             probabilities of each codon at each site.
