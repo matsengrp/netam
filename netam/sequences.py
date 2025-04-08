@@ -460,8 +460,9 @@ def codon_mask_tensor_of(nt_parent, *other_nt_seqs, aa_length=None):
     return torch.tensor(mask, dtype=torch.bool)
 
 
-def assert_pcp_valid(parent, child, aa_mask=None):
-    """Check that the parent-child pairs are valid.
+def is_pcp_valid(parent, child, aa_mask=None):
+    """Check that the parent-child pairs are valid. Returns True if valid, False
+    otherwise. To be valid, the following conditions must be met:
 
     * The parent and child sequences must be the same length
     * There must be unmasked codons
@@ -477,14 +478,36 @@ def assert_pcp_valid(parent, child, aa_mask=None):
     if aa_mask is None:
         aa_mask = codon_mask_tensor_of(parent, child)
     if len(parent) != len(child):
-        raise ValueError("Parent and child sequences are not the same length.")
+        return False
     if not aa_mask.any():
-        raise ValueError("Parent-child pair is masked in all codons.")
+        return False
     if apply_aa_mask_to_nt_sequence(parent, aa_mask) == apply_aa_mask_to_nt_sequence(
         child, aa_mask
     ):
+        return False
+    return True
+
+
+def assert_pcp_valid(parent, child, aa_mask=None):
+    """Check that the parent-child pairs are valid. Raises a ValueError if not. To be valid,
+    the following conditions must be met:
+
+    * The parent and child sequences must be the same length
+    * There must be unmasked codons
+    * The parent and child sequences must not match after masking codons containing
+      ambiguities.
+
+    Args:
+        parent: The parent sequence.
+        child: The child sequence.
+        aa_mask: The mask tensor for the amino acid sequence. If None, it will be
+            computed from the parent and child sequences.
+    """
+    if not is_pcp_valid(parent, child, aa_mask):
         raise ValueError(
-            "Parent-child nucleotide sequence pair matches after masking codons containing ambiguities. "
+            "either the parent and child sequences are not the same length, "
+            "the parent-child pair is masked in all codons, "
+            "or the parent-child nucleotide sequence pair matches after masking codons containing ambiguities. "
             "To avoid this try filtering data using `netam.sequences.assert_pcp_valid`."
         )
 
