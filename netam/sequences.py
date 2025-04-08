@@ -419,6 +419,31 @@ def codon_mask_tensor_of(nt_parent, *other_nt_seqs, aa_length=None):
     assert len(mask) == aa_length
     return torch.tensor(mask, dtype=torch.bool)
 
+def assert_pcp_valid_bool_return(parent, child, aa_mask=None):
+    """Check that the parent-child pairs are valid.
+
+    * The parent and child sequences must be the same length
+    * There must be unmasked codons
+    * The parent and child sequences must not match after masking codons containing
+      ambiguities.
+
+    Args:
+        parent: The parent sequence.
+        child: The child sequence.
+        aa_mask: The mask tensor for the amino acid sequence. If None, it will be
+            computed from the parent and child sequences.
+    """
+    if aa_mask is None:
+        aa_mask = codon_mask_tensor_of(parent, child)
+    if len(parent) != len(child):
+        return False
+    if not aa_mask.any():
+        return False
+    if apply_aa_mask_to_nt_sequence(parent, aa_mask) == apply_aa_mask_to_nt_sequence(
+        child, aa_mask
+    ):
+        return False
+    return True
 
 def assert_pcp_valid(parent, child, aa_mask=None):
     """Check that the parent-child pairs are valid.
