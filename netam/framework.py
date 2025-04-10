@@ -478,6 +478,16 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
 
 
 def add_shm_model_outputs_to_pcp_df(pcp_df, crepe, light_chain_rate_adjustment=0.63):
+    """Evaluate a neutral model on PCPs.
+
+    Args:
+        pcp_df: DataFrame with columns `parent_h`, `parent_l`, `child_h`, `child_l`
+        crepe: A neutral Crepe
+        light_chain_rate_adjustment: A scaling factor for the light chain rates. This is
+            used to account for the fact that the light chain mutation rate is usually lower than the heavy chain mutation rate.
+    Returns:
+        pcp_df: the input DataFrame with columns `nt_rates_h`, `nt_csps_h`, `nt_rates_l`, and `nt_csps_l` added.
+    """
     pcp_df["nt_rates_h"], pcp_df["nt_csps_h"] = trimmed_shm_model_outputs_of_crepe(
         crepe, pcp_df["parent_h"]
     )
