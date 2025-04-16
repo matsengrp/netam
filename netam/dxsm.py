@@ -327,6 +327,11 @@ class DXSMBurrito(framework.Burrito, ABC):
         multihit_model,
         **optimization_kwargs,
     ):
+        print(parent)
+        print(child)
+        print(nt_rates)
+        print(nt_csps)
+        print(aa_mask)
         sel_matrix = self.build_selection_matrix_from_parent_aa(
             aa_parents_indices, aa_mask
         )
