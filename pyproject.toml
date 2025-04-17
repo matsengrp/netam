@@ -2,4 +2,57 @@
 requires = ["setuptools>=64", "wheel", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools_scm]
+[project]
+name = "netam"
+description = "Neural network models for antibody affinity maturation"
+readme = "README.md"
+authors = [
+    {name = "Matsen Group", email = "ematsen@gmail.com"}
+]
+requires-python = ">=3.9,<3.13"
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3.9",
+]
+dynamic = ["version"]
+dependencies = [
+    "biopython",
+    "natsort",
+    "optuna",
+    "pandas",
+    "pyyaml",
+    "requests",
+    "tensorboardX",
+    "torch",
+    "tqdm",
+    "fire",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "docformatter",
+    "nbconvert",
+    "ipython",
+    "ipykernel",
+    "pytest",
+    "snakemake",
+    "typing_extensions",
+    "seaborn",
+]
+
+[project.urls]
+repository = "https://github.com/matsengrp/netam.git"
+
+[project.scripts]
+netam = "netam.cli:main"
+
+[tool.setuptools]
+packages = ["netam"]
+
+[tool.setuptools.package-data]
+netam = ["py.typed"]
