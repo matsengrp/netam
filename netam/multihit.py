@@ -11,7 +11,6 @@ renormalize. The correction factor for hit class 0 is fixed at 1.
 """
 
 import torch
-from torch.utils.data import Dataset
 from tqdm import tqdm
 import pandas as pd
 from typing import Sequence, List, Tuple
@@ -25,7 +24,7 @@ from netam.hit_class import hit_class_probs_tensor
 from netam import sequences
 from netam.common import stack_heterogeneous
 import netam.framework as framework
-from netam.framework import Burrito
+from netam.framework import Burrito, BranchLengthDataset
 from netam.models import HitClassModel
 
 
@@ -91,7 +90,7 @@ def _observed_hit_classes(parents: Sequence[str], children: Sequence[str]):
     return labels
 
 
-class HitClassDataset(Dataset):
+class HitClassDataset(BranchLengthDataset):
     def __init__(
         self,
         nt_parents: Sequence[str],
@@ -143,6 +142,7 @@ class HitClassDataset(Dataset):
         self.codon_mask = self.observed_hcs > -1
 
         # Make initial branch lengths (will get optimized later).
+        # Setting branch lengths calls update_hit_class_probs.
         self._branch_lengths = torch.tensor(
             [
                 sequences.nt_mutation_frequency(parent, child)

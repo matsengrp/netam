@@ -21,6 +21,7 @@ setup(
         "requests",
         "tensorboardX",
         "torch",
+        "scipy",
         "tqdm",
         "fire",
     ],

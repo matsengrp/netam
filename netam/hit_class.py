@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+from netam import molevol
+from netam.sequences import flatten_codon_idxs
 
 
 # Define the number of bases (e.g., 4 for DNA/RNA)
@@ -64,14 +66,11 @@ def apply_multihit_correction(
     corrections = torch.cat([torch.tensor([0.0]), log_hit_class_factors]).exp()
     reshaped_corrections = corrections[per_parent_hit_class]
     unnormalized_corrected_probs = codon_probs * reshaped_corrections
-    normalizations = torch.sum(
-        unnormalized_corrected_probs, dim=[1, 2, 3], keepdim=True
+    result = molevol.scale_parent_codon_normalization(
+        molevol.flatten_codons(unnormalized_corrected_probs),
+        flatten_codon_idxs(parent_codon_idxs),
     )
-    result = unnormalized_corrected_probs / normalizations
-    if torch.any(torch.isnan(result)):
-        print("NAN found in multihit correction application")
-        assert False
-    return result
+    return molevol.unflatten_codons(result)
 
 
 def hit_class_probs_tensor(
