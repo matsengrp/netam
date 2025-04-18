@@ -327,17 +327,20 @@ class DXSMBurrito(framework.Burrito, ABC):
         multihit_model,
         **optimization_kwargs,
     ):
-        print(parent)
-        print(child)
-        print(nt_rates)
-        print(nt_csps)
-        print(aa_mask)
+        # print(parent)
+        # print(child)
+        # print(nt_rates)
+        # print(nt_csps)
+        # print(aa_mask)
         sel_matrix = self.build_selection_matrix_from_parent_aa(
             aa_parents_indices, aa_mask
         )
+        # This is essential so that it is not interpreted as indices!!
+        assert aa_mask.dtype == torch.bool
         # Masks may be padded at end to account for sequences of different
         # lengths. The first part of the mask up to parent length should be
         # all the valid bits for the sequence.
+        # TODO how does this work for paired???
         trimmed_aa_mask = aa_mask[: len(parent)]
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
             sel_matrix[aa_mask],

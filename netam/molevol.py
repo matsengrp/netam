@@ -5,9 +5,11 @@ states conditioned on there being a substitution.
 """
 
 import numpy as np
+from scipy import optimize
 
 import torch
 from torch import Tensor, optim
+from warnings import warn
 
 from netam.codon_table import CODON_AA_INDICATOR_MATRIX
 
@@ -479,6 +481,12 @@ def mutsel_log_pcp_probability_of(
 
     def log_pcp_probability(log_branch_length: torch.Tensor):
         branch_length = torch.exp(log_branch_length)
+        # print("mutsel_log_pcp_probability_of")
+        # print(parent)
+        # print(child)
+        # print("branch length:", branch_length)
+        # print("rates:", nt_rates)
+        # print("csps:", nt_csps)
         nt_mut_probs = 1.0 - torch.exp(-branch_length * nt_rates)
 
         codon_mutsel, sums_too_big = build_codon_mutsel(
@@ -502,6 +510,8 @@ def mutsel_log_pcp_probability_of(
         ]
 
         child_prob_vector = torch.clamp(child_prob_vector, min=1e-10)
+        # print("mutsel child_prob_vector:")
+        # print(child_prob_vector)
 
         result = torch.sum(torch.log(child_prob_vector))
 
@@ -513,51 +523,39 @@ def mutsel_log_pcp_probability_of(
 
 
 def optimize_branch_length(
+    # TODO remove arguments that aren't used any longer
     log_prob_fn,
     starting_branch_length,
     learning_rate=0.1,
     max_optimization_steps=1000,
-    optimization_tol=1e-3,
-    log_branch_length_lower_threshold=-10.0,
+    optimization_tol=1e-10,
+    log_branch_length_lower_threshold=-15.0,
 ):
-    log_branch_length = torch.tensor(np.log(starting_branch_length), requires_grad=True)
-
-    optimizer = optim.Adam([log_branch_length], lr=learning_rate)
-    prev_log_branch_length = log_branch_length.clone()
-
-    step_idx = 0
-
-    for step_idx in range(max_optimization_steps):
-        # For some PCPs, the optimizer works very hard optimizing very tiny branch lengths.
-        if log_branch_length < log_branch_length_lower_threshold:
-            break
-
-        optimizer.zero_grad()
-
-        loss = -log_prob_fn(log_branch_length)
-        assert torch.isfinite(
-            loss
-        ), f"Loss is not finite on step {step_idx}: perhaps selection has given a probability of zero?"
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_([log_branch_length], max_norm=5.0)
-        optimizer.step()
-        if torch.isnan(log_branch_length):
-            raise ValueError("branch length optimization resulted in NAN")
-
-        change_in_log_branch_length = torch.abs(
-            log_branch_length - prev_log_branch_length
+    upper_bound = 0.0
+    try:
+        result = optimize.minimize_scalar(
+            lambda x: -log_prob_fn(torch.tensor(x)).item(),
+            bracket=(
+                log_branch_length_lower_threshold,
+                np.log(starting_branch_length),
+                upper_bound,
+            ),
+            options={"xtol": optimization_tol, "maxiter": max_optimization_steps},
+            method="brent",
         )
-        if change_in_log_branch_length < optimization_tol:
-            break
+    except ValueError:
+        warn("Optimization failed with invalid bracket. Trying bounded method")
+        raise_upper_bound = True
+        while raise_upper_bound:
+            result = optimize.minimize_scalar(
+                lambda x: -log_prob_fn(torch.tensor(x)).item(),
+                bounds=(log_branch_length_lower_threshold, upper_bound),
+                options={"xatol": optimization_tol, "maxiter": max_optimization_steps},
+                method="bounded",
+            )
+            raise_upper_bound = result.x > upper_bound - 0.1
+            upper_bound = upper_bound + 1
 
-        prev_log_branch_length = log_branch_length.clone()
-
-    if step_idx == max_optimization_steps - 1:
-        print(
-            f"Warning: optimization did not converge after {max_optimization_steps} steps; log branch length is {log_branch_length.detach().item()}"
-        )
-        failed_to_converge = True
-    else:
-        failed_to_converge = False
-
-    return torch.exp(log_branch_length.detach()).item(), failed_to_converge
+    failed_to_converge = not result.success
+    result = result.x
+    return np.exp(result), failed_to_converge
