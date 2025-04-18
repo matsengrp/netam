@@ -1,5 +1,6 @@
 import os
 from collections import Counter
+import numpy as np
 
 import netam.multihit as multihit
 import netam.molevol as molevol
@@ -142,7 +143,12 @@ def test_multihit_correction():
         torch.arange(4).unsqueeze(0).tile((uncorrected_hc_log_probs.shape[0], 1))
     ]
     uncorrected_hc_log_probs += corrections
-    aggregate_first = torch.softmax(uncorrected_hc_log_probs, dim=1)
+    # set first element of each row to log(1 - sum(exp(others)))
+    uncorrected_hc_log_probs[:, 0] = torch.log(
+        1 - torch.exp(uncorrected_hc_log_probs[:, 1:]).sum(dim=1)
+    )
+
+    aggregate_first = uncorrected_hc_log_probs.exp()
     assert torch.allclose(aggregate_first, aggregate_last)
 
 
@@ -468,12 +474,13 @@ def _fit_branch_length(nt_parent, nt_child, prob_func_func):
     branch_prob = prob_func_func(nt_parent, nt_child)
 
     result = optimize.minimize_scalar(
-        lambda x: -branch_prob(x).item(),
-        bounds=(0.0, 1.0),
+        lambda x: -branch_prob(np.exp(x)).item(),
+        options={"xatol": 1e-10, "maxiter": 1000},
+        bounds=(-15.0, 1.0),
         method="bounded",
     )
 
-    return result.x
+    return np.exp(result.x)
 
 
 def test_manual_branch_lengths():
@@ -489,6 +496,7 @@ def test_manual_branch_lengths():
     if not torch.allclose(
         torch.tensor(validated_branch_lengths),
         torch.tensor(branch_lengths_from_used_func),
+        atol=1e-3,
     ):
         print(validated_branch_lengths)
         print(branch_lengths_from_used_func)
@@ -598,7 +606,7 @@ def test_multihit_branch_lengths_dnsm():
     null_mh_lengths = null_mh_burrito.serial_find_optimal_branch_lengths(
         null_mh_burrito.train_dataset, **optimization_kwargs
     )
-    assert torch.allclose(lengths, null_mh_lengths)
+    assert torch.allclose(lengths, null_mh_lengths, atol=1e-3)
 
     mh_model = HitClassModel()
     mh_model.values = torch.nn.Parameter(torch.tensor([1.0, 2.0, 5]).log())

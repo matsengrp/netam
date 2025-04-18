@@ -206,6 +206,20 @@ def aaprob_of_mut_and_sub(
     return aaprobs_of_codon_probs(codon_probs)
 
 
+def flatten_codons(array: Tensor) -> Tensor:
+    """Reshape a tensor from (..., 4, 4, 4) to (..., 64)."""
+    shape = array.shape
+    assert shape[-3:] == (4, 4, 4), "Last three dimensions must be (4, 4, 4)"
+    return array.reshape(shape[:-3] + (64,))
+
+
+def unflatten_codons(array: Tensor) -> Tensor:
+    """Reshape a tensor from (..., 64) to (..., 4, 4, 4)."""
+    shape = array.shape
+    assert shape[-1] == 64, "Last dimension must be 64"
+    return array.reshape(shape[:-1] + (4, 4, 4))
+
+
 def reshape_for_codons(array: Tensor) -> Tensor:
     """Reshape a tensor to add a codon dimension by taking groups of 3 sites.
 
@@ -559,3 +573,35 @@ def optimize_branch_length(
     failed_to_converge = not result.success
     result = result.x
     return np.exp(result), failed_to_converge
+
+
+def scale_parent_codon_normalization(codon_probs, parent_codon_idxs):
+    """Adjust the parent codon probability so that codon probs sum to one at each site.
+
+    Args:
+        codon_probs: The codon probabilities in linear space.
+            Shape: [B, L, 64]
+        parent_codon_idxs (torch.Tensor): The indices of the parent codons.
+            Shape: [B, L]
+    Returns:
+        torch.Tensor: The adjusted codon probabilities.
+            Shape: [B, L, 64]
+    """
+    valid_mask = parent_codon_idxs != sequences.AMBIGUOUS_CODON_IDX  # Shape: [B, L]
+
+    # Zero out the parent indices in codon_probs, while keeping the computation
+    # graph intact.
+    preds_zeroer = torch.ones_like(codon_probs)
+    preds_zeroer[valid_mask, parent_codon_idxs[valid_mask]] = 0.0
+    codon_probs = codon_probs * preds_zeroer
+
+    # Calculate the non-parent sum after zeroing out the parent indices.
+    non_parent_sum = codon_probs[valid_mask, :].sum(dim=-1)
+
+    # Add these parent values back in, again keeping the computation graph intact.
+    preds_parent = torch.zeros_like(codon_probs)
+    preds_parent[valid_mask, parent_codon_idxs[valid_mask]] = 1.0 - non_parent_sum
+    preds = codon_probs + preds_parent
+    # Set ambiguous codons to nan to make sure that we handle them correctly downstream.
+    preds[~valid_mask, :] = float("nan")
+    return preds

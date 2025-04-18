@@ -997,7 +997,11 @@ class HitClassModel(nn.Module):
     ):
         """Forward function takes a tensor of target codon distributions, for each
         observed parent codon, and adjusts the distributions according to the hit class
-        corrections."""
+        corrections.
+
+        Inputs should be in unflattened form, with codons represented in shape (4, 4,
+        4).
+        """
         return apply_multihit_correction(
             parent_codon_idxs, uncorrected_codon_probs, self.values
         )
