@@ -35,6 +35,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "black",
+    "flake8",
     "docformatter",
     "nbconvert",
     "ipython",
