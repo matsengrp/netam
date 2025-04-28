@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 import copy
 import os
 from time import time
+import multiprocessing as mp
+from functools import partial
 
 import pandas as pd
 import numpy as np
@@ -840,6 +842,26 @@ class Burrito(ABC):
             walltime=self.execution_time(),
         )
 
+    def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
+        worker_count = min(mp.cpu_count() // 2, 10)
+        # # The following can be used when one wants a better traceback.
+        # burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
+        # return burrito.serial_find_optimal_branch_lengths(
+        #     dataset, **optimization_kwargs
+        # )
+
+        our_optimize_branch_length = partial(
+            worker_optimize_branch_length,
+            self.__class__,
+        )
+        with mp.Pool(worker_count) as pool:
+            splits = dataset.split(worker_count)
+            results = pool.starmap(
+                our_optimize_branch_length,
+                [(self.model, split, optimization_kwargs) for split in splits],
+            )
+        return torch.cat(results)
+
     def joint_train(
         self,
         epochs=100,
@@ -1083,7 +1105,7 @@ class RSSHMBurrito(TwoLossMixin, SHMBurrito):
             **optimization_kwargs,
         )
 
-    def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
+    def serial_find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
         optimal_lengths = []
         failed_count = 0
 
@@ -1134,3 +1156,9 @@ def burrito_class_of_model(model):
         return RSSHMBurrito
     else:
         return SHMBurrito
+
+
+def worker_optimize_branch_length(burrito_class, model, dataset, optimization_kwargs):
+    """The worker used for parallel branch length optimization."""
+    burrito = burrito_class(None, dataset, copy.deepcopy(model))
+    return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)

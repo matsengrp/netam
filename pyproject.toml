@@ -28,6 +28,7 @@ dependencies = [
     "requests",
     "tensorboardX",
     "torch",
+    "scipy",
     "tqdm",
     "fire",
 ]

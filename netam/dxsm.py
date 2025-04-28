@@ -1,7 +1,5 @@
 from abc import ABC, abstractmethod
 import copy
-import multiprocessing as mp
-from functools import partial
 
 import torch
 
@@ -239,7 +237,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             self.nt_children,
             self.nt_ratess.copy(),
             self.nt_cspss.copy(),
-            self._branch_lengths.copy(),
+            self.branch_lengths.copy(),
             self.aa_parents_idxss.copy(),
             self.aa_children_idxss.copy(),
             self.masks.copy(),
@@ -261,7 +259,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
             self.nt_children[indices].reset_index(drop=True),
             self.nt_ratess[indices],
             self.nt_cspss[indices],
-            self._branch_lengths[indices],
+            self.branch_lengths[indices],
             self.aa_parents_idxss[indices],
             self.aa_children_idxss[indices],
             self.masks[indices],
@@ -330,14 +328,16 @@ class DXSMBurrito(framework.Burrito, ABC):
         sel_matrix = self.build_selection_matrix_from_parent_aa(
             aa_parents_indices, aa_mask
         )
+        # This is essential so that it is not interpreted as indices!!
+        assert aa_mask.dtype == torch.bool
         # Masks may be padded at end to account for sequences of different
-        # lengths. The first part of the mask up to parent length should be
-        # all the valid bits for the sequence.
-        trimmed_aa_mask = aa_mask[: len(parent)]
+        # lengths. The first part of the mask should be
+        # all the valid bits for the sequence. apply_aa_mask_to_nt_sequence
+        # ignores extra mask on the end.
         log_pcp_probability = molevol.mutsel_log_pcp_probability_of(
             sel_matrix[aa_mask],
-            apply_aa_mask_to_nt_sequence(parent, trimmed_aa_mask),
-            apply_aa_mask_to_nt_sequence(child, trimmed_aa_mask),
+            apply_aa_mask_to_nt_sequence(parent, aa_mask),
+            apply_aa_mask_to_nt_sequence(child, aa_mask),
             nt_rates[aa_mask.repeat_interleave(3)],
             nt_csps[aa_mask.repeat_interleave(3)],
             multihit_model,
@@ -395,25 +395,6 @@ class DXSMBurrito(framework.Burrito, ABC):
 
         return torch.tensor(optimal_lengths)
 
-    def find_optimal_branch_lengths(self, dataset, **optimization_kwargs):
-        worker_count = min(mp.cpu_count() // 2, 10)
-        # # The following can be used when one wants a better traceback.
-        # burrito = self.__class__(None, dataset, copy.deepcopy(self.model))
-        # return burrito.serial_find_optimal_branch_lengths(
-        #     dataset, **optimization_kwargs
-        # )
-        our_optimize_branch_length = partial(
-            worker_optimize_branch_length,
-            self.__class__,
-        )
-        with mp.Pool(worker_count) as pool:
-            splits = dataset.split(worker_count)
-            results = pool.starmap(
-                our_optimize_branch_length,
-                [(self.model, split, optimization_kwargs) for split in splits],
-            )
-        return torch.cat(results)
-
     def load_branch_lengths(self, in_csv_prefix):
         if self.train_dataset is not None:
             self.train_dataset.load_branch_lengths(
@@ -455,9 +436,3 @@ class DXSMBurrito(framework.Burrito, ABC):
     @abstractmethod
     def loss_of_batch(self, batch):
         pass
-
-
-def worker_optimize_branch_length(burrito_class, model, dataset, optimization_kwargs):
-    """The worker used for parallel branch length optimization."""
-    burrito = burrito_class(None, dataset, copy.deepcopy(model))
-    return burrito.serial_find_optimal_branch_lengths(dataset, **optimization_kwargs)

@@ -21,7 +21,7 @@ class DDSMDataset(DXSMDataset):
             self.masks,
             self.nt_ratess,
             self.nt_cspss,
-            self._branch_lengths,
+            self.branch_lengths,
         ):
             # Note we are replacing all Ns with As, which means that we need to be careful
             # with masking out these positions later. We do this below.
