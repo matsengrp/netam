@@ -234,6 +234,11 @@ def iter_codons(nt_seq):
         yield nt_seq[i : i + 3]
 
 
+def contains_stop_codon(nt_seq):
+    """Check if a nucleotide sequence contains a stop codon."""
+    return any(codon in STOP_CODONS for codon in iter_codons(nt_seq))
+
+
 def prepare_heavy_light_pair(heavy_seq, light_seq, known_token_count, is_nt=True):
     """Prepare a pair of heavy and light chain sequences for model input.
 

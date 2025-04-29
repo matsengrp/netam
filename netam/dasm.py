@@ -3,15 +3,11 @@
 import torch
 import torch.nn.functional as F
 
-from netam.common import (
-    clamp_probability,
-    BIG,
-)
+from netam.common import BIG
 from netam.dxsm import DXSMDataset, DXSMBurrito
 import netam.molevol as molevol
 
 from netam.sequences import (
-    nt_idx_tensor_of_str,
     codon_idx_tensor_of_str_ambig,
     AMBIGUOUS_CODON_IDX,
 )
@@ -70,44 +66,19 @@ class DASMDataset(DXSMDataset):
             self.nt_cspss,
             self.branch_lengths,
         ):
-            # Note we are replacing all Ns with As, which means that we need to be careful
-            # with masking out these positions later. We do this below.
-            parent_idxs = nt_idx_tensor_of_str(nt_parent.replace("N", "A"))
-            parent_len = len(nt_parent)
-
-            mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
-            nt_csps = nt_csps[:parent_len, :]
-            nt_mask = mask.repeat_interleave(3)[: len(nt_parent)]
-            molevol.check_csps(parent_idxs[nt_mask], nt_csps[: len(nt_parent)][nt_mask])
-
-            neutral_codon_probs = molevol.neutral_codon_probs(
-                parent_idxs.reshape(-1, 3),
-                mut_probs.reshape(-1, 3),
-                nt_csps.reshape(-1, 3, 4),
+            neutral_codon_probs = molevol.neutral_codon_probs_of_seq(
+                nt_parent,
+                mask,
+                nt_rates,
+                nt_csps,
+                branch_length,
                 multihit_model=self.multihit_model,
             )
-
-            if not torch.isfinite(neutral_codon_probs).all():
-                print("Found a non-finite neutral_codon_prob")
-                print(f"nt_parent: {nt_parent}")
-                print(f"mask: {mask}")
-                print(f"nt_rates: {nt_rates}")
-                print(f"nt_csps: {nt_csps}")
-                print(f"branch_length: {branch_length}")
-                raise ValueError(
-                    f"neutral_codon_probs is not finite: {neutral_codon_probs}"
-                )
-
-            # Ensure that all values are positive before taking the log later
-            neutral_codon_probs = clamp_probability(neutral_codon_probs)
-
             pad_len = self.max_aa_seq_len - neutral_codon_probs.shape[0]
             if pad_len > 0:
                 neutral_codon_probs = F.pad(
                     neutral_codon_probs, (0, 0, 0, pad_len), value=1e-8
                 )
-            # Here we zero out masked positions.
-            neutral_codon_probs *= mask[:, None]
 
             neutral_codon_probs_l.append(neutral_codon_probs)
 
@@ -196,29 +167,17 @@ class DASMBurrito(DXSMBurrito):
             batch
         )
 
-        # This code block, in other burritos, is done in a separate function,
+        # This code block, in other burritos, is partly done in a separate function,
         # but we can't do that here because we need to normalize the
         # probabilities in a way that is not possible without having the index
         # of the parent codon. Namely, we need to set the parent codon to 1 -
         # sum(children).
 
-        # The aa_codon_indicator_matrix lifts things up from aa land to codon land.
-        log_preds = (
-            log_neutral_codon_probs
-            + log_selection_factors @ self.aa_codon_indicator_matrix
-            + self.stop_codon_zapper
+        log_preds = molevol.adjust_codon_probs_by_aa_selection_factors(
+            batch["codon_parents_idxs"].to(self.device),
+            log_neutral_codon_probs,
+            log_selection_factors,
         )
-        assert torch.isnan(log_preds).sum() == 0
-
-        parent_indices = batch["codon_parents_idxs"].to(self.device)  # Shape: [B, L]
-
-        preds = molevol.set_parent_codon_prob(torch.exp(log_preds), parent_indices)
-
-        # We have to clamp the predictions to avoid log(0) issues.
-        preds = clamp_probability(preds)
-
-        log_preds = torch.log(preds)
-
         return log_preds
 
     def loss_of_batch(self, batch):

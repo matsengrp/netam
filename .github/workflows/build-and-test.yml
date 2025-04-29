@@ -55,6 +55,7 @@ jobs:
       - name: Test
         shell: bash -l {0}
         run: |
+          set -e
           cd main
           make test
           make notebooks
