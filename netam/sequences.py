@@ -489,6 +489,15 @@ def assert_pcp_valid(parent, child, aa_mask=None):
         )
 
 
+def assert_pcp_valid_return_bool(*args, **kwargs):
+    """Wraps assert_pcp_valid to return a boolean instead of raising an exception."""
+    try:
+        assert_pcp_valid(*args, **kwargs)
+    except ValueError:
+        return False
+    return True
+
+
 # Reference: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
