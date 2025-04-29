@@ -661,6 +661,8 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         """
         result = self.predict(self.represent(amino_acid_indices, mask))
         if self.hyperparameters["output_dim"] >= 20:
+            # To match the paper, we set wildtype aa selection factors to 1,
+            # so that synonymous codon probabilities are not modified.
             result = zap_predictions_along_diagonal(
                 result, amino_acid_indices, fill=0.0
             )
