@@ -10,6 +10,8 @@ from importlib.resources import files
 import requests
 
 from netam.framework import load_crepe
+from netam.models import HitClassModel
+
 
 with files(__package__).joinpath("_pretrained") as pretrained_path:
     PRETRAINED_DIR = str(pretrained_path)
@@ -41,6 +43,13 @@ for local_file, remote, models_dir, models in PACKAGE_LOCATIONS_AND_CONTENTS:
 
     for model in models:
         MODEL_TO_LOCAL[model] = (local_file, models_dir)
+
+
+PRETRAINED_MULTIHIT_MODELS = {
+    # Trained using the notebook
+    # thrifty-experiments-1/human/multihit_model_exploration.ipynb
+    "ThriftyHumV0.2-59-hc-tangshm": [-0.1626,  0.0692,  0.5076],
+}
 
 
 def local_path_for_model(model_name: str):
@@ -88,3 +97,20 @@ def load(model_name: str, device=None):
 
     local_crepe_path = local_path_for_model(model_name)
     return load_crepe(local_crepe_path, device=device)
+
+
+def load_multihit(model_name: str, device=None):
+    """Load a pre-trained multihit model."""
+    if model_name is None:
+        return None
+    else:
+        try:
+            parameters = PRETRAINED_MULTIHIT_MODELS[model_name]
+        except KeyError:
+            raise ValueError(
+                f"Model {model_name} not found in pre-trained multihit models."
+            )
+        model = HitClassModel()
+        model.reinitialize_weights(parameters=parameters)
+        model.eval()
+        return model.to(device)

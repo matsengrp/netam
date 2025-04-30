@@ -574,8 +574,10 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         self,
         output_dim: int = 1,
         known_token_count: int = MAX_AA_TOKEN_IDX + 1,
-        neutral_model_name=DEFAULT_NEUTRAL_MODEL,
+        neutral_model_name: str = DEFAULT_NEUTRAL_MODEL,
+        multihit_model_name: str = None,
         train_timestamp: str = None,
+        model_type: str = None,
     ):
         super().__init__()
         if train_timestamp is None:
@@ -584,6 +586,8 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         self.output_dim = output_dim
         self.known_token_count = known_token_count
         self.neutral_model_name = neutral_model_name
+        self.multihit_model_name = multihit_model_name
+        self.model_type = model_type
 
     @property
     def hyperparameters(self):
@@ -591,7 +595,9 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
             "output_dim": self.output_dim,
             "known_token_count": self.known_token_count,
             "neutral_model_name": self.neutral_model_name,
+            "multihit_model_name": self.multihit_model_name,
             "train_timestamp": self.train_timestamp,
+            "model_type": self.model_type,
         }
 
     @property
@@ -1015,5 +1021,5 @@ class HitClassModel(nn.Module):
             parent_codon_idxs, uncorrected_codon_probs, self.values
         )
 
-    def reinitialize_weights(self):
-        self.values = nn.Parameter(torch.tensor([0.0, 0.0, 0.0]))
+    def reinitialize_weights(self, parameters=[0.0, 0.0, 0.0]):
+        self.values = nn.Parameter(torch.tensor(parameters))
