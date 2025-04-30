@@ -574,7 +574,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         self,
         output_dim: int = 1,
         known_token_count: int = MAX_AA_TOKEN_IDX + 1,
-        neutral_model=DEFAULT_NEUTRAL_MODEL,
+        neutral_model_name=DEFAULT_NEUTRAL_MODEL,
         train_timestamp: str = None,
     ):
         super().__init__()
@@ -583,14 +583,14 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         self.train_timestamp = train_timestamp
         self.output_dim = output_dim
         self.known_token_count = known_token_count
-        self.neutral_model = neutral_model
+        self.neutral_model_name = neutral_model_name
 
     @property
     def hyperparameters(self):
         return {
             "output_dim": self.output_dim,
             "known_token_count": self.known_token_count,
-            "neutral_model": self.neutral_model,
+            "neutral_model_name": self.neutral_model_name,
             "train_timestamp": self.train_timestamp,
         }
 
