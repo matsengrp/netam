@@ -495,6 +495,19 @@ def add_shm_model_outputs_to_pcp_df(pcp_df, crepe, light_chain_rate_adjustment=0
     Returns:
         pcp_df: the input DataFrame with columns `nt_rates_h`, `nt_csps_h`, `nt_rates_l`, and `nt_csps_l` added.
     """
+    max_seq_len = max(
+        pcp_df["parent_h"].str.len().max(), pcp_df["parent_l"].str.len().max()
+    )
+    if crepe.encoder.site_count < max_seq_len:
+        print(
+            f"Neutral model can only handle sequences of length {crepe.encoder.site_count} "
+            f"but the longest sequence in the dataset is {max_seq_len}. "
+            "Filtering out sequences that are too long."
+        )
+        pcp_df = pcp_df[pcp_df["parent_h"].str.len() <= crepe.encoder.site_count]
+        pcp_df = pcp_df[pcp_df["parent_l"].str.len() <= crepe.encoder.site_count]
+
+
     pcp_df["nt_rates_h"], pcp_df["nt_csps_h"] = trimmed_shm_model_outputs_of_crepe(
         crepe, pcp_df["parent_h"]
     )
