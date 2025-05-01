@@ -3,6 +3,7 @@
 import pytest
 import torch
 
+from netam.pretrained import load_multihit
 from netam.framework import (
     codon_probs_of_parent_seq,
     trimmed_shm_model_outputs_of_crepe,
@@ -32,10 +33,6 @@ def dasm_pred_burrito(pcp_df):
     force_spawn()
     """Fixture that returns the DASM Burrito object."""
     pcp_df["in_train"] = False
-    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(
-        pcp_df, MAX_KNOWN_TOKEN_COUNT
-    )
-    train_dataset = val_dataset
 
     model = TransformerBinarySelectionModelWiggleAct(
         nhead=2,
@@ -43,7 +40,15 @@ def dasm_pred_burrito(pcp_df):
         dim_feedforward=256,
         layer_count=2,
         output_dim=20,
+        model_type="dasm",
     )
+
+    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(
+        pcp_df,
+        MAX_KNOWN_TOKEN_COUNT,
+        multihit_model=load_multihit(model.multihit_model_name),
+    )
+    train_dataset = val_dataset
 
     burrito = DASMBurrito(
         train_dataset,
@@ -88,7 +93,7 @@ def test_neutral_probs(pcp_df, dasm_pred_burrito):
                 rates[0],
                 csps[0],
                 branch_length,
-                multihit_model=None,
+                multihit_model=dasm_pred_burrito.val_dataset.multihit_model,
             ).log()
         )
     # Check that the predictions match
@@ -132,7 +137,7 @@ def test_selection_probs(pcp_df, dasm_pred_burrito):
             parent_seq,
             branch_length,
             neutral_crepe=neutral_crepe,
-            multihit_model=None,
+            multihit_model=dasm_pred_burrito.val_dataset.multihit_model,
         )
         for parent_seq, branch_length in zip(parent_seqs, branch_lengths)
     )
@@ -148,6 +153,7 @@ def test_selection_probs(pcp_df, dasm_pred_burrito):
         assert torch.allclose(
             zero_stop_codon_probs(pred[: len(heavy_codon_prob)].exp()),
             heavy_codon_prob.exp(),
+            atol=1e-8,
         ), "Predictions should match"
         # Check that stop codons are zeroed out
         # netam.codon_table.STOP_CODON_INDICATOR is a length 64 tensor with 1s at stop codon indices

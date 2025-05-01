@@ -1024,3 +1024,14 @@ class HitClassModel(nn.Module):
 
     def reinitialize_weights(self, parameters=[0.0, 0.0, 0.0]):
         self.values = nn.Parameter(torch.tensor(parameters))
+
+    def to_weights(self):
+        return list(self.values.detach().numpy())
+
+    @classmethod
+    def from_weights(cls, weights):
+        assert len(weights) == 3
+        model = cls()
+        model.reinitialize_weights(weights)
+        model.eval()
+        return model

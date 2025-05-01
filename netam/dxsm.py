@@ -1,3 +1,4 @@
+from warnings import warn
 from abc import ABC, abstractmethod
 import copy
 
@@ -16,6 +17,7 @@ from netam.common import (
     stack_heterogeneous,
     zap_predictions_along_diagonal,
 )
+from netam.pretrained import name_and_multihit_model_match
 import netam.framework as framework
 import netam.molevol as molevol
 from netam.sequences import (
@@ -302,6 +304,37 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
 class DXSMBurrito(framework.Burrito, ABC):
     # Not defining model_type here; instead defining it in subclasses.
     # This will raise an error if we aren't using a subclass.
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Does model metadata match dataset?
+        # TODO Don't have a way to check neutral model here... should we add
+        # info about neutral model to dataset?
+
+        # TODO make these all warnings -- some tests require them to not fail
+
+        # For backward compatibility -- it's not possible to determine what an
+        # old crepe is from its metadata :(
+        if self.model.model_type != "unknown":
+            assert (
+                self.model.model_type == self.model_type
+            ), f"Model type {self.model.model_type} does not match expected type {self.model_type}"
+        else:
+            warn(
+                "Model type is unknown. This is likely an old model that does not include "
+                "its type (dnsm, ddsm, or dasm, etc.) in its metadata. Be sure the model "
+                "type matches the Dataset and Burrito type."
+            )
+
+        assert name_and_multihit_model_match(
+            self.model.hyperparameters["multihit_model_name"],
+            self.val_dataset.multihit_model,
+        )
+        if self.train_dataset is not None:
+            assert name_and_multihit_model_match(
+                self.model.hyperparameters["multihit_model_name"],
+                self.train_dataset.multihit_model,
+            )
 
     def selection_factors_of_aa_idxs(self, aa_idxs, aa_mask):
         """Get the log selection factors for a batch of amino acid indices.

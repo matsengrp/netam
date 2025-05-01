@@ -3,6 +3,7 @@ import os
 import torch
 import pytest
 
+from netam.pretrained import load_multihit
 from netam.framework import (
     crepe_exists,
     load_crepe,
@@ -31,12 +32,19 @@ def dnsm_burrito(pcp_df):
     force_spawn()
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
-    train_dataset, val_dataset = DNSMDataset.train_val_datasets_of_pcp_df(
-        pcp_df, MAX_KNOWN_TOKEN_COUNT
-    )
 
     model = TransformerBinarySelectionModelWiggleAct(
-        nhead=2, d_model_per_head=4, dim_feedforward=256, layer_count=2
+        nhead=2,
+        d_model_per_head=4,
+        dim_feedforward=256,
+        layer_count=2,
+        model_type="dnsm",
+    )
+
+    train_dataset, val_dataset = DNSMDataset.train_val_datasets_of_pcp_df(
+        pcp_df,
+        MAX_KNOWN_TOKEN_COUNT,
+        multihit_model=load_multihit(model.multihit_model_name),
     )
 
     burrito = DNSMBurrito(

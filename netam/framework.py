@@ -341,10 +341,25 @@ def load_crepe(prefix, device=None):
             f"Model class '{model_class_name}' not found in 'models' module."
         )
 
-    if issubclass(model_class, models.TransformerBinarySelectionModelLinAct):
+    # Handle defaults for model hyperparameters that are missing because the
+    # model was trained before they were added
+    if issubclass(model_class, models.AbstractBinarySelectionModel):
         if "known_token_count" not in config["model_hyperparameters"]:
-            # Assume the model is from before any new tokens were added, so 21
-            config["model_hyperparameters"]["known_token_count"] = 21
+            if issubclass(model_class, models.TransformerBinarySelectionModelLinAct):
+                # Assume the model is from before any new tokens were added, so 21
+                config["model_hyperparameters"]["known_token_count"] = 21
+            else:
+                # Then it's a single model...
+                config["model_hyperparameters"]["known_token_count"] = 22
+        default_vals = {
+            "neutral_model_name": "ThriftyHumV0.2-59",
+            "multihit_model_name": None,
+            "train_timestamp": "old",
+            "model_type": "unknown",
+        }
+        for key, val in default_vals.items():
+            if key not in config["model_hyperparameters"]:
+                config["model_hyperparameters"][key] = val
 
     model = model_class(**config["model_hyperparameters"])
 
