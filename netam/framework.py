@@ -507,7 +507,6 @@ def add_shm_model_outputs_to_pcp_df(pcp_df, crepe, light_chain_rate_adjustment=0
         pcp_df = pcp_df[pcp_df["parent_h"].str.len() <= crepe.encoder.site_count]
         pcp_df = pcp_df[pcp_df["parent_l"].str.len() <= crepe.encoder.site_count]
 
-
     pcp_df["nt_rates_h"], pcp_df["nt_csps_h"] = trimmed_shm_model_outputs_of_crepe(
         crepe, pcp_df["parent_h"]
     )
