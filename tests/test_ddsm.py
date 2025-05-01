@@ -1,6 +1,7 @@
 import torch
 import pytest
 
+from netam.pretrained import load_multihit
 from netam.common import force_spawn
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.ddsm import (
@@ -21,16 +22,19 @@ def ddsm_burrito(pcp_df):
     """Fixture that returns the DNSM Burrito object."""
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
-    train_dataset, val_dataset = DDSMDataset.train_val_datasets_of_pcp_df(
-        pcp_df, MAX_KNOWN_TOKEN_COUNT
-    )
-
     model = TransformerBinarySelectionModelWiggleAct(
         nhead=2,
         d_model_per_head=4,
         dim_feedforward=256,
         layer_count=2,
         output_dim=20,
+        model_type="ddsm",
+    )
+
+    train_dataset, val_dataset = DDSMDataset.train_val_datasets_of_pcp_df(
+        pcp_df,
+        MAX_KNOWN_TOKEN_COUNT,
+        multihit_model=load_multihit(model.multihit_model_name),
     )
 
     burrito = DDSMBurrito(

@@ -6,6 +6,7 @@ It was inspired by the `load_model` module of [AbLang2](https://github.com/oxpig
 import os
 import zipfile
 from importlib.resources import files
+import numpy as np
 
 import requests
 
@@ -111,7 +112,20 @@ def load_multihit(model_name: str, device=None):
                 f"Model {model_name} not found in pre-trained multihit models."
             )
         print(f"Loading multihit model {model_name}")
-        model = HitClassModel()
-        model.reinitialize_weights(parameters=parameters)
-        model.eval()
+        model = HitClassModel.from_weights(parameters)
         return model.to(device)
+
+
+def name_and_multihit_model_match(model_name: str, multihit_model: HitClassModel):
+    """Check if the model name and multihit model match."""
+    if model_name is None:
+        return multihit_model is None
+    else:
+        if multihit_model is None:
+            return False
+        elif model_name in PRETRAINED_MULTIHIT_MODELS:
+            return np.allclose(
+                multihit_model.to_weights(), PRETRAINED_MULTIHIT_MODELS[model_name]
+            )
+        else:
+            return model_name == str(multihit_model.to_weights())

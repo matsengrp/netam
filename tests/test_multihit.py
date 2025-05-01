@@ -182,9 +182,15 @@ def make_dasm_burrito(multihit_model, pcp_df):
     dataset = DASMDataset.of_pcp_df(
         pcp_df, MAX_KNOWN_TOKEN_COUNT, multihit_model=multihit_model
     )
+    if multihit_model is not None:
+        multihit_model_name = str(multihit_model.to_weights())
+    else:
+        multihit_model_name = None
     model = SingleValueBinarySelectionModel(
         output_dim=20,
         known_token_count=MAX_KNOWN_TOKEN_COUNT,
+        model_type="dasm",
+        multihit_model_name=multihit_model_name,
     )
     model.single_value = torch.nn.Parameter(torch.tensor(0.0))
     burrito = DASMBurrito(
@@ -202,7 +208,13 @@ def make_dnsm_burrito(multihit_model, pcp_df):
     dataset = DNSMDataset.of_pcp_df(
         pcp_df, MAX_KNOWN_TOKEN_COUNT, multihit_model=multihit_model
     )
-    model = SingleValueBinarySelectionModel()
+    if multihit_model is not None:
+        multihit_model_name = str(multihit_model.to_weights())
+    else:
+        multihit_model_name = None
+    model = SingleValueBinarySelectionModel(
+        model_type="dnsm", multihit_model_name=multihit_model_name
+    )
     model.single_value = torch.nn.Parameter(torch.tensor(0.0))
     burrito = DNSMBurrito(
         dataset,
