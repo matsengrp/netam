@@ -48,7 +48,7 @@ for local_file, remote, models_dir, models in PACKAGE_LOCATIONS_AND_CONTENTS:
 PRETRAINED_MULTIHIT_MODELS = {
     # Trained using the notebook
     # thrifty-experiments-1/human/multihit_model_exploration.ipynb
-    "ThriftyHumV0.2-59-hc-tangshm": [-0.1626,  0.0692,  0.5076],
+    "ThriftyHumV0.2-59-hc-tangshm": [-0.1626, 0.0692, 0.5076],
 }
 
 
@@ -94,7 +94,7 @@ def load(model_name: str, device=None):
     If the model is not already downloaded, it will be downloaded from the appropriate
     URL and stashed in the PRETRAINED_DIR.
     """
-
+    print(f"Loading model {model_name}")
     local_crepe_path = local_path_for_model(model_name)
     return load_crepe(local_crepe_path, device=device)
 
@@ -110,6 +110,7 @@ def load_multihit(model_name: str, device=None):
             raise ValueError(
                 f"Model {model_name} not found in pre-trained multihit models."
             )
+        print(f"Loading multihit model {model_name}")
         model = HitClassModel()
         model.reinitialize_weights(parameters=parameters)
         model.eval()

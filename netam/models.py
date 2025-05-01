@@ -31,6 +31,7 @@ from typing import Tuple
 # If this changes, we need to update old models that may not have neutral model
 # in their metadata
 DEFAULT_NEUTRAL_MODEL = "ThriftyHumV0.2-59"
+DEFAULT_MULTIHIT_MODEL = "ThriftyHumV0.2-59-hc-tangshm"
 
 
 warnings.filterwarnings(
@@ -575,7 +576,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         output_dim: int = 1,
         known_token_count: int = MAX_AA_TOKEN_IDX + 1,
         neutral_model_name: str = DEFAULT_NEUTRAL_MODEL,
-        multihit_model_name: str = None,
+        multihit_model_name: str = DEFAULT_MULTIHIT_MODEL,
         train_timestamp: str = None,
         model_type: str = None,
     ):
