@@ -588,6 +588,10 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
         self.known_token_count = known_token_count
         self.neutral_model_name = neutral_model_name
         self.multihit_model_name = multihit_model_name
+        if model_type is None:
+            warnings.warn(
+                "model_type should be specified. Either 'dasm', 'dnsm', or 'ddsm' expected."
+            )
         self.model_type = model_type
 
     @property
