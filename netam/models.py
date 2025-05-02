@@ -1026,11 +1026,11 @@ class HitClassModel(nn.Module):
             parent_codon_idxs, uncorrected_codon_probs, self.values
         )
 
-    def reinitialize_weights(self, parameters=[0.0, 0.0, 0.0]):
+    def reinitialize_weights(self, parameters=(0.0, 0.0, 0.0)):
         self.values = nn.Parameter(torch.tensor(parameters))
 
     def to_weights(self):
-        return list(self.values.detach().numpy())
+        return tuple(self.values.detach().numpy())
 
     @classmethod
     def from_weights(cls, weights):
