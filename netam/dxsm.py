@@ -311,14 +311,14 @@ class DXSMBurrito(framework.Burrito, ABC):
         # TODO Don't have a way to check neutral model here... should we add
         # info about neutral model to dataset?
 
-        # TODO make these all warnings -- some tests require them to not fail
-
         # For backward compatibility -- it's not possible to determine what an
         # old crepe is from its metadata :(
         if self.model.model_type != "unknown":
-            assert (
-                self.model.model_type == self.model_type
-            ), f"Model type {self.model.model_type} does not match expected type {self.model_type}"
+            if not (self.model.model_type == self.model_type):
+                warn(
+                    f"Model type {self.model.model_type} does not match expected type {self.model_type}. "
+                    "To avoid this warning, provide `model_type` argument to model constructor."
+                )
         else:
             warn(
                 "Model type is unknown. This is likely an old model that does not include "
@@ -326,15 +326,28 @@ class DXSMBurrito(framework.Burrito, ABC):
                 "type matches the Dataset and Burrito type."
             )
 
-        assert name_and_multihit_model_match(
-            self.model.hyperparameters["multihit_model_name"],
+        multihit_model_name = self.model.hyperparameters["multihit_model_name"]
+        if not name_and_multihit_model_match(
+            multihit_model_name,
             self.val_dataset.multihit_model,
-        )
-        if self.train_dataset is not None:
-            assert name_and_multihit_model_match(
-                self.model.hyperparameters["multihit_model_name"],
-                self.train_dataset.multihit_model,
+        ):
+            warn(
+                "Validation dataset multihit model does not match the one referenced in "
+                f"provided model metadata: '{multihit_model_name}'. "
+                "To fix this, provide the `multihit_model_name` argument to the model "
+                "constructor, or provide the corresponding multihit model instance to the Dataset constructor."
             )
+        if self.train_dataset is not None:
+            if not name_and_multihit_model_match(
+                multihit_model_name,
+                self.train_dataset.multihit_model,
+            ):
+                warn(
+                    "Training dataset multihit model does not match the one referenced in "
+                    f"provided model metadata: '{multihit_model_name}'. "
+                    "To fix this, provide the `multihit_model_name` argument to the model "
+                    "constructor, or provide the corresponding multihit model instance to the Dataset constructor."
+                )
 
     def selection_factors_of_aa_idxs(self, aa_idxs, aa_mask):
         """Get the log selection factors for a batch of amino acid indices.
