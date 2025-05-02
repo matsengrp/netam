@@ -46,10 +46,13 @@ for local_file, remote, models_dir, models in PACKAGE_LOCATIONS_AND_CONTENTS:
         MODEL_TO_LOCAL[model] = (local_file, models_dir)
 
 
+# Names here are arbitrarily chosen (they are not processed or interpreted in
+# any way by the code), and should describe the origin of the
+# multihit model.
 PRETRAINED_MULTIHIT_MODELS = {
     # Trained using the notebook
     # thrifty-experiments-1/human/multihit_model_exploration.ipynb
-    "ThriftyHumV0.2-59-hc-tangshm": [-0.1626, 0.0692, 0.5076],
+    "ThriftyHumV0.2-59-hc-tangshm": (-0.1626, 0.0692, 0.5076),
 }
 
 
