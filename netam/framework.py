@@ -458,6 +458,10 @@ def standardize_heavy_light_columns(pcp_df):
                     fill_value = pd.NA
                 pcp_df.loc[is_heavy_chain, col + "_l"] = fill_value
                 pcp_df.loc[~is_heavy_chain, col + "_h"] = fill_value
+                # Avoid implicit cast to float, even when column contains no NaNs
+                if pd.api.types.is_integer_dtype(pcp_df[col]):
+                    for dcol in [col + "_h", col + "_l"]:
+                        pcp_df[dcol] = pcp_df[dcol].astype("Int64")
 
     if (pcp_df["parent_h"].str.len() + pcp_df["parent_l"].str.len()).min() < 3:
         raise ValueError("At least one PCP has fewer than three nucleotides.")
