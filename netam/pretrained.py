@@ -53,6 +53,7 @@ PRETRAINED_MULTIHIT_MODELS = {
     # Trained using the notebook
     # thrifty-experiments-1/human/multihit_model_exploration.ipynb
     "ThriftyHumV0.2-59-hc-tangshm": (-0.1626, 0.0692, 0.5076),
+    "ThriftyHumV0.2-59-hc-shmoof": (-0.2068,  0.1603,  0.6317),
 }
 
 
