@@ -81,7 +81,7 @@ def test_neutral_probs(pcp_df, dasm_pred_burrito):
 
     branch_lengths = dasm_pred_burrito.val_dataset.branch_lengths
 
-    neutral_crepe = pretrained.load("ThriftyHumV0.2-45")
+    neutral_crepe = pretrained.load(dasm_pred_burrito.model.neutral_model_name)
     codon_probs = []
     for (nt_parent, _), branch_length in zip(parent_seqs, branch_lengths):
         rates, csps = trimmed_shm_model_outputs_of_crepe(neutral_crepe, [nt_parent])
@@ -98,14 +98,15 @@ def test_neutral_probs(pcp_df, dasm_pred_burrito):
         )
     # Check that the predictions match
     for pred, heavy_codon_prob in zip(burrito_preds, codon_probs):
-        print(pred[0].detach().numpy())
-        print(heavy_codon_prob[0].detach().numpy())
-        print(pred[0].logsumexp(0))
-        print(heavy_codon_prob[0].logsumexp(0))
-        print((pred[0] - heavy_codon_prob[0]).detach().numpy())
-        assert torch.allclose(
+        if not torch.allclose(
             pred[: len(heavy_codon_prob)], heavy_codon_prob
-        ), "Predictions should match"
+        ):
+            print(pred[: len(heavy_codon_prob)].detach().numpy())
+            print(heavy_codon_prob.detach().numpy())
+            print(pred[: len(heavy_codon_prob)].logsumexp(-1))
+            print(heavy_codon_prob.logsumexp(-1))
+            print("max difference seen", (pred[: len(heavy_codon_prob)] - heavy_codon_prob).detach().abs().max().numpy())
+            assert False, "Predictions should match"
 
 
 def test_selection_probs(pcp_df, dasm_pred_burrito):
@@ -129,7 +130,7 @@ def test_selection_probs(pcp_df, dasm_pred_burrito):
 
     # Get the predictions from codon_probs_of_parent_seq
     dasm_crepe = dasm_pred_burrito.to_crepe()
-    neutral_crepe = pretrained.load("ThriftyHumV0.2-45")
+    neutral_crepe = pretrained.load(dasm_pred_burrito.model.neutral_model_name)
     print("Computing from scratch")
     codon_probs = list(
         codon_probs_of_parent_seq(
@@ -180,7 +181,7 @@ def test_sequence_sampling(pcp_df, dasm_pred_burrito):
 
     # Get the predictions from codon_probs_of_parent_seq
     dasm_crepe = dasm_pred_burrito.to_crepe()
-    neutral_crepe = pretrained.load("ThriftyHumV0.2-45")
+    neutral_crepe = pretrained.load(dasm_pred_burrito.model.neutral_model_name)
 
     def hamming_distance(seq1, seq2):
         return sum(a != b for a, b in zip(seq1, seq2))
@@ -323,7 +324,7 @@ def test_sequence_sample_dnsm(pcp_df, dnsm_burrito):
 
     # Get the predictions from codon_probs_of_parent_seq
     dnsm_crepe = dnsm_burrito.to_crepe()
-    neutral_crepe = pretrained.load("ThriftyHumV0.2-45")
+    neutral_crepe = pretrained.load(dnsm_burrito.model.neutral_model_name)
 
     for i, (parent_seq, branch_length) in enumerate(zip(parent_seqs, branch_lengths)):
         heavy_codon_probs, _ = codon_probs_of_parent_seq(
