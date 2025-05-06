@@ -242,8 +242,8 @@ def make_test_pcp_df(len_factor=1, extend_same=0):
     df = pd.DataFrame(
         {"parent": [parent_seq] * 4, "child": child_seqs, "v_gene": ["IGHV1-39*01"] * 4}
     )
-    for child in child_seqs:
-        print(sum(c1 != c2 for c1, c2 in zip(parent_seq, child)))
+    # for child in child_seqs:
+    #     print(sum(c1 != c2 for c1, c2 in zip(parent_seq, child)))
     # df = pd.DataFrame({"parent": ["ATGTAC"] * 3, "child": ["ATGTAT", "ATGTTG", "ATGGTG"], "v_gene": ["IGHV1-39*01"] * 3})
     pcp_df = framework.standardize_heavy_light_columns(df)
     pcp_df = framework.add_shm_model_outputs_to_pcp_df(
