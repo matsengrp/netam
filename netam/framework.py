@@ -24,10 +24,12 @@ from netam.common import (
     parallelize_function,
 )
 from netam.sequences import (
-    aa_mask_tensor_of,
+    codon_mask_tensor_of,
     codon_idx_tensor_of_str_ambig,
     BASES_AND_N_TO_INDEX,
     BASES,
+    AMBIGUOUS_CODON_IDX,
+    AA_AMBIG_IDX,
     VRC01_NT_SEQ,
     generate_kmers,
     kmer_to_index_of,
@@ -1222,7 +1224,9 @@ def codon_probs_of_parent_seq(
         )
 
     aa_seqs = tuple(translate_sequences(nt_sequence))
-    mask = tuple(aa_mask_tensor_of(chain_aa_seq) for chain_aa_seq in aa_seqs)
+    # We must mask any codons containing N's because we need neutral probs to
+    # do simulation:
+    mask = tuple(codon_mask_tensor_of(chain_nt_seq) for chain_nt_seq in nt_sequence)
     rates, csps = trimmed_shm_model_outputs_of_crepe(neutral_crepe, nt_sequence)
     log_selection_factors = tuple(
         map(
@@ -1238,8 +1242,10 @@ def codon_probs_of_parent_seq(
         for aa_seq, old_selection_factors in zip(aa_seqs, log_selection_factors):
             chain_factors = old_selection_factors.unsqueeze(1).repeat(1, 20)
             parent_indices = aa_idx_tensor_of_str(aa_seq)
-            if len(parent_indices) > 0:
-                chain_factors[torch.arange(len(parent_indices)), parent_indices] = 0.0
+            ambig_aa_mask = parent_indices < AA_AMBIG_IDX
+            unambig_sites = ambig_aa_mask.sum()
+            if unambig_sites > 0:
+                chain_factors[ambig_aa_mask][torch.arange(unambig_sites), parent_indices[ambig_aa_mask]] = 0.0
             new_selection_factors.append(chain_factors)
         log_selection_factors = tuple(new_selection_factors)
 
@@ -1274,6 +1280,8 @@ def codon_probs_of_parent_seq(
     )
 
 
+_CODONS_WITH_AMBIG = CODONS + ["NNN"]
+
 def sample_sequence_from_codon_probs(codon_probs):
     """Mutate the parent sequence according to the provided codon probabilities. The
     target sequence is chosen by sampling IID from the codon probabilities at each site.
@@ -1282,16 +1290,21 @@ def sample_sequence_from_codon_probs(codon_probs):
 
     Args:
         codon_probs: A tensor of shape (L, 64) representing the
-            probabilities of each codon at each site.
+            probabilities of each codon at each site. Any site containing
+            nan pobabilities will be filled with `NNN`.
     Returns:
         A string representing the mutated sequence.
     """
 
+    sampled_codon_indices = torch.full(
+        (codon_probs.shape[0],), AMBIGUOUS_CODON_IDX, dtype=torch.long
+    )
+    unambiguous_codons = ~codon_probs.isnan().any(dim=1)
     # Sample codon indices based on probabilities at each position
-    sampled_codon_indices = torch.multinomial(codon_probs, num_samples=1).squeeze()
+    sampled_codon_indices[unambiguous_codons] = torch.multinomial(codon_probs[unambiguous_codons], num_samples=1).squeeze()
 
     # Convert codon indices to codon strings
-    sampled_codons = [CODONS[idx.item()] for idx in sampled_codon_indices]
+    sampled_codons = [_CODONS_WITH_AMBIG[idx.item()] for idx in sampled_codon_indices]
 
     # Join the codons to form the complete sequence
     mutated_sequence = "".join(sampled_codons)
