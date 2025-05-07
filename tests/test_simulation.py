@@ -21,11 +21,14 @@ from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.sequences import (
     MAX_KNOWN_TOKEN_COUNT,
     aa_mask_tensor_of,
+    nt_idx_tensor_of_str,
     translate_sequence,
     translate_sequences,
+    iter_codons,
 )
 from test_dnsm import dnsm_burrito
 from netam.codon_table import STOP_CODON_INDICATOR
+from netam.hit_class import parent_specific_hit_classes
 
 
 @pytest.fixture(scope="module")
@@ -75,6 +78,7 @@ def test_neutral_probs(pcp_df, dasm_pred_burrito):
 
     print("recomputing branch lengths")
     dasm_pred_burrito.standardize_and_optimize_branch_lengths()
+    dasm_pred_burrito.model.eval()
     print("updating neutral probs")
     dasm_pred_burrito.val_dataset.update_neutral_probs()
     burrito_preds = dasm_pred_burrito.val_dataset.log_neutral_codon_probss
@@ -83,6 +87,7 @@ def test_neutral_probs(pcp_df, dasm_pred_burrito):
 
     neutral_crepe = pretrained.load(dasm_pred_burrito.model.neutral_model_name)
     codon_probs = []
+    hit_classes = []
     for (nt_parent, _), branch_length in zip(parent_seqs, branch_lengths):
         rates, csps = trimmed_shm_model_outputs_of_crepe(neutral_crepe, [nt_parent])
         mask = aa_mask_tensor_of(translate_sequence(nt_parent))
@@ -96,15 +101,24 @@ def test_neutral_probs(pcp_df, dasm_pred_burrito):
                 multihit_model=dasm_pred_burrito.val_dataset.multihit_model,
             ).log()
         )
+        hit_classes.append(parent_specific_hit_classes(nt_idx_tensor_of_str(nt_parent).reshape(-1, 3)).view(-1, 64))
     # Check that the predictions match
-    for pred, heavy_codon_prob in zip(burrito_preds, codon_probs):
+    for i, (pred, heavy_codon_prob, hit_classes) in enumerate(zip(burrito_preds, codon_probs, hit_classes)):
         if not torch.allclose(
             pred[: len(heavy_codon_prob)], heavy_codon_prob
         ):
-            print(pred[: len(heavy_codon_prob)].detach().numpy())
-            print(heavy_codon_prob.detach().numpy())
-            print(pred[: len(heavy_codon_prob)].logsumexp(-1))
-            print(heavy_codon_prob.logsumexp(-1))
+            invalid_mask = ~torch.isclose(
+                pred[: len(heavy_codon_prob)], heavy_codon_prob
+            )
+
+            print("incorrect values in sequence", i)
+            print("lenngth of sequence", len(heavy_codon_prob))
+            print("invalid values at sites:", invalid_mask.any(dim=-1).nonzero())
+            print("incorrect values hit classes:", hit_classes[invalid_mask])
+            print(pred[: len(heavy_codon_prob)][invalid_mask].detach().numpy())
+            print(heavy_codon_prob[invalid_mask].detach().numpy())
+            print("sum codon probs for affected sites", pred[: len(heavy_codon_prob)].logsumexp(-1)[invalid_mask.any(dim=-1)])
+            print("sum codon probs for affected sites", heavy_codon_prob.logsumexp(-1)[invalid_mask.any(dim=-1)])
             print("max difference seen", (pred[: len(heavy_codon_prob)] - heavy_codon_prob).detach().abs().max().numpy())
             assert False, "Predictions should match"
 
@@ -336,3 +350,44 @@ def test_sequence_sample_dnsm(pcp_df, dnsm_burrito):
         )
 
         sample_sequence_from_codon_probs(heavy_codon_probs)
+
+
+def introduce_ns(sequence):
+    """Introduce N's into the sequence."""
+    # Convert the sequence to a list of characters
+    seq_list = list(sequence)
+    # Randomly select positions to introduce N's
+    for i in range(len(seq_list)):
+        if torch.rand(1).item() < 0.1:  # 10% chance to introduce an N
+            seq_list[i] = "N"
+    # Convert back to a string
+    return "".join(seq_list)
+
+def test_ambig_sample_dnsm(pcp_df, dnsm_burrito):
+    """Test that the DASM burrito can sample sequences with mutation counts similar to
+    real data."""
+    # Check that ambiguous sites are propagated to the child
+    parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
+    branch_lengths = dnsm_burrito.val_dataset.branch_lengths
+
+    # Get the predictions from codon_probs_of_parent_seq
+    dnsm_crepe = dnsm_burrito.to_crepe()
+    neutral_crepe = pretrained.load(dnsm_burrito.model.neutral_model_name)
+
+    for i, (parent_seq, branch_length) in enumerate(zip(parent_seqs, branch_lengths)):
+        new_parent = tuple(introduce_ns(pseq) for pseq in parent_seq)
+        heavy_codon_probs, _ = codon_probs_of_parent_seq(
+            dnsm_crepe,
+            new_parent,
+            branch_length,
+            neutral_crepe=neutral_crepe,
+            multihit_model=None,
+        )
+
+        seq = sample_sequence_from_codon_probs(heavy_codon_probs)
+        for i in range(2):
+            for p, c in zip(iter_codons(new_parent[i]), iter_codons(seq[i])):
+                if "N" in p:
+                    assert c == "NNN", f"Codon {p} should be NNN, but got {c}"
+                else:
+                    assert "N" not in c, f"Codon {c} should not contain N, but got {p}"

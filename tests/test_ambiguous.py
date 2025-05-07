@@ -130,7 +130,7 @@ def ambig_pcp_df():
 
     df = add_shm_model_outputs_to_pcp_df(
         df,
-        pretrained.load("ThriftyHumV0.2-45"),
+        pretrained.load("ThriftyHumV0.2-59"),
     )
     return df
 
