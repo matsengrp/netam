@@ -14,8 +14,8 @@ from netam.framework import load_crepe
 from netam.models import HitClassModel
 
 
-with files(__package__).joinpath("_pretrained") as pretrained_path:
-    PRETRAINED_DIR = str(pretrained_path)
+pretrained_path = files(__package__).joinpath("_pretrained")
+PRETRAINED_DIR = str(pretrained_path)
 
 PACKAGE_LOCATIONS_AND_CONTENTS = (
     # Order of entries:
