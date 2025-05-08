@@ -43,6 +43,8 @@ from netam import models
 import netam.molevol as molevol
 
 
+_CODONS_WITH_AMBIG = CODONS + ["NNN"]
+
 def encode_mut_pos_and_base(parent, child, site_count=None):
     """
     This function takes a parent and child sequence and returns a tuple of
@@ -1280,8 +1282,6 @@ def codon_probs_of_parent_seq(
     )
 
 
-_CODONS_WITH_AMBIG = CODONS + ["NNN"]
-
 def sample_sequence_from_codon_probs(codon_probs):
     """Mutate the parent sequence according to the provided codon probabilities. The
     target sequence is chosen by sampling IID from the codon probabilities at each site.
@@ -1295,13 +1295,32 @@ def sample_sequence_from_codon_probs(codon_probs):
     Returns:
         A string representing the mutated sequence.
     """
-
+    codon_logits = codon_probs.log()
+    # Initialize the output tensor
     sampled_codon_indices = torch.full(
-        (codon_probs.shape[0],), AMBIGUOUS_CODON_IDX, dtype=torch.long
+        (codon_logits.shape[0],), AMBIGUOUS_CODON_IDX, dtype=torch.long
     )
-    unambiguous_codons = ~codon_probs.isnan().any(dim=1)
-    # Sample codon indices based on probabilities at each position
-    sampled_codon_indices[unambiguous_codons] = torch.multinomial(codon_probs[unambiguous_codons], num_samples=1).squeeze()
+    
+    # Identify positions without NaN values
+    unambiguous_codons = ~codon_logits.isnan().any(dim=1)
+    
+    if torch.any(unambiguous_codons):
+        # Extract valid logits
+        valid_logits = codon_logits[unambiguous_codons]
+        
+        # Create a multinomial distribution using logits directly for numerical stability
+        # We use log_softmax first for better numerical stability
+        log_probs = torch.log_softmax(valid_logits, dim=1)
+        distribution = torch.distributions.Multinomial(total_count=1, logits=log_probs)
+        
+        # Sample from the distribution for all positions at once
+        samples = distribution.sample()
+        
+        # Get indices of the 1s in the one-hot encoded samples
+        sampled_indices = torch.argmax(samples, dim=1)
+        
+        # Assign the sampled indices to the appropriate positions
+        sampled_codon_indices[unambiguous_codons] = sampled_indices
 
     # Convert codon indices to codon strings
     sampled_codons = [_CODONS_WITH_AMBIG[idx.item()] for idx in sampled_codon_indices]

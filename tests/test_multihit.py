@@ -26,6 +26,7 @@ from netam.sequences import (
     aa_idx_tensor_of_str_ambig,
     apply_aa_mask_to_nt_sequence,
     translate_sequence,
+    hamming_distance,
 )
 from netam.models import SingleValueBinarySelectionModel, HitClassModel
 from netam.dasm import DASMDataset, DASMBurrito
@@ -305,7 +306,7 @@ def _codon_prob_of_hit_class_stop_zapped(
         # Add probabilities of all the stop codons to prob.
         for sc in STOP_CODONS:
             prob += _codon_prob_of_hit_class(
-                _hamming_dist(sc, parent_codon), branch_length=branch_length, rate=rate
+                hamming_distance(sc, parent_codon), branch_length=branch_length, rate=rate
             )
     return prob
 
@@ -318,9 +319,9 @@ def _codon_prob_of_hit_class_multihit_adjusted(
     if hit_class == 0:
         return torch.tensor(1.0) - sum(
             _codon_prob_of_hit_class(
-                _hamming_dist(cod, parent_codon), branch_length=branch_length, rate=rate
+                hamming_distance(cod, parent_codon), branch_length=branch_length, rate=rate
             )
-            * multihit_vals[_hamming_dist(cod, parent_codon)]
+            * multihit_vals[hamming_distance(cod, parent_codon)]
             for cod in CODONS
             if cod not in STOP_CODONS + [parent_codon]
         )
@@ -336,7 +337,7 @@ def multihit_adjusted_codon_probs_of_seqs(nt_parent, multihit_vals, branch_lengt
         [
             [
                 _codon_prob_of_hit_class_multihit_adjusted(
-                    _hamming_dist(cod, parent_codon),
+                    hamming_distance(cod, parent_codon),
                     cod,
                     multihit_vals,
                     branch_length=branch_length,
@@ -431,13 +432,9 @@ def test_codon_probs_of_burrito():
             assert False
 
 
-def _hamming_dist(seq1, seq2):
-    return sum(c1 != c2 for c1, c2 in zip(seq1, seq2))
-
-
 def _hit_classes_of_seqs(nt_parent, nt_child):
     for c1, c2 in zip(iter_codons(nt_parent), iter_codons(nt_child)):
-        yield _hamming_dist(c1, c2)
+        yield hamming_distance(c1, c2)
 
 
 def _prob_of_branch_simplest(nt_parent, nt_child):

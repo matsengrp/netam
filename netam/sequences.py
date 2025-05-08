@@ -612,3 +612,14 @@ def aa_onehot_tensor_of_str(aa_str):
     aa_indices_parent = aa_idx_array_of_str(aa_str)
     aa_onehot[torch.arange(len(aa_str)), aa_indices_parent] = 1
     return aa_onehot
+
+
+def hamming_distance(seq1, seq2):
+    """Calculate the Hamming distance between two sequences."""
+    if len(seq1) != len(seq2):
+        raise ValueError("Sequences must be of the same length.")
+    return sum(el1 != el2 for el1, el2 in zip(seq1, seq2))
+
+
+def paired_hamming_distance(seq1, seq2):
+    return sum(hamming_distance(s1, s2) for s1, s2 in zip(seq1, seq2))
