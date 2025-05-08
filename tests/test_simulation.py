@@ -25,6 +25,7 @@ from netam.sequences import (
     translate_sequence,
     translate_sequences,
     iter_codons,
+    hamming_distance,
 )
 from test_dnsm import dnsm_burrito
 from netam.codon_table import STOP_CODON_INDICATOR
@@ -196,9 +197,6 @@ def test_sequence_sampling(pcp_df, dasm_pred_burrito):
     # Get the predictions from codon_probs_of_parent_seq
     dasm_crepe = dasm_pred_burrito.to_crepe()
     neutral_crepe = pretrained.load(dasm_pred_burrito.model.neutral_model_name)
-
-    def hamming_distance(seq1, seq2):
-        return sum(a != b for a, b in zip(seq1, seq2))
 
     # Process all sequences
     sequence_diffs = []

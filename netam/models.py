@@ -31,7 +31,7 @@ from typing import Tuple
 # If this changes, we need to update old models that may not have neutral model
 # in their metadata
 DEFAULT_NEUTRAL_MODEL = "ThriftyHumV0.2-59"
-DEFAULT_MULTIHIT_MODEL = "ThriftyHumV0.2-59-hc-shmoof"
+DEFAULT_MULTIHIT_MODEL = "ThriftyHumV0.2-59-hc-tangshm"
 
 
 warnings.filterwarnings(
