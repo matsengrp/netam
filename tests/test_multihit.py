@@ -306,7 +306,9 @@ def _codon_prob_of_hit_class_stop_zapped(
         # Add probabilities of all the stop codons to prob.
         for sc in STOP_CODONS:
             prob += _codon_prob_of_hit_class(
-                hamming_distance(sc, parent_codon), branch_length=branch_length, rate=rate
+                hamming_distance(sc, parent_codon),
+                branch_length=branch_length,
+                rate=rate,
             )
     return prob
 
@@ -319,7 +321,9 @@ def _codon_prob_of_hit_class_multihit_adjusted(
     if hit_class == 0:
         return torch.tensor(1.0) - sum(
             _codon_prob_of_hit_class(
-                hamming_distance(cod, parent_codon), branch_length=branch_length, rate=rate
+                hamming_distance(cod, parent_codon),
+                branch_length=branch_length,
+                rate=rate,
             )
             * multihit_vals[hamming_distance(cod, parent_codon)]
             for cod in CODONS
