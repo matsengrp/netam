@@ -128,8 +128,8 @@ def test_multihit_correction():
     hit_class_factors = torch.tensor([-0.1, 1, 2.3])
     # We'll verify that aggregating by hit class then adjusting is the same as adjusting then aggregating by hit class.
     codon_idxs = reshape_for_codons(ex_parent_codon_idxs)
-    adjusted_codon_probs = hit_class.apply_multihit_correction(
-        codon_idxs, ex_codon_probs, hit_class_factors
+    adjusted_codon_probs = HitClassModel.from_weights(hit_class_factors)(
+        codon_idxs, ex_codon_probs
     )
     aggregate_last = hit_class.hit_class_probs_tensor(codon_idxs, adjusted_codon_probs)
 
