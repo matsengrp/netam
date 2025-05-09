@@ -68,7 +68,9 @@ def apply_multihit_correction(
     reshaped_corrections = corrections[per_parent_hit_class]
     # clamp only above to avoid summing a bunch of small fake values when
     # computing wild type prob
-    unnormalized_corrected_probs = clamp_probability_above(codon_probs * reshaped_corrections)
+    unnormalized_corrected_probs = clamp_probability_above(
+        codon_probs * reshaped_corrections
+    )
     result = molevol.set_parent_codon_prob(
         molevol.flatten_codons(unnormalized_corrected_probs),
         flatten_codon_idxs(parent_codon_idxs),

@@ -45,6 +45,7 @@ import netam.molevol as molevol
 
 _CODONS_WITH_AMBIG = CODONS + ["NNN"]
 
+
 def encode_mut_pos_and_base(parent, child, site_count=None):
     """
     This function takes a parent and child sequence and returns a tuple of
@@ -1247,7 +1248,9 @@ def codon_probs_of_parent_seq(
             ambig_aa_mask = parent_indices < AA_AMBIG_IDX
             unambig_sites = ambig_aa_mask.sum()
             if unambig_sites > 0:
-                chain_factors[ambig_aa_mask][torch.arange(unambig_sites), parent_indices[ambig_aa_mask]] = 0.0
+                chain_factors[ambig_aa_mask][
+                    torch.arange(unambig_sites), parent_indices[ambig_aa_mask]
+                ] = 0.0
             new_selection_factors.append(chain_factors)
         log_selection_factors = tuple(new_selection_factors)
 
@@ -1300,25 +1303,25 @@ def sample_sequence_from_codon_probs(codon_probs):
     sampled_codon_indices = torch.full(
         (codon_logits.shape[0],), AMBIGUOUS_CODON_IDX, dtype=torch.long
     )
-    
+
     # Identify positions without NaN values
     unambiguous_codons = ~codon_logits.isnan().any(dim=1)
-    
+
     if torch.any(unambiguous_codons):
         # Extract valid logits
         valid_logits = codon_logits[unambiguous_codons]
-        
+
         # Create a multinomial distribution using logits directly for numerical stability
         # We use log_softmax first for better numerical stability
         log_probs = torch.log_softmax(valid_logits, dim=1)
         distribution = torch.distributions.Multinomial(total_count=1, logits=log_probs)
-        
+
         # Sample from the distribution for all positions at once
         samples = distribution.sample()
-        
+
         # Get indices of the 1s in the one-hot encoded samples
         sampled_indices = torch.argmax(samples, dim=1)
-        
+
         # Assign the sampled indices to the appropriate positions
         sampled_codon_indices[unambiguous_codons] = sampled_indices
 
