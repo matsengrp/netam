@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from netam import molevol
-from netam.common import clamp_probability
+from netam.common import clamp_probability, clamp_probability_above
 from netam.sequences import flatten_codon_idxs
 
 
@@ -66,7 +66,9 @@ def apply_multihit_correction(
     per_parent_hit_class = parent_specific_hit_classes(parent_codon_idxs)
     corrections = torch.cat([torch.tensor([0.0]), log_hit_class_factors]).exp()
     reshaped_corrections = corrections[per_parent_hit_class]
-    unnormalized_corrected_probs = clamp_probability(codon_probs * reshaped_corrections)
+    # clamp only above to avoid summing a bunch of small fake values when
+    # computing wild type prob
+    unnormalized_corrected_probs = clamp_probability_above(codon_probs * reshaped_corrections)
     result = molevol.set_parent_codon_prob(
         molevol.flatten_codons(unnormalized_corrected_probs),
         flatten_codon_idxs(parent_codon_idxs),
