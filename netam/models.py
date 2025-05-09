@@ -10,12 +10,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
+from netam import molevol
 from netam.hit_class import apply_multihit_correction
 from netam import sequences
 from netam.sequences import MAX_AA_TOKEN_IDX
 from netam.common import (
     chunk_function,
     zap_predictions_along_diagonal,
+    clamp_probability,
+    clamp_probability_above,
 )
 from netam.sequences import (
     generate_kmers,
@@ -25,6 +28,7 @@ from netam.sequences import (
     PositionalEncoding,
     split_heavy_light_model_outputs,
     AA_PADDING_TOKEN,
+    flatten_codon_idxs,
 )
 from typing import Tuple
 
@@ -1022,6 +1026,26 @@ class HitClassModel(nn.Module):
         Inputs should be in unflattened form, with codons represented in shape (4, 4,
         4).
         """
+        result = self.apply_multihit_correction(
+            parent_codon_idxs, uncorrected_codon_probs
+        )
+        # clamp only above to avoid summing a bunch of small fake values when
+        # computing wild type prob
+        unnormalized_corrected_probs = clamp_probability_above(
+            result
+        )
+        result = molevol.set_parent_codon_prob(
+            molevol.flatten_codons(unnormalized_corrected_probs),
+            flatten_codon_idxs(parent_codon_idxs),
+        )
+        result = clamp_probability(result)
+        return molevol.unflatten_codons(result)
+
+    def apply_multihit_correction(
+        self, parent_codon_idxs: torch.Tensor, uncorrected_codon_probs: torch.Tensor
+    ):
+        """Apply the correction to the uncorrected codon probabilities. Unlike `forward` this does
+        not clamp or recompute parent codon probability. Otherwise, it is identical to `forward`."""
         return apply_multihit_correction(
             parent_codon_idxs, uncorrected_codon_probs, self.values
         )
