@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import math
 import warnings
+from datetime import datetime
 
 import pandas as pd
 
@@ -25,8 +26,13 @@ from netam.sequences import (
     split_heavy_light_model_outputs,
     AA_PADDING_TOKEN,
 )
-
 from typing import Tuple
+
+# If this changes, we need to update old models that may not have neutral model
+# in their metadata
+DEFAULT_NEUTRAL_MODEL = "ThriftyHumV0.2-59"
+DEFAULT_MULTIHIT_MODEL = "ThriftyHumV0.2-59-hc-tangshm"
+
 
 warnings.filterwarnings(
     "ignore", category=UserWarning, module="torch.nn.modules.transformer"
@@ -565,8 +571,39 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
     See forward() for details.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        output_dim: int = 1,
+        known_token_count: int = MAX_AA_TOKEN_IDX + 1,
+        neutral_model_name: str = DEFAULT_NEUTRAL_MODEL,
+        multihit_model_name: str = DEFAULT_MULTIHIT_MODEL,
+        train_timestamp: str = None,
+        model_type: str = None,
+    ):
         super().__init__()
+        if train_timestamp is None:
+            train_timestamp = datetime.utcnow().isoformat(timespec="minutes")
+        self.train_timestamp = train_timestamp
+        self.output_dim = output_dim
+        self.known_token_count = known_token_count
+        self.neutral_model_name = neutral_model_name
+        self.multihit_model_name = multihit_model_name
+        if model_type is None:
+            warnings.warn(
+                "model_type should be specified. Either 'dasm', 'dnsm', or 'ddsm' expected."
+            )
+        self.model_type = model_type
+
+    @property
+    def hyperparameters(self):
+        return {
+            "output_dim": self.output_dim,
+            "known_token_count": self.known_token_count,
+            "neutral_model_name": self.neutral_model_name,
+            "multihit_model_name": self.multihit_model_name,
+            "train_timestamp": self.train_timestamp,
+            "model_type": self.model_type,
+        }
 
     @property
     def device(self):
@@ -677,16 +714,16 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
         dim_feedforward: int,
         layer_count: int,
         dropout_prob: float = 0.5,
-        output_dim: int = 1,
-        known_token_count: int = MAX_AA_TOKEN_IDX + 1,
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(
+            **kwargs,
+        )
         # Note that d_model has to be divisible by nhead, so we make that
         # automatic here.
         self.d_model_per_head = d_model_per_head
         self.d_model = d_model_per_head * nhead
         self.nhead = nhead
-        self.known_token_count = known_token_count
         self.dim_feedforward = dim_feedforward
         self.pos_encoder = PositionalEncoding(self.d_model, dropout_prob)
         self.amino_acid_embedding = nn.Embedding(self.known_token_count, self.d_model)
@@ -697,19 +734,17 @@ class TransformerBinarySelectionModelLinAct(AbstractBinarySelectionModel):
             batch_first=True,
         )
         self.encoder = nn.TransformerEncoder(self.encoder_layer, layer_count)
-        self.linear = nn.Linear(self.d_model, output_dim)
+        self.linear = nn.Linear(self.d_model, self.output_dim)
         self.init_weights()
 
     @property
     def hyperparameters(self):
-        return {
+        return super().hyperparameters | {
             "nhead": self.nhead,
             "d_model_per_head": self.d_model_per_head,
             "dim_feedforward": self.dim_feedforward,
             "layer_count": self.encoder.num_layers,
             "dropout_prob": self.pos_encoder.dropout.p,
-            "output_dim": self.linear.out_features,
-            "known_token_count": self.known_token_count,
         }
 
     def init_weights(self) -> None:
@@ -829,11 +864,11 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
         dim_feedforward: int,
         layer_count: int,
         dropout_prob: float = 0.5,
-        output_dim: int = 1,
-        known_token_count: int = MAX_AA_TOKEN_IDX + 1,
+        **kwargs,
     ):
-        super().__init__()
-        self.known_token_count = known_token_count
+        super().__init__(
+            **kwargs,
+        )
         self.d_model_per_head = d_model_per_head
         self.d_model = d_model_per_head * nhead
         self.nhead = nhead
@@ -870,7 +905,7 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
 
         # Output layers
         self.combine_features = nn.Linear(2 * self.d_model, self.d_model)
-        self.output = nn.Linear(self.d_model, output_dim)
+        self.output = nn.Linear(self.d_model, self.output_dim)
 
         self.init_weights()
 
@@ -933,14 +968,12 @@ class BidirectionalTransformerBinarySelectionModel(AbstractBinarySelectionModel)
 
     @property
     def hyperparameters(self):
-        return {
+        return super().hyperparameters | {
             "nhead": self.nhead,
             "d_model_per_head": self.d_model_per_head,
             "dim_feedforward": self.dim_feedforward,
             "layer_count": self.forward_encoder.num_layers,
             "dropout_prob": self.forward_pos_encoder.dropout.p,
-            "output_dim": self.output.out_features,
-            "known_token_count": self.known_token_count,
         }
 
 
@@ -956,20 +989,9 @@ class BidirectionalTransformerBinarySelectionModelWiggleAct(
 class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
     """A one parameter selection model as a baseline."""
 
-    def __init__(
-        self, output_dim: int = 1, known_token_count: int = MAX_AA_TOKEN_IDX + 1
-    ):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.single_value = nn.Parameter(torch.tensor(0.0))
-        self.output_dim = output_dim
-        self.known_token_count = known_token_count
-
-    @property
-    def hyperparameters(self):
-        return {
-            "output_dim": self.output_dim,
-            "known_token_count": self.known_token_count,
-        }
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         """Build a binary log selection matrix from an index-encoded parent sequence."""
@@ -1004,5 +1026,16 @@ class HitClassModel(nn.Module):
             parent_codon_idxs, uncorrected_codon_probs, self.values
         )
 
-    def reinitialize_weights(self):
-        self.values = nn.Parameter(torch.tensor([0.0, 0.0, 0.0]))
+    def reinitialize_weights(self, parameters=(0.0, 0.0, 0.0)):
+        self.values = nn.Parameter(torch.tensor(parameters))
+
+    def to_weights(self):
+        return tuple(self.values.detach().numpy())
+
+    @classmethod
+    def from_weights(cls, weights):
+        assert len(weights) == 3
+        model = cls()
+        model.reinitialize_weights(weights)
+        model.eval()
+        return model

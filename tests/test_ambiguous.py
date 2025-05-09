@@ -130,7 +130,7 @@ def ambig_pcp_df():
 
     df = add_shm_model_outputs_to_pcp_df(
         df,
-        pretrained.load("ThriftyHumV0.2-45"),
+        pretrained.load("ThriftyHumV0.2-59"),
     )
     return df
 
@@ -138,7 +138,11 @@ def ambig_pcp_df():
 @pytest.fixture
 def dnsm_model():
     return TransformerBinarySelectionModelWiggleAct(
-        nhead=2, d_model_per_head=4, dim_feedforward=256, layer_count=2
+        nhead=2,
+        d_model_per_head=4,
+        dim_feedforward=256,
+        layer_count=2,
+        model_type="dnsm",
     )
 
 
@@ -148,7 +152,11 @@ def test_dnsm_burrito(ambig_pcp_df, dnsm_model):
     ambig_pcp_df["in_train"] = True
     ambig_pcp_df.loc[ambig_pcp_df.index[-15:], "in_train"] = False
     train_dataset, val_dataset = DNSMDataset.train_val_datasets_of_pcp_df(
-        ambig_pcp_df, MAX_KNOWN_TOKEN_COUNT
+        ambig_pcp_df,
+        MAX_KNOWN_TOKEN_COUNT,
+        multihit_model=pretrained.load_multihit(
+            dnsm_model.multihit_model_name, device=None
+        ),
     )
 
     burrito = DNSMBurrito(
@@ -170,6 +178,7 @@ def dasm_model():
         dim_feedforward=256,
         layer_count=2,
         output_dim=20,
+        model_type="dasm",
     )
 
 
@@ -179,7 +188,11 @@ def test_dasm_burrito(ambig_pcp_df, dasm_model):
     ambig_pcp_df["in_train"] = True
     ambig_pcp_df.loc[ambig_pcp_df.index[-15:], "in_train"] = False
     train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(
-        ambig_pcp_df, MAX_KNOWN_TOKEN_COUNT
+        ambig_pcp_df,
+        MAX_KNOWN_TOKEN_COUNT,
+        multihit_model=pretrained.load_multihit(
+            dasm_model.multihit_model_name, device=None
+        ),
     )
 
     burrito = DASMBurrito(

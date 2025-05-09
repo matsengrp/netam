@@ -14,7 +14,7 @@ from warnings import warn
 from netam.codon_table import CODON_AA_INDICATOR_MATRIX, STOP_CODON_ZAPPER
 
 import netam.sequences as sequences
-from netam.common import clamp_probability
+from netam.common import clamp_probability, clamp_probability_above
 
 
 def check_csps(parent_idxs: Tensor, csps: Tensor) -> Tensor:
@@ -483,6 +483,10 @@ def adjust_codon_probs_by_aa_selection_factors(
 
     # Convert to linear space so we can add probabilities.
     preds = torch.exp(log_preds)
+
+    # clamp only above to avoid summing a bunch of small fake values when
+    # computing wild type prob
+    preds = clamp_probability_above(preds)
 
     preds = set_parent_codon_prob(preds, parent_codon_idxs)
 
