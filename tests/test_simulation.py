@@ -2,9 +2,11 @@
 
 import pytest
 import torch
+import pandas as pd
 
 from netam.pretrained import load_multihit
 from netam.framework import (
+    add_shm_model_outputs_to_pcp_df,
     codon_probs_of_parent_seq,
     trimmed_shm_model_outputs_of_crepe,
     sample_sequence_from_codon_probs,
@@ -233,14 +235,14 @@ def test_sequence_sampling(pcp_df, dasm_pred_burrito):
             parent_seq,
             branch_length,
             neutral_crepe=neutral_crepe,
-            multihit_model=None,
+            multihit_model=pretrained.load_multihit(dasm_crepe.model.multihit_model_name),
         )
 
         # Use only the heavy chain for sampling
         heavy_parent_seq = parent_seq[0]
 
         # Sample multiple sequences for this parent
-        num_samples = 40
+        num_samples = 200
         sampled_seqs = [
             sample_sequence_from_codon_probs(heavy_codon_probs)
             for _ in range(num_samples)
@@ -305,6 +307,60 @@ def test_sequence_sampling(pcp_df, dasm_pred_burrito):
     assert (
         mean_abs_diff < tolerance * 1.5
     ), f"Mean absolute difference ({mean_abs_diff:.2f}) is too large"
+
+
+def test_refit_branch_lengths(pcp_df, dasm_pred_burrito):
+    """Test that after simulating with a fixed branch length, branch length optimization recovers the original branch length, on average."""
+    selection_crepe = dasm_pred_burrito.to_crepe()
+    fixed_branch_length = 0.1
+    replicates = 100
+    multihit_model = load_multihit(selection_crepe.model.multihit_model_name)
+    neutral_crepe = pretrained.load(selection_crepe.model.neutral_model_name)
+
+    new_pcps = []
+    for parent in pcp_df["parent_h"]:
+        # Get the codon probabilities for the parent sequence
+        heavy_codon_probs, _ = codon_probs_of_parent_seq(
+            selection_crepe,
+            (parent, ""),
+            fixed_branch_length,
+            neutral_crepe=neutral_crepe,
+            multihit_model=multihit_model,
+        )
+        for _ in range(replicates):
+            # Sample a sequence from the codon probabilities
+            sampled_sequence = sample_sequence_from_codon_probs(heavy_codon_probs)
+
+            if parent != sampled_sequence:
+                new_pcps.append((parent, sampled_sequence))
+
+    dataset_cls, burrito_cls = DASMDataset, DASMBurrito
+    known_token_count = selection_crepe.model.hyperparameters["known_token_count"]
+    neutral_crepe = pretrained.load(selection_crepe.model.neutral_model_name)
+    multihit_model = pretrained.load_multihit(selection_crepe.model.multihit_model_name)
+    new_pcp_df = pd.DataFrame(
+        new_pcps,
+        columns=["parent_h", "child_h"],
+    )
+    for col in pcp_df.columns:
+        if col not in ["parent_h", "child_h"]:
+            new_pcp_df[col] = list(pcp_df[col]) * replicates
+    # Make val dataset from pcp_df:
+    new_pcp_df = add_shm_model_outputs_to_pcp_df(new_pcp_df, neutral_crepe)
+    new_pcp_df["in_train"] = False
+
+    _, val_dataset = dataset_cls.train_val_datasets_of_pcp_df(
+        new_pcp_df, known_token_count, multihit_model=multihit_model
+    )
+
+    burrito = burrito_cls(
+        None,
+        val_dataset,
+        selection_crepe.model,
+    )
+
+    burrito.standardize_and_optimize_branch_lengths()
+    assert torch.allclose(burrito.val_dataset.branch_lengths.mean().double(), torch.tensor(fixed_branch_length).double(), rtol=1e-2)
 
 
 def test_selection_factors(pcp_df, dasm_pred_burrito):

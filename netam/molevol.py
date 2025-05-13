@@ -319,8 +319,10 @@ def build_codon_mutsel(
     )
     codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
 
+    # # TODO for testing
+    # assert multihit_model is None
     if multihit_model is not None:
-        codon_probs = multihit_model(parent_codon_idxs, codon_probs)
+        codon_probs = multihit_model.forward(parent_codon_idxs, codon_probs)
 
     # Calculate the codon selection matrix for each sequence via Einstein
     # summation, in which we sum over the repeated indices.
@@ -382,8 +384,10 @@ def neutral_codon_probs(
     )
     codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
 
+    # # TODO for testing
+    # assert multihit_model is None
     if multihit_model is not None:
-        codon_probs = multihit_model(parent_codon_idxs, codon_probs)
+        codon_probs = multihit_model.forward(parent_codon_idxs, codon_probs)
 
     return codon_probs.view(-1, 64)
 
