@@ -475,17 +475,14 @@ def is_pcp_valid(parent, child, aa_mask=None):
         aa_mask: The mask tensor for the amino acid sequence. If None, it will be
             computed from the parent and child sequences.
     """
-    if aa_mask is None:
-        aa_mask = codon_mask_tensor_of(parent, child)
-    if len(parent) != len(child):
+    # Note that the use of try/except within control flow is generally not
+    # recommended, but in this case it allows for more granuality in the
+    # error messages.
+    try:
+        assert_pcp_valid(parent, child, aa_mask)
+        return True
+    except ValueError:
         return False
-    if not aa_mask.any():
-        return False
-    if apply_aa_mask_to_nt_sequence(parent, aa_mask) == apply_aa_mask_to_nt_sequence(
-        child, aa_mask
-    ):
-        return False
-    return True
 
 
 def assert_pcp_valid(parent, child, aa_mask=None):
@@ -503,11 +500,22 @@ def assert_pcp_valid(parent, child, aa_mask=None):
         aa_mask: The mask tensor for the amino acid sequence. If None, it will be
             computed from the parent and child sequences.
     """
-    if not is_pcp_valid(parent, child, aa_mask):
+    if aa_mask is None:
+        aa_mask = codon_mask_tensor_of(parent, child)
+    if len(parent) != len(child):
         raise ValueError(
-            "either the parent and child sequences are not the same length, "
-            "the parent-child pair is masked in all codons, "
-            "or the parent-child nucleotide sequence pair matches after masking codons containing ambiguities. "
+            "The parent and child sequences are not the same length."
+        )
+    if not aa_mask.any():
+        raise ValueError(
+            "The parent and child sequences are masked in all codons."
+        )
+    if apply_aa_mask_to_nt_sequence(parent, aa_mask) == apply_aa_mask_to_nt_sequence(
+        child, aa_mask
+    ):
+        raise ValueError(
+            "The parent and child nucleotide sequence "
+            "pair matches after masking codons containing ambiguities. "
             "To avoid this try filtering data using `netam.sequences.assert_pcp_valid`."
         )
 
