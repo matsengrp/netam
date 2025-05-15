@@ -503,13 +503,9 @@ def assert_pcp_valid(parent, child, aa_mask=None):
     if aa_mask is None:
         aa_mask = codon_mask_tensor_of(parent, child)
     if len(parent) != len(child):
-        raise ValueError(
-            "The parent and child sequences are not the same length."
-        )
+        raise ValueError("The parent and child sequences are not the same length.")
     if not aa_mask.any():
-        raise ValueError(
-            "The parent and child sequences are masked in all codons."
-        )
+        raise ValueError("The parent and child sequences are masked in all codons.")
     if apply_aa_mask_to_nt_sequence(parent, aa_mask) == apply_aa_mask_to_nt_sequence(
         child, aa_mask
     ):
