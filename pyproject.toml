@@ -30,7 +30,7 @@ dependencies = [
     "torch",
     "scipy",
     "tqdm",
-    "fire",
+    "fire@git+https://github.com/google/python-fire.git"
 ]
 
 [project.optional-dependencies]
