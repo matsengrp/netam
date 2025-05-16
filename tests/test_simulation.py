@@ -17,6 +17,10 @@ from netam.dasm import (
     DASMBurrito,
     DASMDataset,
 )
+from netam.dnsm import (
+    DNSMBurrito,
+    DNSMDataset,
+)
 from netam.molevol import (
     neutral_codon_probs_of_seq,
     zero_stop_codon_probs,
@@ -154,6 +158,8 @@ def test_neutral_probs(pcp_df, dasm_pred_burrito):
 def test_selection_probs(pcp_df, dasm_pred_burrito):
     """Test that the DASM burrito computes the same predictions as
     codon_probs_of_parent_seq."""
+    # TO make the same test for dnsm, things are more complicated because the
+    # burrito only produces aa-level probabilities.
     parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
 
     print("recomputing branch lengths")
