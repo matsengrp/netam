@@ -1243,15 +1243,13 @@ def codon_probs_of_parent_seq(
         # 1 (0 in log space).
         new_selection_factors = []
         for aa_seq, old_selection_factors in zip(aa_seqs, log_selection_factors):
-            chain_factors = old_selection_factors.unsqueeze(1).repeat(1, 20)
-            parent_indices = aa_idx_tensor_of_str(aa_seq)
-            ambig_aa_mask = parent_indices < AA_AMBIG_IDX
-            unambig_sites = ambig_aa_mask.sum()
-            if unambig_sites > 0:
-                chain_factors[ambig_aa_mask][
-                    torch.arange(unambig_sites), parent_indices[ambig_aa_mask]
-                ] = 0.0
-            new_selection_factors.append(chain_factors)
+            if len(aa_seq) == 0:
+                new_selection_factors.append(torch.empty(0, 20, dtype=old_selection_factors.dtype))
+            else:
+                parent_indices = aa_idx_tensor_of_str(aa_seq)
+                new_selection_factors.append(
+                    molevol.lift_to_per_aa_selection_factors(old_selection_factors.exp(), parent_indices).log()
+                )
         log_selection_factors = tuple(new_selection_factors)
 
     parent_codon_idxs = tuple(
