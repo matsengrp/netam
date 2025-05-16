@@ -37,10 +37,12 @@ def test_predictions_of_batch(fixed_ddsm_val_burrito):
     # These outputs were produced by the comparison code in this test, but
     # written to the files referenced here. The code state was netam 3c632fa.
     # (however, this test did not exist in the codebase at that time)
+    these_branch_lengths = fixed_ddsm_val_burrito.val_dataset.branch_lengths.double()
+    # pd.DataFrame({"branch_length": these_branch_lengths}).to_csv("tests/old_models/val_branch_lengths.csv")
     branch_lengths = torch.tensor(
         pd.read_csv("tests/old_models/val_branch_lengths.csv")["branch_length"]
     ).double()
-    these_branch_lengths = fixed_ddsm_val_burrito.val_dataset.branch_lengths.double()
+
     if not torch.allclose(branch_lengths, these_branch_lengths, atol=2e-4):
         print(branch_lengths)
         print(these_branch_lengths)
@@ -56,6 +58,7 @@ def test_predictions_of_batch(fixed_ddsm_val_burrito):
         )
         predictions_list.append(predictions.detach().cpu())
     these_predictions = torch.cat(predictions_list, axis=0).double()
+    # torch.save(these_predictions, "tests/old_models/val_predictions.pt")
     predictions = torch.load(
         "tests/old_models/val_predictions.pt", weights_only=True
     ).double()
