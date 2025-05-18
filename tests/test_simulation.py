@@ -4,6 +4,7 @@ import pytest
 import torch
 import pandas as pd
 
+from netam.codon_table import CODON_AA_INDICATOR_MATRIX
 from netam.pretrained import load_multihit
 from netam.framework import (
     add_shm_model_outputs_to_pcp_df,
@@ -65,6 +66,41 @@ def dasm_pred_burrito(pcp_df):
     train_dataset = val_dataset
 
     burrito = DASMBurrito(
+        train_dataset,
+        val_dataset,
+        model,
+        batch_size=32,
+        learning_rate=0.001,
+        min_learning_rate=0.0001,
+    )
+    burrito.joint_train(
+        epochs=1, cycle_count=2, training_method="full", optimize_bl_first_cycle=False
+    )
+    return burrito
+
+
+@pytest.fixture(scope="module")
+def dnsm_pred_burrito(pcp_df):
+    force_spawn()
+    """Fixture that returns the DNSM Burrito object."""
+    pcp_df["in_train"] = False
+
+    model = TransformerBinarySelectionModelWiggleAct(
+        nhead=2,
+        d_model_per_head=4,
+        dim_feedforward=256,
+        layer_count=2,
+        model_type="dnsm",
+    )
+
+    train_dataset, val_dataset = DNSMDataset.train_val_datasets_of_pcp_df(
+        pcp_df,
+        MAX_KNOWN_TOKEN_COUNT,
+        multihit_model=load_multihit(model.multihit_model_name),
+    )
+    train_dataset = val_dataset
+
+    burrito = DNSMBurrito(
         train_dataset,
         val_dataset,
         model,
@@ -211,6 +247,96 @@ def test_selection_probs(pcp_df, dasm_pred_burrito):
         ):
             print(f"Stop codon probabilities are not zeroed out!")
             print(pred[:, STOP_CODON_INDICATOR == 1].exp())
+
+
+def test_selection_probs_dnsm(pcp_df, dnsm_pred_burrito):
+    """Test that the DNSM burrito computes the same predictions as
+    codon_probs_of_parent_seq."""
+    # TO make the same test for dnsm, things are more complicated because the
+    # burrito only produces aa-level probabilities.
+    parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
+
+    print("recomputing branch lengths")
+    dnsm_pred_burrito.standardize_and_optimize_branch_lengths()
+    print("updating neutral probs")
+    dnsm_pred_burrito.val_dataset.update_neutral_probs()
+    # Get the predictions from the DNSM burrito
+    dnsm_pred_burrito.batch_size = 500
+    val_loader = dnsm_pred_burrito.build_val_loader()
+    # There should be exactly one batch
+    (batch,) = val_loader
+    print("Getting predictions")
+    burrito_preds = dnsm_pred_burrito.predictions_of_batch(batch)
+    # ^ remember, this is one probability per-site of mutation.
+
+    branch_lengths = dnsm_pred_burrito.val_dataset.branch_lengths
+
+    # Get the predictions from codon_probs_of_parent_seq
+    dnsm_crepe = dnsm_pred_burrito.to_crepe()
+    neutral_crepe = pretrained.load(dnsm_pred_burrito.model.neutral_model_name)
+    print("Computing from scratch")
+    codon_probs_heavy = list(
+        codon_probs_of_parent_seq(
+            dnsm_crepe,
+            parent_seq,
+            branch_length,
+            neutral_crepe=neutral_crepe,
+            multihit_model=dnsm_pred_burrito.val_dataset.multihit_model,
+        )[0]  # For DNSM, we need to use aa-level probabilities
+        for parent_seq, branch_length in zip(parent_seqs, branch_lengths)
+    )
+
+    # Check that the predictions match
+    for pred, heavy_codon_prob, parent_seq in zip(burrito_preds, codon_probs_heavy, parent_seqs):
+        parent_codon_idxs = nt_idx_tensor_of_str(parent_seq[0]).reshape(-1, 3)
+        hit_classes = parent_specific_hit_classes(parent_codon_idxs).view(-1, 64)
+        no_mut_probs = heavy_codon_prob[hit_classes == 0].detach().clone()
+        zeroed_wt_hcprob = heavy_codon_prob.detach().clone()
+        zeroed_wt_hcprob[hit_classes == 0] = 0.0
+        mut_sums = zeroed_wt_hcprob.sum(dim=-1)
+        mut_probs = 1.0 - no_mut_probs
+        if not torch.allclose(
+            mut_probs, pred[: len(mut_probs)]
+        ):
+            print(f"The following should match:")
+            print(mut_probs.detach().numpy())
+            print(pred[: len(mut_probs)].detach().numpy())
+            print("Difference:", (mut_probs - pred[: len(mut_probs)]).detach().numpy())
+
+            print(f"The following should also match (not checked):")
+            print(mut_sums.detach().numpy())
+            print(pred[: len(mut_sums)].detach().numpy())
+            print("Difference:", (mut_sums - pred[: len(mut_sums)]).detach().numpy())
+            assert False
+
+        if not torch.allclose(
+            mut_sums, pred[:len(mut_sums)]
+        ):
+            print(f"The following should match:")
+            print(mut_sums.detach().numpy())
+            print(pred[: len(mut_sums)].detach().numpy())
+            print("Difference:", (mut_sums - pred[: len(mut_sums)]).detach().numpy())
+            assert False
+
+        # heavy_codon_prob = heavy_codon_prob.log().type_as(pred)
+        # print(pred[0].detach().numpy())
+        # print(heavy_codon_prob[0].detach().numpy())
+        # print(pred[0].logsumexp(0))
+        # print(heavy_codon_prob[0].logsumexp(0))
+        # print((pred[0] - heavy_codon_prob[0]).detach().numpy())
+        # assert torch.allclose(
+        #     # zero_stop_codon_probs(pred[: len(heavy_codon_prob)].exp()),
+        #     pred[: len(heavy_codon_prob)].exp(),
+        #     heavy_codon_prob.exp(),
+        #     atol=1e-8,
+        # ), "Predictions should match"
+        # Check that stop codons are zeroed out
+        # netam.codon_table.STOP_CODON_INDICATOR is a length 64 tensor with 1s at stop codon indices
+        # if not torch.allclose(
+        #     pred[:, STOP_CODON_INDICATOR == 1].exp(), torch.tensor(0.0)
+        # ):
+        #     print(f"Stop codon probabilities are not zeroed out!")
+        #     print(pred[:, STOP_CODON_INDICATOR == 1].exp())
 
 
 def test_sequence_sampling(pcp_df, dasm_pred_burrito):

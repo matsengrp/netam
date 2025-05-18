@@ -806,5 +806,6 @@ def lift_to_per_aa_selection_factors(
     selection_matrix[
         torch.arange(len(aa_parent_idxs))[valid_mask], aa_parent_idxs[valid_mask]
     ] = 1.0
+    # TODO is this supposed to be nan?
     selection_matrix[~valid_mask] = 1.0
     return selection_matrix
