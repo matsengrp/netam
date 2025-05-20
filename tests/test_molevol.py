@@ -3,6 +3,8 @@ import pytest
 
 import netam.molevol as molevol
 from netam import pretrained
+import netam.sequences as sequences
+from netam.models import DEFAULT_MULTIHIT_MODEL
 
 from netam.sequences import (
     nt_idx_tensor_of_str,
@@ -11,6 +13,11 @@ from netam.sequences import (
     CODONS,
     NT_STR_SORTED,
 )
+from netam.framework import add_shm_model_outputs_to_pcp_df, codon_probs_of_parent_seq
+from netam.hit_class import parent_specific_hit_classes
+from netam.common import clamp_probability, clamp_log_probability, clamp_probability_above
+
+from test_dnsm import dnsm_burrito
 
 # These happen to be the same as some examples in test_models.py but that's fine.
 # If it was important that they were shared, we should put them in a conftest.py.
@@ -167,3 +174,83 @@ def test_aaprob_of_mut_and_sub():
             codon_subs,
         ).squeeze(),
     )
+
+
+def test_build_codon_mutsel(pcp_df, dnsm_burrito):
+    # There are two ways of computing codon probabilities. Let's make sure
+    # they're the same:
+    neutral_crepe = pretrained.load("ThriftyHumV0.2-59")
+    pcp_df = add_shm_model_outputs_to_pcp_df(
+        pcp_df.copy(),
+        neutral_crepe,
+    )
+    multihit_model = pretrained.load_multihit(DEFAULT_MULTIHIT_MODEL)
+
+    branch_length = 0.5
+    for seq, nt_rates, nt_csps in zip(pcp_df["parent_h"], pcp_df["nt_rates_h"], pcp_df["nt_csps_h"]):
+        parent_idxs = sequences.nt_idx_tensor_of_str(seq)
+        aa_parent_idxs = sequences.aa_idx_tensor_of_str(
+            translate_sequence(seq)
+        )
+        aa_seq_len = len(seq) // 3
+        codon_parent_idxs = sequences.codon_idx_tensor_of_str_ambig(seq)
+        hit_classes = parent_specific_hit_classes(
+            parent_idxs.reshape(-1, 3),
+        )
+        flat_hit_classes = molevol.flatten_codons(hit_classes)
+
+        aa_mask = torch.full_like(aa_parent_idxs, True).bool()
+        # sel_matrix = torch.ones((aa_seq_len, 20))
+        sel_matrix = dnsm_burrito.build_selection_matrix_from_parent_aa(aa_parent_idxs, aa_mask)
+        # neutral_sel_matrix[torch.arange(aa_seq_len), aa_parent_idxs]
+
+        # First way:
+        nt_mut_probs = 1.0 - torch.exp(-branch_length * nt_rates)
+        codon_mutsel, _ = molevol.build_codon_mutsel(
+            parent_idxs.reshape(-1, 3),
+            nt_mut_probs.reshape(-1, 3),
+            nt_csps.reshape(-1, 3, 4),
+            sel_matrix,
+            multihit_model=multihit_model,
+        )
+        log_codon_mutsel = clamp_probability(codon_mutsel).log()
+        flat_log_codon_mutsel = molevol.flatten_codons(log_codon_mutsel)
+
+        # Second way:
+        neutral_codon_probs = molevol.neutral_codon_probs_of_seq(
+            seq,
+            aa_mask,
+            nt_rates,
+            nt_csps,
+            branch_length,
+            multihit_model=multihit_model,
+        )
+        adjusted_codon_probs = molevol.adjust_codon_probs_by_aa_selection_factors(
+            codon_parent_idxs.unsqueeze(0),
+            neutral_codon_probs.unsqueeze(0).log(),
+            sel_matrix.unsqueeze(0).log()
+        ).squeeze(0)
+        if not torch.allclose(adjusted_codon_probs, flat_log_codon_mutsel):
+            diff_mask = ~torch.isclose(adjusted_codon_probs, flat_log_codon_mutsel)
+            print(flat_hit_classes[diff_mask])
+            print((adjusted_codon_probs - flat_log_codon_mutsel)[diff_mask])
+            print(adjusted_codon_probs[diff_mask])
+            print(flat_log_codon_mutsel[diff_mask])
+            assert False
+
+        # Now let's compare to the simulation probs:
+        sim_probs = clamp_probability(codon_probs_of_parent_seq(
+            dnsm_burrito.to_crepe(),
+            (seq, ""),
+            branch_length,
+            neutral_crepe=neutral_crepe,
+            multihit_model=multihit_model,
+        )[0]).log()
+
+        if not torch.allclose(adjusted_codon_probs, sim_probs):
+            diff_mask = ~torch.isclose(adjusted_codon_probs, sim_probs)
+            print(flat_hit_classes[diff_mask].detach().numpy())
+            print((adjusted_codon_probs - sim_probs)[diff_mask].detach().numpy())
+            print(adjusted_codon_probs[diff_mask].detach().numpy())
+            print(sim_probs[diff_mask].detach().numpy())
+            assert False
