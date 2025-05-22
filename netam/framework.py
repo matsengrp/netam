@@ -24,10 +24,12 @@ from netam.common import (
     parallelize_function,
 )
 from netam.sequences import (
-    aa_mask_tensor_of,
+    codon_mask_tensor_of,
     codon_idx_tensor_of_str_ambig,
     BASES_AND_N_TO_INDEX,
     BASES,
+    AMBIGUOUS_CODON_IDX,
+    AA_AMBIG_IDX,
     VRC01_NT_SEQ,
     generate_kmers,
     kmer_to_index_of,
@@ -39,6 +41,9 @@ from netam.sequences import (
 )
 from netam import models
 import netam.molevol as molevol
+
+
+_CODONS_WITH_AMBIG = CODONS + ["NNN"]
 
 
 def encode_mut_pos_and_base(parent, child, site_count=None):
@@ -341,10 +346,25 @@ def load_crepe(prefix, device=None):
             f"Model class '{model_class_name}' not found in 'models' module."
         )
 
-    if issubclass(model_class, models.TransformerBinarySelectionModelLinAct):
+    # Handle defaults for model hyperparameters that are missing because the
+    # model was trained before they were added
+    if issubclass(model_class, models.AbstractBinarySelectionModel):
         if "known_token_count" not in config["model_hyperparameters"]:
-            # Assume the model is from before any new tokens were added, so 21
-            config["model_hyperparameters"]["known_token_count"] = 21
+            if issubclass(model_class, models.TransformerBinarySelectionModelLinAct):
+                # Assume the model is from before any new tokens were added, so 21
+                config["model_hyperparameters"]["known_token_count"] = 21
+            else:
+                # Then it's a single model...
+                config["model_hyperparameters"]["known_token_count"] = 22
+        default_vals = {
+            "neutral_model_name": "ThriftyHumV0.2-59",
+            "multihit_model_name": None,
+            "train_timestamp": "old",
+            "model_type": "unknown",
+        }
+        for key, val in default_vals.items():
+            if key not in config["model_hyperparameters"]:
+                config["model_hyperparameters"][key] = val
 
     model = model_class(**config["model_hyperparameters"])
 
@@ -443,6 +463,10 @@ def standardize_heavy_light_columns(pcp_df):
                     fill_value = pd.NA
                 pcp_df.loc[is_heavy_chain, col + "_l"] = fill_value
                 pcp_df.loc[~is_heavy_chain, col + "_h"] = fill_value
+                # Avoid implicit cast to float, even when column contains no NaNs
+                if pd.api.types.is_integer_dtype(pcp_df[col]):
+                    for dcol in [col + "_h", col + "_l"]:
+                        pcp_df[dcol] = pcp_df[dcol].astype("Int64")
 
     if (pcp_df["parent_h"].str.len() + pcp_df["parent_l"].str.len()).min() < 3:
         raise ValueError("At least one PCP has fewer than three nucleotides.")
@@ -495,6 +519,18 @@ def add_shm_model_outputs_to_pcp_df(pcp_df, crepe, light_chain_rate_adjustment=0
     Returns:
         pcp_df: the input DataFrame with columns `nt_rates_h`, `nt_csps_h`, `nt_rates_l`, and `nt_csps_l` added.
     """
+    max_seq_len = max(
+        pcp_df["parent_h"].str.len().max(), pcp_df["parent_l"].str.len().max()
+    )
+    if crepe.encoder.site_count < max_seq_len:
+        print(
+            f"Neutral model can only handle sequences of length {crepe.encoder.site_count} "
+            f"but the longest sequence in the dataset is {max_seq_len}. "
+            "Filtering out sequences that are too long."
+        )
+        pcp_df = pcp_df[pcp_df["parent_h"].str.len() <= crepe.encoder.site_count]
+        pcp_df = pcp_df[pcp_df["parent_l"].str.len() <= crepe.encoder.site_count]
+
     pcp_df["nt_rates_h"], pcp_df["nt_csps_h"] = trimmed_shm_model_outputs_of_crepe(
         crepe, pcp_df["parent_h"]
     )
@@ -1191,9 +1227,10 @@ def codon_probs_of_parent_seq(
         )
 
     aa_seqs = tuple(translate_sequences(nt_sequence))
-    mask = tuple(aa_mask_tensor_of(chain_aa_seq) for chain_aa_seq in aa_seqs)
+    # We must mask any codons containing N's because we need neutral probs to
+    # do simulation:
+    mask = tuple(codon_mask_tensor_of(chain_nt_seq) for chain_nt_seq in nt_sequence)
     rates, csps = trimmed_shm_model_outputs_of_crepe(neutral_crepe, nt_sequence)
-    log_selection_factors = selection_crepe([aa_seqs])[0]
     log_selection_factors = tuple(
         map(
             torch.log,
@@ -1206,11 +1243,13 @@ def codon_probs_of_parent_seq(
         # 1 (0 in log space).
         new_selection_factors = []
         for aa_seq, old_selection_factors in zip(aa_seqs, log_selection_factors):
-            chain_factors = old_selection_factors.unsqueeze(1).repeat(1, 20)
-            parent_indices = aa_idx_tensor_of_str(aa_seq)
-            if len(parent_indices) > 0:
-                chain_factors[torch.arange(len(parent_indices)), parent_indices] = 0.0
-            new_selection_factors.append(chain_factors)
+            if len(aa_seq) == 0:
+                new_selection_factors.append(torch.empty(0, 20, dtype=old_selection_factors.dtype))
+            else:
+                parent_indices = aa_idx_tensor_of_str(aa_seq)
+                new_selection_factors.append(
+                    molevol.lift_to_per_aa_selection_factors(old_selection_factors.exp(), parent_indices).log()
+                )
         log_selection_factors = tuple(new_selection_factors)
 
     parent_codon_idxs = tuple(
@@ -1252,16 +1291,40 @@ def sample_sequence_from_codon_probs(codon_probs):
 
     Args:
         codon_probs: A tensor of shape (L, 64) representing the
-            probabilities of each codon at each site.
+            probabilities of each codon at each site. Any site containing
+            nan pobabilities will be filled with `NNN`.
     Returns:
         A string representing the mutated sequence.
     """
+    codon_logits = codon_probs.log()
+    # Initialize the output tensor
+    sampled_codon_indices = torch.full(
+        (codon_logits.shape[0],), AMBIGUOUS_CODON_IDX, dtype=torch.long
+    )
 
-    # Sample codon indices based on probabilities at each position
-    sampled_codon_indices = torch.multinomial(codon_probs, num_samples=1).squeeze()
+    # Identify positions without NaN values
+    unambiguous_codons = ~codon_logits.isnan().any(dim=1)
+
+    if torch.any(unambiguous_codons):
+        # Extract valid logits
+        valid_logits = codon_logits[unambiguous_codons]
+
+        # Create a multinomial distribution using logits directly for numerical stability
+        # We use log_softmax first for better numerical stability
+        log_probs = torch.log_softmax(valid_logits, dim=1)
+        distribution = torch.distributions.Multinomial(total_count=1, logits=log_probs)
+
+        # Sample from the distribution for all positions at once
+        samples = distribution.sample()
+
+        # Get indices of the 1s in the one-hot encoded samples
+        sampled_indices = torch.argmax(samples, dim=1)
+
+        # Assign the sampled indices to the appropriate positions
+        sampled_codon_indices[unambiguous_codons] = sampled_indices
 
     # Convert codon indices to codon strings
-    sampled_codons = [CODONS[idx.item()] for idx in sampled_codon_indices]
+    sampled_codons = [_CODONS_WITH_AMBIG[idx.item()] for idx in sampled_codon_indices]
 
     # Join the codons to form the complete sequence
     mutated_sequence = "".join(sampled_codons)

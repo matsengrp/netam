@@ -3,7 +3,7 @@
 import torch
 import torch.nn.functional as F
 
-from netam.common import BIG
+from netam.common import BIG, SMALL_PROB
 from netam.dxsm import DXSMDataset, DXSMBurrito
 import netam.molevol as molevol
 
@@ -77,7 +77,7 @@ class DASMDataset(DXSMDataset):
             pad_len = self.max_aa_seq_len - neutral_codon_probs.shape[0]
             if pad_len > 0:
                 neutral_codon_probs = F.pad(
-                    neutral_codon_probs, (0, 0, 0, pad_len), value=1e-8
+                    neutral_codon_probs, (0, 0, 0, pad_len), value=SMALL_PROB
                 )
 
             neutral_codon_probs_l.append(neutral_codon_probs)
