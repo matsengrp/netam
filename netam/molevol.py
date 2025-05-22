@@ -45,7 +45,7 @@ def check_csps(parent_idxs: Tensor, csps: Tensor) -> Tensor:
     ), "Parent entry must have a substitution probability of nearly 0"
     assert torch.allclose(
         csps[: len(parent_idxs)].sum(dim=1), torch.ones(len(parent_idxs))
-    )
+    ), "Substitution probabilities must sum to 1"
 
 
 def build_mutation_matrices(
