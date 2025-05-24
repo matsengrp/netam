@@ -169,6 +169,14 @@ def translate_sequences(nt_sequences):
     return [translate_sequence(seq) for seq in nt_sequences]
 
 
+def translate_sequence_mask_codons(nt_sequence):
+    """Translate a nucleotide sequence, masking as ambiguous any codon containing an N"""
+    return "".join(translate_codon(codon) if "N" not in codon else "X" for codon in iter_codons(nt_sequence))
+
+
+def translate_sequences_mask_codons(nt_sequences):
+    return [translate_sequence_mask_codons(seq) for seq in nt_sequences]
+
 def generic_mutation_frequency(ambig_symb, parent, child):
     """Return the fraction of sites that differ between the parent and child
     sequences."""

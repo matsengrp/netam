@@ -4,6 +4,7 @@ from netam.framework import (
     add_shm_model_outputs_to_pcp_df,
 )
 from netam import pretrained
+import torch
 
 
 @pytest.fixture(scope="module")

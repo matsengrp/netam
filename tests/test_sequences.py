@@ -26,6 +26,7 @@ from netam.sequences import (
     unflatten_codon_idxs,
     flatten_codon_idxs,
     nt_idx_tensor_of_str,
+    codon_mask_tensor_of,
 )
 from netam.codon_table import CODON_AA_INDICATOR_MATRIX
 from netam.common import combine_and_pad_tensors
@@ -229,3 +230,49 @@ def test_codon_indices():
         print(test_codon_idxs)
         print(true_codon_indices)
         assert False
+
+def test_codon_mask_tensor_of():
+    cases = [
+        [
+            "ATGCGTACGTAG",
+            None,
+            [True] * 4,
+        ],
+        [
+            "ATGCGTACGTAG",
+            4,
+            [True] * 4,
+        ],
+        [
+            "ATGCGTACGTAG",
+            5,
+            [True] * 4 + [False],
+        ],
+        [
+            "ATGCGTACGTAG",
+            3,
+            [True] * 3,
+        ],
+        [
+            "ATGCGTACGTAN",
+            None,
+            [True] * 3 + [False],
+        ],
+        [
+            "ATG^^^ACGTAG",
+            4,
+            [True, False, True, True],
+        ],
+        [
+            "ATGNGTACGTAG",
+            5,
+            [True, False, True, True, False],
+        ],
+        [
+            "ATGCGTACGNAG",
+            3,
+            [True] * 3,
+        ],
+    ]
+    for seq, aa_len, expected in cases:
+        assert codon_mask_tensor_of(seq, aa_length=aa_len).tolist() == expected
