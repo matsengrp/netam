@@ -641,7 +641,7 @@ def dnsm_burrito(pcp_df):
 
 
 # TODO add dasm_burrito back
-@pytest.mark.parametrize("burrito_func", [dnsm_burrito])
+@pytest.mark.parametrize("burrito_func", [dasm_burrito])
 def test_selection_factors(pcp_df, burrito_func):
     burrito = burrito_func(pcp_df)
     # There are two ways of computing codon probabilities. Let's make sure
@@ -655,7 +655,6 @@ def test_selection_factors(pcp_df, burrito_func):
     )
     multihit_model = pretrained.load_multihit(DEFAULT_MULTIHIT_MODEL)
     for multihit_model in [None, pretrained.load_multihit(DEFAULT_MULTIHIT_MODEL)]:
-        branch_length = 0.8
         for seq in pcp_df["parent_h"]:
             parent_idxs = sequences.nt_idx_tensor_of_str(seq.replace("N", "A"))
             aa_seq_len = len(seq) // 3
@@ -680,11 +679,14 @@ def test_selection_factors(pcp_df, burrito_func):
 
             print("from crepe")
             from_crepe = burrito.to_crepe()([(aa_parent, "")])[0][0]
-            print(from_crepe)
-            from_crepe = molevol.lift_to_per_aa_selection_factors(from_crepe, sequences.aa_idx_tensor_of_str_ambig(aa_parent))
+            if burrito.model.model_type == "dnsm":
+                from_crepe = molevol.lift_to_per_aa_selection_factors(from_crepe, sequences.aa_idx_tensor_of_str_ambig(aa_parent))
             if not torch.allclose(from_crepe, sel_matrix):
-                print(from_crepe)
-                print(sel_matrix)
+                diff_mask = ~torch.isclose(from_crepe, sel_matrix, equal_nan=True)
+                print(from_crepe[diff_mask])
+                print((from_crepe - sel_matrix)[diff_mask])
+                print(sel_matrix[diff_mask])
+                print("".join(char for char, m in zip(aa_parent, diff_mask.any(dim=-1).tolist()) if m))
                 assert False
 
 
