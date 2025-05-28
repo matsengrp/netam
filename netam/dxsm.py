@@ -308,8 +308,6 @@ class DXSMBurrito(framework.Burrito, ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Does model metadata match dataset?
-        # TODO Don't have a way to check neutral model here... should we add
-        # info about neutral model to dataset?
 
         # For backward compatibility -- it's not possible to determine what an
         # old crepe is from its metadata :(

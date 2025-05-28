@@ -319,8 +319,6 @@ def build_codon_mutsel(
     )
     codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
 
-    # # TODO for testing
-    # assert multihit_model is None
     if multihit_model is not None:
         codon_probs = multihit_model.forward(parent_codon_idxs, codon_probs)
 
@@ -384,8 +382,6 @@ def neutral_codon_probs(
     )
     codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
 
-    # # TODO for testing
-    # assert multihit_model is None
     if multihit_model is not None:
         codon_probs = multihit_model.forward(parent_codon_idxs, codon_probs)
 

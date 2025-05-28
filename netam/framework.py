@@ -1215,7 +1215,7 @@ def _nan_masked_sites(in_tensor, site_mask):
     return in_tensor
 
 
-def codon_probs_of_parent_seq_old(
+def codon_probs_of_parent_seq(
     selection_crepe, nt_sequence, branch_length, neutral_crepe=None, multihit_model=None
 ):
     """Calculate the predicted model probabilities of each codon at each site.
@@ -1239,7 +1239,12 @@ def codon_probs_of_parent_seq_old(
     # We may need to translate codons containing N's as ambiguities, even if they
     # can be translated to a single amino acid. Otherwise, predictions will not
     # match the burrito predictions
-    aa_seqs = tuple(translate_sequences(nt_sequence))
+    # aa_seqs = tuple(translate_sequences(nt_sequence))
+    # TODO is this the right choice?? Concealing data from the model to get
+    # better agreement with the burrito? Is the burrito doing the right thing?
+    # (maybe it should be taking into account the aa despite the ambiguity in
+    # the codon)
+    aa_seqs = tuple(translate_sequences_mask_codons(nt_sequence))
     # We must mask any codons containing N's because we need neutral probs to
     # do simulation:
     mask = tuple(codon_mask_tensor_of(chain_nt_seq) for chain_nt_seq in nt_sequence)
@@ -1296,7 +1301,7 @@ def codon_probs_of_parent_seq_old(
     )
 
 
-def codon_probs_of_parent_seq(
+def codon_probs_of_parent_seq_new(
     selection_crepe, nt_sequence, branch_length, neutral_crepe=None, multihit_model=None
 ):
     """Calculate the predicted model probabilities of each codon at each site.

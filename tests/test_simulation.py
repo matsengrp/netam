@@ -500,7 +500,7 @@ def test_refit_branch_lengths(pcp_df, dasm_pred_burrito):
     assert torch.allclose(burrito.val_dataset.branch_lengths.mean().double(), torch.tensor(fixed_branch_length).double(), rtol=1e-2)
 
 
-def test_selection_factors(pcp_df, dasm_pred_burrito):
+def test_selection_factors_with_crepe(pcp_df, dasm_pred_burrito):
     """Test that the DASM burrito computes the same selection factors as the crepe
     model."""
     parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
@@ -568,13 +568,15 @@ def test_sequence_sample_dnsm(pcp_df, dnsm_burrito):
         sample_sequence_from_codon_probs(heavy_codon_probs)
 
 
-def introduce_ns(sequence, p=0.1):
+def introduce_ns(sequence, site_p=0.05, seq_p=0.5):
     """Introduce N's into the sequence."""
+    if torch.rand(1).item() > seq_p:
+        return sequence
     # Convert the sequence to a list of characters
     seq_list = list(sequence)
     # Randomly select positions to introduce N's
     for i in range(len(seq_list)):
-        if torch.rand(1).item() < p:  # 10% chance to introduce an N
+        if torch.rand(1).item() < site_p:  # 10% chance to introduce an N
             seq_list[i] = "N"
     # Convert back to a string
     return "".join(seq_list)
@@ -653,22 +655,19 @@ def single_dnsm_burrito(pcp_df):
     )
 
 
-# TODO add dasm_burrito back
-# @pytest.mark.parametrize("burrito_func", [single_dnsm_burrito])
-@pytest.mark.parametrize("burrito_func", [dasm_burrito, dnsm_burrito])
+@pytest.mark.parametrize("burrito_func", [single_dnsm_burrito, dasm_burrito, dnsm_burrito])
 def test_selection_factors(pcp_df, burrito_func):
     burrito = burrito_func(pcp_df)
-    # There are two ways of computing codon probabilities. Let's make sure
-    # they're the same:
+    # Make sure selection factors from the burrito match those from the crepe model:
     pcp_df = pcp_df.copy()
-    # pcp_df["parent_h"] = [introduce_ns(seq) for seq in pcp_df["parent_h"]]
+    pcp_df["parent_h"] = [introduce_ns(seq) for seq in pcp_df["parent_h"]]
     neutral_crepe = pretrained.load("ThriftyHumV0.2-59")
     pcp_df = add_shm_model_outputs_to_pcp_df(
         pcp_df.copy(),
         neutral_crepe,
     )
     for seq in pcp_df["parent_h"]:
-        aa_parent = translate_sequence(seq)
+        aa_parent = translate_sequence_mask_codons(seq)
 
         _token_nt_parent, _ = sequences.prepare_heavy_light_pair(
             seq,
@@ -687,13 +686,15 @@ def test_selection_factors(pcp_df, burrito_func):
             from_crepe = molevol.lift_to_per_aa_selection_factors(from_crepe, sequences.aa_idx_tensor_of_str_ambig(aa_parent))
         if not torch.allclose(from_crepe, sel_matrix):
             diff_mask = ~torch.isclose(from_crepe, sel_matrix, equal_nan=True)
-            print(from_crepe[diff_mask])
+            print("Differences in selection factors")
             print((from_crepe - sel_matrix)[diff_mask])
+            print("from crepe:")
+            print(from_crepe[diff_mask])
+            print("From burrito:")
             print(sel_matrix[diff_mask])
+            print("Parent sequence values at sites with differences")
             print("".join(char for char, m in zip(aa_parent, diff_mask.any(dim=-1).tolist()) if m))
             assert False
-
-
 
 
 # TODO add dasm_burrito back
@@ -705,7 +706,7 @@ def test_build_codon_mutsel(pcp_df, burrito_func):
     # they're the same:
     neutral_crepe = pretrained.load("ThriftyHumV0.2-59")
     pcp_df = pcp_df.copy()
-    # pcp_df["parent_h"] = [introduce_ns(seq) for seq in pcp_df["parent_h"]]
+    pcp_df["parent_h"] = [introduce_ns(seq) for seq in pcp_df["parent_h"]]
     pcp_df = add_shm_model_outputs_to_pcp_df(
         pcp_df.copy(),
         neutral_crepe,

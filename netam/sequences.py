@@ -100,22 +100,6 @@ def flatten_codon_idxs(nt_codon_tensor):
         flat_codon_tensor[:, 0], flat_codon_tensor[:, 1], flat_codon_tensor[:, 2]
     ].reshape(*original_shape[:-1])
 
-# We build a table that will allow us to look up the amino acid index
-# from the codon indices. Argmax gets the aa index.
-AA_IDX_FROM_CODON = CODON_AA_INDICATOR_MATRIX.argmax(dim=1).view(4, 4, 4)
-
-def aa_idxs_of_codon_idxs(codon_idx_tensor):
-    """Translate an unflattened codon index tensor of shape (L, 3) to a tensor of amino
-    acid indices."""
-    # Get the amino acid index for each parent codon.
-    return AA_IDX_FROM_CODON[
-        (
-            parent_codon_idxs[:, 0],
-            parent_codon_idxs[:, 1],
-            parent_codon_idxs[:, 2],
-        )
-    ]
-
 
 def idx_of_codon_allowing_ambiguous(codon):
     if "N" in codon:

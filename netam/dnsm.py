@@ -44,15 +44,8 @@ class DNSMDataset(DXSMDataset):
             nt_mask = mask.repeat_interleave(3)[:parent_len]
             molevol.check_csps(parent_idxs[nt_mask], nt_csps[:parent_len][nt_mask])
 
-            # mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
             nt_csps = nt_csps[:parent_len, :]
 
-            # neutral_aa_mut_probs = molevol.neutral_aa_mut_probs(
-            #     parent_idxs.reshape(-1, 3),
-            #     mut_probs.reshape(-1, 3),
-            #     nt_csps.reshape(-1, 3, 4),
-            #     multihit_model=self.multihit_model,
-            # )
             neutral_aa_mut_probs = molevol.non_stop_neutral_aa_mut_probs(
                 parent_idxs,
                 nt_rates[:parent_len],

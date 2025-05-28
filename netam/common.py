@@ -14,7 +14,6 @@ import multiprocessing as mp
 
 
 BIG = 1e9
-# TODO after testing, change back to 1e-10
 SMALL_PROB = 1e-10
 
 
