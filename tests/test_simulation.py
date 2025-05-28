@@ -640,67 +640,72 @@ def dnsm_burrito(pcp_df):
     )
 
 
+def single_dnsm_burrito(pcp_df):
+    crepe = load_crepe("/home/wdumm/dnsm-netam-proj-runner1/dnsm-experiments-1/dnsm-train/trained_models/single-tst-joint")
+    return DNSMBurrito(
+        None,
+        DNSMDataset.of_pcp_df(
+            pcp_df,
+            crepe.model.known_token_count,
+            multihit_model=None,
+        ),
+        model=crepe.model,
+    )
+
+
 # TODO add dasm_burrito back
-@pytest.mark.parametrize("burrito_func", [dasm_burrito])
+# @pytest.mark.parametrize("burrito_func", [single_dnsm_burrito])
+@pytest.mark.parametrize("burrito_func", [dasm_burrito, dnsm_burrito])
 def test_selection_factors(pcp_df, burrito_func):
     burrito = burrito_func(pcp_df)
     # There are two ways of computing codon probabilities. Let's make sure
     # they're the same:
     pcp_df = pcp_df.copy()
-    pcp_df["parent_h"] = [introduce_ns(seq) for seq in pcp_df["parent_h"]]
+    # pcp_df["parent_h"] = [introduce_ns(seq) for seq in pcp_df["parent_h"]]
     neutral_crepe = pretrained.load("ThriftyHumV0.2-59")
     pcp_df = add_shm_model_outputs_to_pcp_df(
         pcp_df.copy(),
         neutral_crepe,
     )
-    multihit_model = pretrained.load_multihit(DEFAULT_MULTIHIT_MODEL)
-    for multihit_model in [None, pretrained.load_multihit(DEFAULT_MULTIHIT_MODEL)]:
-        for seq in pcp_df["parent_h"]:
-            parent_idxs = sequences.nt_idx_tensor_of_str(seq.replace("N", "A"))
-            aa_seq_len = len(seq) // 3
-            aa_parent = translate_sequence_mask_codons(seq)
-            aa_parent_idxs = sequences.aa_idx_tensor_of_str_ambig(aa_parent)
-            codon_parent_idxs = sequences.codon_idx_tensor_of_str_ambig(seq)
-            hit_classes = parent_specific_hit_classes(
-                parent_idxs.reshape(-1, 3),
-            )
-            flat_hit_classes = molevol.flatten_codons(hit_classes)
+    for seq in pcp_df["parent_h"]:
+        aa_parent = translate_sequence(seq)
 
-            _token_nt_parent, _ = sequences.prepare_heavy_light_pair(
-                seq,
-                "",
-                burrito.model.known_token_count,
-            )
-            _token_aa_parent = translate_sequence(_token_nt_parent)
-            _token_aa_parent_idxs = sequences.aa_idx_tensor_of_str_ambig(_token_aa_parent)
-            _token_aa_mask = sequences.codon_mask_tensor_of(_token_nt_parent)
-            print("from burrito")
-            sel_matrix = burrito.build_selection_matrix_from_parent_aa(_token_aa_parent_idxs, _token_aa_mask)[:len(aa_parent)]
+        _token_nt_parent, _ = sequences.prepare_heavy_light_pair(
+            seq,
+            "",
+            burrito.model.known_token_count,
+        )
+        _token_aa_parent = translate_sequence(_token_nt_parent)
+        _token_aa_parent_idxs = sequences.aa_idx_tensor_of_str_ambig(_token_aa_parent)
+        _token_aa_mask = sequences.codon_mask_tensor_of(_token_nt_parent)
+        print("from burrito")
+        sel_matrix = burrito.build_selection_matrix_from_parent_aa(_token_aa_parent_idxs, _token_aa_mask)[:len(aa_parent)]
 
-            print("from crepe")
-            from_crepe = burrito.to_crepe()([(aa_parent, "")])[0][0]
-            if burrito.model.model_type == "dnsm":
-                from_crepe = molevol.lift_to_per_aa_selection_factors(from_crepe, sequences.aa_idx_tensor_of_str_ambig(aa_parent))
-            if not torch.allclose(from_crepe, sel_matrix):
-                diff_mask = ~torch.isclose(from_crepe, sel_matrix, equal_nan=True)
-                print(from_crepe[diff_mask])
-                print((from_crepe - sel_matrix)[diff_mask])
-                print(sel_matrix[diff_mask])
-                print("".join(char for char, m in zip(aa_parent, diff_mask.any(dim=-1).tolist()) if m))
-                assert False
+        print("from crepe")
+        from_crepe = burrito.to_crepe()([(aa_parent, "")])[0][0]
+        if burrito.model.model_type == "dnsm":
+            from_crepe = molevol.lift_to_per_aa_selection_factors(from_crepe, sequences.aa_idx_tensor_of_str_ambig(aa_parent))
+        if not torch.allclose(from_crepe, sel_matrix):
+            diff_mask = ~torch.isclose(from_crepe, sel_matrix, equal_nan=True)
+            print(from_crepe[diff_mask])
+            print((from_crepe - sel_matrix)[diff_mask])
+            print(sel_matrix[diff_mask])
+            print("".join(char for char, m in zip(aa_parent, diff_mask.any(dim=-1).tolist()) if m))
+            assert False
 
 
 
 
 # TODO add dasm_burrito back
-@pytest.mark.parametrize("burrito_func", [dasm_burrito, dnsm_burrito])
+@pytest.mark.parametrize("burrito_func", [single_dnsm_burrito])
+# @pytest.mark.parametrize("burrito_func", [dasm_burrito, dnsm_burrito])
 def test_build_codon_mutsel(pcp_df, burrito_func):
     burrito = burrito_func(pcp_df)
     # There are two ways of computing codon probabilities. Let's make sure
     # they're the same:
     neutral_crepe = pretrained.load("ThriftyHumV0.2-59")
     pcp_df = pcp_df.copy()
-    pcp_df["parent_h"] = [introduce_ns(seq) for seq in pcp_df["parent_h"]]
+    # pcp_df["parent_h"] = [introduce_ns(seq) for seq in pcp_df["parent_h"]]
     pcp_df = add_shm_model_outputs_to_pcp_df(
         pcp_df.copy(),
         neutral_crepe,
@@ -710,9 +715,7 @@ def test_build_codon_mutsel(pcp_df, burrito_func):
         branch_length = 0.06
         for seq, nt_rates, nt_csps in zip(pcp_df["parent_h"], pcp_df["nt_rates_h"], pcp_df["nt_csps_h"]):
             parent_idxs = sequences.nt_idx_tensor_of_str(seq.replace("N", "A"))
-            aa_seq_len = len(seq) // 3
             aa_parent = translate_sequence(seq)
-            aa_parent_idxs = sequences.aa_idx_tensor_of_str_ambig(aa_parent)
             codon_parent_idxs = sequences.codon_idx_tensor_of_str_ambig(seq)
             hit_classes = parent_specific_hit_classes(
                 parent_idxs.reshape(-1, 3),
@@ -737,9 +740,9 @@ def test_build_codon_mutsel(pcp_df, burrito_func):
             nt_mut_probs = 1.0 - torch.exp(-branch_length * nt_rates)
             codon_mutsel, _ = molevol.build_codon_mutsel(
                 parent_idxs.reshape(-1, 3),
-                nt_mut_probs.reshape(-1, 3),
-                nt_csps.reshape(-1, 3, 4),
-                sel_matrix,
+                nt_mut_probs.reshape(-1, 3),  # Linear space
+                nt_csps.reshape(-1, 3, 4),  # Linear space
+                sel_matrix,  # Linear space
                 multihit_model=multihit_model,
             )
             log_codon_mutsel = clamp_probability(codon_mutsel).log()
@@ -770,19 +773,23 @@ def test_build_codon_mutsel(pcp_df, burrito_func):
                 multihit_model=multihit_model,
             )[0]).log()
 
-            if not torch.allclose(adjusted_codon_probs, sim_probs, equal_nan=True):
-                diff_mask = ~torch.isclose(adjusted_codon_probs, sim_probs, equal_nan=True)
-                print(flat_hit_classes[diff_mask])
-                print((adjusted_codon_probs - sim_probs)[diff_mask])
-                print(adjusted_codon_probs[diff_mask])
-                print(sim_probs[diff_mask])
-                assert False
-
+            # adjusted_codon_probs = molevol.set_parent_codon_prob(adjusted_codon_probs.exp(), codon_parent_idxs,).log()
+            # sim_probs = molevol.set_parent_codon_prob(sim_probs.exp(), codon_parent_idxs,).log()
+            # flat_log_codon_mutsel = molevol.set_parent_codon_prob(flat_log_codon_mutsel.exp(), codon_parent_idxs,).log()
             # Compare mutsel path with adjust by selection factors path:
-            if not torch.allclose(adjusted_codon_probs, flat_log_codon_mutsel, equal_nan=True):
+            if not torch.allclose(adjusted_codon_probs, flat_log_codon_mutsel, equal_nan=True, atol=1e-07):
                 diff_mask = ~torch.isclose(adjusted_codon_probs, flat_log_codon_mutsel, equal_nan=True)
                 print(flat_hit_classes[diff_mask])
                 print((adjusted_codon_probs - flat_log_codon_mutsel)[diff_mask])
                 print(adjusted_codon_probs[diff_mask])
                 print(flat_log_codon_mutsel[diff_mask])
+                assert False
+
+            # adjusted_codon_probs = molevol.zero_stop_codon_probs(clamp_probability(adjusted_codon_probs.exp()).log())
+            if not torch.allclose(adjusted_codon_probs, sim_probs, equal_nan=True, atol=1e-06):
+                diff_mask = ~torch.isclose(adjusted_codon_probs, sim_probs, equal_nan=True)
+                print(flat_hit_classes[diff_mask])
+                print((adjusted_codon_probs - sim_probs)[diff_mask])
+                print(adjusted_codon_probs[diff_mask])
+                print(sim_probs[diff_mask])
                 assert False

@@ -1215,7 +1215,7 @@ def _nan_masked_sites(in_tensor, site_mask):
     return in_tensor
 
 
-def codon_probs_of_parent_seq(
+def codon_probs_of_parent_seq_old(
     selection_crepe, nt_sequence, branch_length, neutral_crepe=None, multihit_model=None
 ):
     """Calculate the predicted model probabilities of each codon at each site.
@@ -1236,10 +1236,10 @@ def codon_probs_of_parent_seq(
             "nt_sequence must be a pair of strings, with the first element being the heavy chain sequence and the second element being the light chain sequence."
         )
 
-    # We need to translate codons containing N's as ambiguities, even if they
+    # We may need to translate codons containing N's as ambiguities, even if they
     # can be translated to a single amino acid. Otherwise, predictions will not
     # match the burrito predictions
-    aa_seqs = tuple(translate_sequences_mask_codons(nt_sequence))
+    aa_seqs = tuple(translate_sequences(nt_sequence))
     # We must mask any codons containing N's because we need neutral probs to
     # do simulation:
     mask = tuple(codon_mask_tensor_of(chain_nt_seq) for chain_nt_seq in nt_sequence)
@@ -1296,7 +1296,7 @@ def codon_probs_of_parent_seq(
     )
 
 
-def codon_probs_of_parent_seq_new(
+def codon_probs_of_parent_seq(
     selection_crepe, nt_sequence, branch_length, neutral_crepe=None, multihit_model=None
 ):
     """Calculate the predicted model probabilities of each codon at each site.
@@ -1336,7 +1336,9 @@ def codon_probs_of_parent_seq_new(
                 new_selection_factors.append(torch.empty(0, 20, dtype=old_selection_factors.dtype))
             else:
                 parent_indices = aa_idx_tensor_of_str_ambig(aa_seq)
+                # print(old_selection_factors)
                 new_selection_factors.append(
+                    # Selection factors are expected to be in linear space here
                     molevol.lift_to_per_aa_selection_factors(old_selection_factors, parent_indices)
                 )
         selection_factors = tuple(new_selection_factors)
@@ -1348,8 +1350,11 @@ def codon_probs_of_parent_seq_new(
     for parent_idxs, nt_csps, nt_rates, sel_matrix in zip(parent_nt_idxs, csps, rates, selection_factors):
         if len(parent_idxs) > 0:
             nt_mut_probs = 1.0 - torch.exp(-branch_length * nt_rates)
-            with open("there_inputs.p", "wb") as f:
-                pickle.dump((parent_idxs, nt_mut_probs, nt_csps, sel_matrix), f)
+            # with open("there_inputs.p", "wb") as f:
+            #     pickle.dump((parent_idxs, nt_mut_probs, nt_csps, sel_matrix), f)
+            # print(nt_mut_probs)
+            # print(nt_csps)
+            # print(sel_matrix)
             codon_mutsel, _ = molevol.build_codon_mutsel(
                 parent_idxs.reshape(-1, 3),
                 nt_mut_probs.reshape(-1, 3),
@@ -1357,9 +1362,9 @@ def codon_probs_of_parent_seq_new(
                 sel_matrix,
                 multihit_model=multihit_model,
             )
-            with open("there_outputs.p", "wb") as f:
-                pickle.dump(codon_mutsel, f)
-            codon_probs.append(molevol.flatten_codons(clamp_probability(codon_mutsel)))
+            # with open("there_outputs.p", "wb") as f:
+            #     pickle.dump(codon_mutsel, f)
+            codon_probs.append(molevol.zero_stop_codon_probs(molevol.flatten_codons(clamp_probability(codon_mutsel))))
         else:
             codon_probs.append(torch.empty(0, 64, dtype=torch.float32))
 

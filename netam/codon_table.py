@@ -78,3 +78,20 @@ def build_stop_codon_indicator_tensor():
 STOP_CODON_INDICATOR = build_stop_codon_indicator_tensor()
 
 STOP_CODON_ZAPPER = STOP_CODON_INDICATOR * -BIG
+
+# We build a table that will allow us to look up the amino acid index
+# from the codon indices. Argmax gets the aa index.
+AA_IDX_FROM_CODON = CODON_AA_INDICATOR_MATRIX.argmax(dim=1).view(4, 4, 4)
+
+
+def aa_idxs_of_codon_idxs(codon_idx_tensor):
+    """Translate an unflattened codon index tensor of shape (L, 3) to a tensor of amino
+    acid indices."""
+    # Get the amino acid index for each parent codon.
+    return AA_IDX_FROM_CODON[
+        (
+            codon_idx_tensor[:, 0],
+            codon_idx_tensor[:, 1],
+            codon_idx_tensor[:, 2],
+        )
+    ]

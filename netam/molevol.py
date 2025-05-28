@@ -11,7 +11,7 @@ import torch
 from torch import Tensor
 from warnings import warn
 
-from netam.codon_table import CODON_AA_INDICATOR_MATRIX, STOP_CODON_ZAPPER
+from netam.codon_table import CODON_AA_INDICATOR_MATRIX, STOP_CODON_ZAPPER, aa_idxs_of_codon_idxs
 
 import netam.sequences as sequences
 from netam.common import clamp_probability, clamp_probability_above
@@ -513,21 +513,44 @@ def mut_probs_of_aa_probs(
         parent_codon_idxs (torch.Tensor): The parent codons for each sequence. Shape: (codon_count, 3)
         aa_probs (torch.Tensor): The probability that each site will change to each amino acid. Shape: (codon_count, 20)
     """
-    # We build a table that will allow us to look up the amino acid index
-    # from the codon indices. Argmax gets the aa index.
-    aa_idx_from_codon = CODON_AA_INDICATOR_MATRIX.argmax(dim=1).view(4, 4, 4)
-
-    # Get the amino acid index for each parent codon.
-    parent_aa_idxs = aa_idx_from_codon[
-        (
-            parent_codon_idxs[:, 0],
-            parent_codon_idxs[:, 1],
-            parent_codon_idxs[:, 2],
-        )
-    ]
+    parent_aa_idxs = aa_idxs_of_codon_idxs(parent_codon_idxs)
     p_staying_same = aa_probs[(torch.arange(len(parent_aa_idxs)), parent_aa_idxs)]
 
     return 1.0 - p_staying_same
+
+
+def non_stop_neutral_aa_mut_probs(
+    nt_parent_idxs: Tensor,
+    nt_rates: Tensor,
+    nt_csps: Tensor,
+    branch_length: float,
+    multihit_model=None,
+) -> Tensor:
+    """For every site, what is the probability that the amino acid will have a
+    non-stop substution under neutral evolution?
+    """
+
+    mut_probs = 1.0 - torch.exp(-branch_length * nt_rates)
+    parent_codon_idxs = nt_parent_idxs.reshape(-1, 3)
+    flat_parent_codon_idxs = sequences.flatten_codon_idxs(parent_codon_idxs)
+    mut_matrices = build_mutation_matrices(
+        parent_codon_idxs,
+        mut_probs.reshape(-1, 3),
+        nt_csps.reshape(-1, 3, 4),
+    )
+    codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
+
+    if multihit_model is not None:
+        codon_probs = multihit_model.forward(parent_codon_idxs, codon_probs)
+
+    flat_codon_probs = zero_stop_codon_probs(flatten_codons(codon_probs))
+    flat_codon_probs = set_parent_codon_prob(flat_codon_probs, flat_parent_codon_idxs)
+    aa_probs = flat_codon_probs @ CODON_AA_INDICATOR_MATRIX
+
+    parent_aa_idxs = aa_idxs_of_codon_idxs(parent_codon_idxs)
+    aa_probs[torch.arange(len(parent_aa_idxs)), parent_aa_idxs] = 0.0
+    sums = aa_probs.sum(dim=-1)
+    return clamp_probability(sums)
 
 
 def neutral_aa_mut_probs(
