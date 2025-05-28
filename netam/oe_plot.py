@@ -1,4 +1,4 @@
-"""Code for generating observed vs expected plots"""
+"""Code for generating observed vs expected plots."""
 
 import numpy as np
 import pandas as pd
@@ -12,12 +12,10 @@ from matplotlib.patches import Rectangle
 
 
 def check_for_out_of_range(df):
-    """
-    Check for probabilities out of range in a DataFrame.
+    """Check for probabilities out of range in a DataFrame.
 
     Parameters:
     df (pd.DataFrame): DataFrame with column 'prob'.
-
     """
     out_of_range = df[(df["prob"] < 0) | (df["prob"] > 1)]
     if len(out_of_range) > 0:
@@ -33,10 +31,10 @@ def annotate_sites_df(
     pcp_df,
     numbering_dict=None,
 ):
-    """
-    Add annotations to a per-site DataFrame to indicate position of each site and whether each site is in a CDR.
-    The input DataFrame describes a site in each row is expected to have the 'pcp_index' column,
-    indicating the index of the PCP the site belongs to.
+    """Add annotations to a per-site DataFrame to indicate position of each site and
+    whether each site is in a CDR. The input DataFrame describes a site in each row is
+    expected to have the 'pcp_index' column, indicating the index of the PCP the site
+    belongs to.
 
     Parameters:
     df (pd.DataFrame): site mutabilities DataFrame.
@@ -434,8 +432,8 @@ def plot_sites_observed_vs_expected(
 
 
 def locate_top_k_substitutions(site_sub_probs, k_sub):
-    """
-    Return the top k substitutions predicted for a parent-child pair given precalculated site substitution probabilities.
+    """Return the top k substitutions predicted for a parent-child pair given
+    precalculated site substitution probabilities.
 
     Parameters:
     site_sub_probs (np.array): Probability of substition at each site for a parent sequence.
@@ -443,7 +441,6 @@ def locate_top_k_substitutions(site_sub_probs, k_sub):
 
     Returns:
     pred_sub_sites (np.array): Location of top-k predicted substitutions by model (unordered).
-
     """
     if k_sub == 0:
         return []
@@ -459,14 +456,12 @@ def locate_top_k_substitutions(site_sub_probs, k_sub):
 
 
 def get_subs_and_preds_from_mutabilities_df(df, pcp_df):
-    """
-    Determines the sites of observed and predicted substitutions of every PCP in a dataset,
-    from a site mutabilities DataFrame, which has columns
-    'pcp_index' (index of the PCP that the site belongs to),
-    'prob' (the mutability probability of the site),
-    'mutation' (whether the site has an observed mutation).
-    Predicted substitutions are the sites in the top-k of mutability,
-    where k is the number of observed substition in the PCP.
+    """Determines the sites of observed and predicted substitutions of every PCP in a
+    dataset, from a site mutabilities DataFrame, which has columns 'pcp_index' (index of
+    the PCP that the site belongs to), 'prob' (the mutability probability of the site),
+    'mutation' (whether the site has an observed mutation). Predicted substitutions are
+    the sites in the top-k of mutability, where k is the number of observed substition
+    in the PCP.
 
     Parameters:
     df (pd.DataFrame): site mutabilities DataFrame.
@@ -622,14 +617,15 @@ def plot_sites_observed_vs_top_k_predictions(
 
 
 def get_sub_acc_from_csp_df(df, pcp_df, top_k=1):
-    """
-    Determines the sites of observed substitutions and whether the amino acid substitution is predicted
-    among the top-k most probable for every PCP in a dataset, using a dataframe of CSPs at sites of substitutions.
-    The input DataFrame describes a site and conditional substitution probability (CSP) in each row for an amino acid.
-    The `site` corresponds to a site of substitution, and there are 20 rows for each site to cover all amino acids.
-    Each row is expected to have the `pcp_index` column, indicating the index of the PCP the site belongs to.
-    `prob` denotes a CSP and `aa` denotes the index in AA_STR_SORTED of the corresponding amino acid.
-    `is_target` denotes if the amino acid is the observed substitution target.
+    """Determines the sites of observed substitutions and whether the amino acid
+    substitution is predicted among the top-k most probable for every PCP in a dataset,
+    using a dataframe of CSPs at sites of substitutions. The input DataFrame describes a
+    site and conditional substitution probability (CSP) in each row for an amino acid.
+    The `site` corresponds to a site of substitution, and there are 20 rows for each
+    site to cover all amino acids. Each row is expected to have the `pcp_index` column,
+    indicating the index of the PCP the site belongs to. `prob` denotes a CSP and `aa`
+    denotes the index in AA_STR_SORTED of the corresponding amino acid. `is_target`
+    denotes if the amino acid is the observed substitution target.
 
     Parameters:
     df (pd.DataFrame): site CSPs DataFrame.
@@ -956,13 +952,14 @@ def annotate_site_csp_df(
     pcp_df,
     numbering_dict=None,
 ):
-    """
-    Create a DataFrame with modified or additional annotations for site numbering and CDR label.
-    The input DataFrame describes a site and conditional substitution probability (CSP) in each row for an amino acid.
-    The `site` corresponds to a site of substitution, and there are 20 rows for each site to cover all amino acids.
-    Each row is expected to have the `pcp_index` column, indicating the index of the PCP the site belongs to.
-    `prob` denotes a CSP and `aa` denotes the index in AA_STR_SORTED of the corresponding amino acid.
-    `is_target` denotes if the amino acid is the observed substitution target.
+    """Create a DataFrame with modified or additional annotations for site numbering and
+    CDR label. The input DataFrame describes a site and conditional substitution
+    probability (CSP) in each row for an amino acid. The `site` corresponds to a site of
+    substitution, and there are 20 rows for each site to cover all amino acids. Each row
+    is expected to have the `pcp_index` column, indicating the index of the PCP the site
+    belongs to. `prob` denotes a CSP and `aa` denotes the index in AA_STR_SORTED of the
+    corresponding amino acid. `is_target` denotes if the amino acid is the observed
+    substitution target.
 
     Parameters:
     df (pd.DataFrame): site CSPs DataFrame.
@@ -1036,8 +1033,7 @@ def annotate_site_csp_df(
 
 
 def pcp_sites_cdr_annotation(pcp_row):
-    """
-    Annotations for CDR or not for all sites in a PCP.
+    """Annotations for CDR or not for all sites in a PCP.
 
     Parameters:
     pcp_row (pd.Series): A row from the corresponding PCP file
@@ -1071,8 +1067,7 @@ def pcp_sites_cdr_annotation(pcp_row):
 
 
 def pcp_sites_regions(pcp_row):
-    """
-    Annotations for CDR/FWR for all sites in a PCP.
+    """Annotations for CDR/FWR for all sites in a PCP.
 
     Parameters:
     pcp_row (pd.Series): A row from the corresponding PCP file
