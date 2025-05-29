@@ -36,7 +36,7 @@ from typing import Tuple
 # in their metadata
 DEFAULT_NEUTRAL_MODEL = "ThriftyHumV0.2-59"
 DEFAULT_MULTIHIT_MODEL = None
-# # TODOO when done with dnsm retrainings, switch back to this:
+# # TODO when done with dnsm retrainings, switch back to this:
 # DEFAULT_MULTIHIT_MODEL = "ThriftyHumV0.2-59-hc-tangshm"
 
 
@@ -702,11 +702,6 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
             A tensor of shape (B, L, out_features) representing the log level
             of selection for each possible amino acid at each site.
         """
-        # TODO for debugging:
-        print(f"model inputs {amino_acid_indices.shape} aa indices, {mask.sum(dim=-1)} unmasked sites")
-        print(mask.detach().tolist())
-        print(amino_acid_indices.detach().tolist())
-
         result = self.predict(self.represent(amino_acid_indices, mask))
         if self.hyperparameters["output_dim"] >= 20:
             # To match the paper, we set wildtype aa selection factors to 1,

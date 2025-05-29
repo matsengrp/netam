@@ -47,6 +47,7 @@ from netam.sequences import (
 from netam import models
 import netam.molevol as molevol
 
+DEFAULT_LIGHT_CHAIN_RATE_ADJUSTMENT = 0.63
 
 _CODONS_WITH_AMBIG = CODONS + ["NNN"]
 
@@ -403,6 +404,15 @@ def trimmed_shm_model_outputs_of_crepe(crepe, parents):
     return trimmed_rates, trimmed_csps
 
 
+def trimmed_shm_outputs_of_parent_pair(crepe, parent_pair, light_chain_rate_adjustment=DEFAULT_LIGHT_CHAIN_RATE_ADJUSTMENT):
+    """Model outputs for a heavy, light chain sequence pair. Light chain rates are adjusted
+    by `light_chain_rate_adjustment` factor."""
+    assert len(parent_pair) == 2, "Parent pair must contain a heavy and light chain sequence."
+    rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, parent_pair)
+    rates[1] *= light_chain_rate_adjustment
+    return rates, csps
+
+
 def standardize_heavy_light_columns(pcp_df):
     """Ensure that heavy and light chain columns are present, and fill missing ones with
     placeholder values.
@@ -513,7 +523,7 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
     return pcp_df
 
 
-def add_shm_model_outputs_to_pcp_df(pcp_df, crepe, light_chain_rate_adjustment=0.63):
+def add_shm_model_outputs_to_pcp_df(pcp_df, crepe, light_chain_rate_adjustment=DEFAULT_LIGHT_CHAIN_RATE_ADJUSTMENT):
     """Evaluate a neutral model on PCPs.
 
     Args:
@@ -1236,19 +1246,13 @@ def codon_probs_of_parent_seq(
             "nt_sequence must be a pair of strings, with the first element being the heavy chain sequence and the second element being the light chain sequence."
         )
 
-    # We may need to translate codons containing N's as ambiguities, even if they
-    # can be translated to a single amino acid. Otherwise, predictions will not
-    # match the burrito predictions
-    # aa_seqs = tuple(translate_sequences(nt_sequence))
-    # TODO is this the right choice?? Concealing data from the model to get
-    # better agreement with the burrito? Is the burrito doing the right thing?
-    # (maybe it should be taking into account the aa despite the ambiguity in
-    # the codon)
+    # See Issue #139 for why we use this instead of `translate_sequences`
     aa_seqs = tuple(translate_sequences_mask_codons(nt_sequence))
     # We must mask any codons containing N's because we need neutral probs to
     # do simulation:
     mask = tuple(codon_mask_tensor_of(chain_nt_seq) for chain_nt_seq in nt_sequence)
-    rates, csps = trimmed_shm_model_outputs_of_crepe(neutral_crepe, nt_sequence)
+    # This function applies the light chain rate adjustment
+    rates, csps = trimmed_shm_outputs_of_parent_pair(neutral_crepe, nt_sequence)
     log_selection_factors = tuple(
         map(
             torch.log,
@@ -1299,81 +1303,6 @@ def codon_probs_of_parent_seq(
             parent_codon_idxs, log_codon_probs, log_selection_factors, mask
         )
     )
-
-
-def codon_probs_of_parent_seq_new(
-    selection_crepe, nt_sequence, branch_length, neutral_crepe=None, multihit_model=None
-):
-    """Calculate the predicted model probabilities of each codon at each site.
-
-    Args:
-        nt_sequence: A tuple of two strings, the heavy and light chain nucleotide
-            sequences.
-        branch_length: The branch length of the tree.
-    Returns:
-        a tuple of tensors of shape (L, 64) representing the predicted probabilities of each
-        codon at each site.
-    """
-    if neutral_crepe is None:
-        raise NotImplementedError("neutral_crepe is required.")
-
-    if isinstance(nt_sequence, str) or len(nt_sequence) != 2:
-        raise ValueError(
-            "nt_sequence must be a pair of strings, with the first element being the heavy chain sequence and the second element being the light chain sequence."
-        )
-
-    aa_seqs = tuple(translate_sequences_mask_codons(nt_sequence))
-    # We must mask any codons containing N's because we need neutral probs to
-    # do simulation:
-    mask = tuple(codon_mask_tensor_of(chain_nt_seq) for chain_nt_seq in nt_sequence)
-    # TODO This does not apply light chain correction factor!!
-    rates, csps = trimmed_shm_model_outputs_of_crepe(neutral_crepe, nt_sequence)
-
-    selection_factors = selection_crepe([aa_seqs])[0]
-
-    if selection_crepe.model.hyperparameters["output_dim"] == 1:
-        # Need to upgrade single selection factor to 20 selection factors, all
-        # equal except for the one for the parent sequence, which should be
-        # 1 (0 in log space).
-        new_selection_factors = []
-        for aa_seq, old_selection_factors in zip(aa_seqs, selection_factors):
-            if len(aa_seq) == 0:
-                new_selection_factors.append(torch.empty(0, 20, dtype=old_selection_factors.dtype))
-            else:
-                parent_indices = aa_idx_tensor_of_str_ambig(aa_seq)
-                # print(old_selection_factors)
-                new_selection_factors.append(
-                    # Selection factors are expected to be in linear space here
-                    molevol.lift_to_per_aa_selection_factors(old_selection_factors, parent_indices)
-                )
-        selection_factors = tuple(new_selection_factors)
-
-    parent_nt_idxs = tuple(
-        nt_idx_tensor_of_str(nt_chain_seq.replace("N", "A")) for nt_chain_seq in nt_sequence
-    )
-    codon_probs = []
-    for parent_idxs, nt_csps, nt_rates, sel_matrix in zip(parent_nt_idxs, csps, rates, selection_factors):
-        if len(parent_idxs) > 0:
-            nt_mut_probs = 1.0 - torch.exp(-branch_length * nt_rates)
-            # with open("there_inputs.p", "wb") as f:
-            #     pickle.dump((parent_idxs, nt_mut_probs, nt_csps, sel_matrix), f)
-            # print(nt_mut_probs)
-            # print(nt_csps)
-            # print(sel_matrix)
-            codon_mutsel, _ = molevol.build_codon_mutsel(
-                parent_idxs.reshape(-1, 3),
-                nt_mut_probs.reshape(-1, 3),
-                nt_csps.reshape(-1, 3, 4),
-                sel_matrix,
-                multihit_model=multihit_model,
-            )
-            # with open("there_outputs.p", "wb") as f:
-            #     pickle.dump(codon_mutsel, f)
-            codon_probs.append(molevol.zero_stop_codon_probs(molevol.flatten_codons(clamp_probability(codon_mutsel))))
-        else:
-            codon_probs.append(torch.empty(0, 64, dtype=torch.float32))
-
-    return tuple(codon_probs)
 
 
 def sample_sequence_from_codon_probs(codon_probs):

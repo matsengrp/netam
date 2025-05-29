@@ -525,26 +525,19 @@ def non_stop_neutral_aa_mut_probs(
     """For every site, what is the probability that the amino acid will have a
     non-stop substution under neutral evolution?
     """
-
     mut_probs = 1.0 - torch.exp(-branch_length * nt_rates)
     parent_codon_idxs = nt_parent_idxs.reshape(-1, 3)
-    flat_parent_codon_idxs = sequences.flatten_codon_idxs(parent_codon_idxs)
-    mut_matrices = build_mutation_matrices(
+    aa_probs = neutral_aa_probs(
         parent_codon_idxs,
         mut_probs.reshape(-1, 3),
         nt_csps.reshape(-1, 3, 4),
+        multihit_model=multihit_model,
     )
-    codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
-
-    if multihit_model is not None:
-        codon_probs = multihit_model.forward(parent_codon_idxs, codon_probs)
-
-    flat_codon_probs = zero_stop_codon_probs(flatten_codons(codon_probs))
-    flat_codon_probs = set_parent_codon_prob(flat_codon_probs, flat_parent_codon_idxs)
-    aa_probs = flat_codon_probs @ CODON_AA_INDICATOR_MATRIX
 
     parent_aa_idxs = aa_idxs_of_codon_idxs(parent_codon_idxs)
     aa_probs[torch.arange(len(parent_aa_idxs)), parent_aa_idxs] = 0.0
+    # We exclude stops by summing the probabilities of non-wt aa's, instead of
+    # taking 1 - p(wt).
     sums = aa_probs.sum(dim=-1)
     return clamp_probability(sums)
 
@@ -825,6 +818,5 @@ def lift_to_per_aa_selection_factors(
     selection_matrix[
         torch.arange(len(aa_parent_idxs))[valid_mask], aa_parent_idxs[valid_mask]
     ] = 1.0
-    # TODO is this supposed to be nan?
     selection_matrix[~valid_mask] = 1.0
     return selection_matrix

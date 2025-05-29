@@ -22,10 +22,12 @@ from netam.sequences import (
     token_mask_of_aa_idxs,
 )
 from netam.codon_table import CODON_AA_INDICATOR_MATRIX
+from conftest import get_pcp_df
 
 
-@pytest.fixture(scope="module", params=["pcp_df", "pcp_df_paired"])
-def dasm_burrito(pcp_df):
+@pytest.fixture(scope="module", params=["heavy", "paired"])
+def dasm_burrito(request):
+    pcp_df = get_pcp_df(request.param)
     force_spawn()
     """Fixture that returns the DASM Burrito object."""
     pcp_df["in_train"] = True

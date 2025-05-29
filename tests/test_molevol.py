@@ -188,3 +188,55 @@ def test_aaprob_of_mut_and_sub():
             codon_subs,
         ).squeeze(),
     )
+
+
+def _check_non_stop_neutral_aa_mut_probs(
+    nt_parent_idxs,
+    nt_rates,
+    nt_csps,
+    branch_length,
+    multihit_model=None,
+):
+
+    mut_probs = 1.0 - torch.exp(-branch_length * nt_rates)
+    parent_codon_idxs = nt_parent_idxs.reshape(-1, 3)
+    flat_parent_codon_idxs = sequences.flatten_codon_idxs(parent_codon_idxs)
+    mut_matrices = molevol.build_mutation_matrices(
+        parent_codon_idxs,
+        mut_probs.reshape(-1, 3),
+        nt_csps.reshape(-1, 3, 4),
+    )
+    codon_probs = molevol.codon_probs_of_mutation_matrices(mut_matrices)
+
+    if multihit_model is not None:
+        codon_probs = multihit_model.forward(parent_codon_idxs, codon_probs)
+
+    flat_codon_probs = molevol.zero_stop_codon_probs(molevol.flatten_codons(codon_probs))
+    flat_codon_probs = molevol.set_parent_codon_prob(flat_codon_probs, flat_parent_codon_idxs)
+    aa_probs = flat_codon_probs @ molevol.CODON_AA_INDICATOR_MATRIX
+
+    parent_aa_idxs = molevol.aa_idxs_of_codon_idxs(parent_codon_idxs)
+    aa_probs[torch.arange(len(parent_aa_idxs)), parent_aa_idxs] = 0.0
+    sums = aa_probs.sum(dim=-1)
+    return clamp_probability(sums)
+
+
+def test_non_stop_neutral_aa_mut_probs(pcp_df):
+    branch_length = 0.05
+    for multihit_model in [None, pretrained.load_multihit(DEFAULT_MULTIHIT_MODEL)]:
+        for seq, rates, csps in zip(pcp_df["parent_h"], pcp_df["nt_rates_h"], pcp_df["nt_csps_h"]):
+            neutral_aa_probs = molevol.non_stop_neutral_aa_mut_probs(
+                nt_idx_tensor_of_str(seq),
+                rates,
+                csps,
+                branch_length,
+                multihit_model=multihit_model,
+            )
+            check_neutral_aa_probs = _check_non_stop_neutral_aa_mut_probs(
+                nt_idx_tensor_of_str(seq),
+                rates,
+                csps,
+                branch_length,
+                multihit_model=multihit_model,
+            )
+            assert torch.allclose(neutral_aa_probs, check_neutral_aa_probs)

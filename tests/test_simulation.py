@@ -48,8 +48,7 @@ from netam.codon_table import STOP_CODON_INDICATOR
 from netam.hit_class import parent_specific_hit_classes
 
 
-@pytest.fixture(scope="module")
-def dasm_pred_burrito(pcp_df):
+def _dasm_pred_burrito(pcp_df):
     force_spawn()
     """Fixture that returns the DASM Burrito object."""
     pcp_df["in_train"] = False
@@ -84,8 +83,7 @@ def dasm_pred_burrito(pcp_df):
     return burrito
 
 
-@pytest.fixture(scope="module")
-def dnsm_pred_burrito(pcp_df):
+def _dnsm_pred_burrito(pcp_df):
     force_spawn()
     """Fixture that returns the DNSM Burrito object."""
     pcp_df["in_train"] = False
@@ -119,9 +117,24 @@ def dnsm_pred_burrito(pcp_df):
     return burrito
 
 
+@pytest.fixture(scope="module")
+def dnsm_pred_burrito(pcp_df):
+    return _dnsm_pred_burrito(pcp_df)
+
+
+@pytest.fixture(scope="module")
+def dasm_pred_burrito(pcp_df):
+    return _dasm_pred_burrito(pcp_df)
+
+
+@pytest.fixture(scope="module", params=[_dasm_pred_burrito, _dnsm_pred_burrito])
+def generic_burrito(request, pcp_df):
+    """Fixture that returns the DASM or DNSM Burrito object based on the parameter."""
+    return request.param(pcp_df)
+
+
 # Test that the dasm burrito computes the same predictions as
 # framework.codon_probs_of_parent_seq:
-
 
 def test_neutral_probs(pcp_df, dasm_pred_burrito):
     """Test that the DASM burrito computes the same predictions as
@@ -252,96 +265,6 @@ def test_selection_probs(pcp_df, dasm_pred_burrito):
         ):
             print(f"Stop codon probabilities are not zeroed out!")
             print(pred[:, STOP_CODON_INDICATOR == 1].exp())
-
-
-def test_selection_probs_dnsm(pcp_df, dnsm_pred_burrito):
-    """Test that the DNSM burrito computes the same predictions as
-    codon_probs_of_parent_seq."""
-    # TO make the same test for dnsm, things are more complicated because the
-    # burrito only produces aa-level probabilities.
-    parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
-
-    print("recomputing branch lengths")
-    dnsm_pred_burrito.standardize_and_optimize_branch_lengths()
-    print("updating neutral probs")
-    dnsm_pred_burrito.val_dataset.update_neutral_probs()
-    # Get the predictions from the DNSM burrito
-    dnsm_pred_burrito.batch_size = 500
-    val_loader = dnsm_pred_burrito.build_val_loader()
-    # There should be exactly one batch
-    (batch,) = val_loader
-    print("Getting predictions")
-    burrito_preds = dnsm_pred_burrito.predictions_of_batch(batch)
-    # ^ remember, this is one probability per-site of mutation.
-
-    branch_lengths = dnsm_pred_burrito.val_dataset.branch_lengths
-
-    # Get the predictions from codon_probs_of_parent_seq
-    dnsm_crepe = dnsm_pred_burrito.to_crepe()
-    neutral_crepe = pretrained.load(dnsm_pred_burrito.model.neutral_model_name)
-    print("Computing from scratch")
-    codon_probs_heavy = list(
-        codon_probs_of_parent_seq(
-            dnsm_crepe,
-            parent_seq,
-            branch_length,
-            neutral_crepe=neutral_crepe,
-            multihit_model=dnsm_pred_burrito.val_dataset.multihit_model,
-        )[0]  # For DNSM, we need to use aa-level probabilities
-        for parent_seq, branch_length in zip(parent_seqs, branch_lengths)
-    )
-
-    # Check that the predictions match
-    for pred, heavy_codon_prob, parent_seq in zip(burrito_preds, codon_probs_heavy, parent_seqs):
-        parent_codon_idxs = nt_idx_tensor_of_str(parent_seq[0]).reshape(-1, 3)
-        hit_classes = parent_specific_hit_classes(parent_codon_idxs).view(-1, 64)
-        no_mut_probs = heavy_codon_prob[hit_classes == 0].detach().clone()
-        zeroed_wt_hcprob = heavy_codon_prob.detach().clone()
-        zeroed_wt_hcprob[hit_classes == 0] = 0.0
-        mut_sums = zeroed_wt_hcprob.sum(dim=-1)
-        mut_probs = 1.0 - no_mut_probs
-        if not torch.allclose(
-            mut_probs, pred[: len(mut_probs)]
-        ):
-            print(f"The following should match:")
-            print(mut_probs.detach().numpy())
-            print(pred[: len(mut_probs)].detach().numpy())
-            print("Difference:", (mut_probs - pred[: len(mut_probs)]).detach().numpy())
-
-            print(f"The following should also match (not checked):")
-            print(mut_sums.detach().numpy())
-            print(pred[: len(mut_sums)].detach().numpy())
-            print("Difference:", (mut_sums - pred[: len(mut_sums)]).detach().numpy())
-            assert False
-
-        if not torch.allclose(
-            mut_sums, pred[:len(mut_sums)]
-        ):
-            print(f"The following should match:")
-            print(mut_sums.detach().numpy())
-            print(pred[: len(mut_sums)].detach().numpy())
-            print("Difference:", (mut_sums - pred[: len(mut_sums)]).detach().numpy())
-            assert False
-
-        # heavy_codon_prob = heavy_codon_prob.log().type_as(pred)
-        # print(pred[0].detach().numpy())
-        # print(heavy_codon_prob[0].detach().numpy())
-        # print(pred[0].logsumexp(0))
-        # print(heavy_codon_prob[0].logsumexp(0))
-        # print((pred[0] - heavy_codon_prob[0]).detach().numpy())
-        # assert torch.allclose(
-        #     # zero_stop_codon_probs(pred[: len(heavy_codon_prob)].exp()),
-        #     pred[: len(heavy_codon_prob)].exp(),
-        #     heavy_codon_prob.exp(),
-        #     atol=1e-8,
-        # ), "Predictions should match"
-        # Check that stop codons are zeroed out
-        # netam.codon_table.STOP_CODON_INDICATOR is a length 64 tensor with 1s at stop codon indices
-        # if not torch.allclose(
-        #     pred[:, STOP_CODON_INDICATOR == 1].exp(), torch.tensor(0.0)
-        # ):
-        #     print(f"Stop codon probabilities are not zeroed out!")
-        #     print(pred[:, STOP_CODON_INDICATOR == 1].exp())
 
 
 def test_sequence_sampling(pcp_df, dasm_pred_burrito):
@@ -544,17 +467,17 @@ def test_selection_factors_with_crepe(pcp_df, dasm_pred_burrito):
         ), f"Selection factors don't match for sequence {i}"
 
 
-def test_sequence_sample_dnsm(pcp_df, dnsm_burrito):
+def test_sequence_sample_dnsm(pcp_df, dnsm_pred_burrito):
     """Test that the DASM burrito can sample sequences with mutation counts similar to
     real data."""
     # Check that on average, the difference in Hamming distance between
     # sampled sequences and actual sequences to their parents is close to 0
     parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
-    branch_lengths = dnsm_burrito.val_dataset.branch_lengths
+    branch_lengths = dnsm_pred_burrito.val_dataset.branch_lengths
 
     # Get the predictions from codon_probs_of_parent_seq
-    dnsm_crepe = dnsm_burrito.to_crepe()
-    neutral_crepe = pretrained.load(dnsm_burrito.model.neutral_model_name)
+    dnsm_crepe = dnsm_pred_burrito.to_crepe()
+    neutral_crepe = pretrained.load(dnsm_pred_burrito.model.neutral_model_name)
 
     for i, (parent_seq, branch_length) in enumerate(zip(parent_seqs, branch_lengths)):
         heavy_codon_probs, _ = codon_probs_of_parent_seq(
@@ -582,16 +505,16 @@ def introduce_ns(sequence, site_p=0.05, seq_p=0.5):
     return "".join(seq_list)
 
 
-def test_ambig_sample_dnsm(pcp_df, dnsm_burrito):
+def test_ambig_sample_dnsm(pcp_df, dnsm_pred_burrito):
     """Test that the DASM burrito can sample sequences with mutation counts similar to
     real data."""
     # Check that ambiguous sites are propagated to the child
     parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
-    branch_lengths = dnsm_burrito.val_dataset.branch_lengths
+    branch_lengths = dnsm_pred_burrito.val_dataset.branch_lengths
 
     # Get the predictions from codon_probs_of_parent_seq
-    dnsm_crepe = dnsm_burrito.to_crepe()
-    neutral_crepe = pretrained.load(dnsm_burrito.model.neutral_model_name)
+    dnsm_crepe = dnsm_pred_burrito.to_crepe()
+    neutral_crepe = pretrained.load(dnsm_pred_burrito.model.neutral_model_name)
 
     for i, (parent_seq, branch_length) in enumerate(zip(parent_seqs, branch_lengths)):
         new_parent = tuple(introduce_ns(pseq) for pseq in parent_seq)
@@ -612,53 +535,8 @@ def test_ambig_sample_dnsm(pcp_df, dnsm_burrito):
                     assert "N" not in c, f"Codon {c} should not contain N, but got {p}"
 
 
-
-
-# TODO these will need to be upgraded to dynamically created burritos to keep
-# the test up to date. However, for speed I'll just read from disk:
-def dasm_burrito(pcp_df):
-    crepe = load_crepe("/home/wdumm/dnsm-netam-proj-runner1/dnsm-experiments-1/tests/models/dasm_13k-v1tangCC-joint")
-    return DASMBurrito(
-        None,
-        DASMDataset.of_pcp_df(
-            pcp_df,
-            crepe.model.known_token_count,
-            multihit_model=None,
-        ),
-        model=crepe.model,
-    )
-
-
-def dnsm_burrito(pcp_df):
-    crepe = load_crepe("/home/wdumm/dnsm-netam-proj-runner1/dnsm-experiments-1/tests/models/dnsm_77k-v1jaffe50k-joint")
-    return DNSMBurrito(
-        None,
-        DNSMDataset.of_pcp_df(
-            pcp_df,
-            crepe.model.known_token_count,
-            multihit_model=None,
-        ),
-        model=crepe.model,
-    )
-
-
-def single_dnsm_burrito(pcp_df):
-    crepe = load_crepe("/home/wdumm/dnsm-netam-proj-runner1/dnsm-experiments-1/dnsm-train/trained_models/single-tst-joint")
-    return DNSMBurrito(
-        None,
-        DNSMDataset.of_pcp_df(
-            pcp_df,
-            crepe.model.known_token_count,
-            multihit_model=None,
-        ),
-        model=crepe.model,
-    )
-
-
-@pytest.mark.parametrize("burrito_func", [single_dnsm_burrito, dasm_burrito, dnsm_burrito])
-def test_selection_factors(pcp_df, burrito_func):
-    burrito = burrito_func(pcp_df)
-    # Make sure selection factors from the burrito match those from the crepe model:
+def test_selection_factors(pcp_df, generic_burrito):
+    # Make sure selection factors from the generic_burrito match those from the crepe model:
     pcp_df = pcp_df.copy()
     pcp_df["parent_h"] = [introduce_ns(seq) for seq in pcp_df["parent_h"]]
     neutral_crepe = pretrained.load("ThriftyHumV0.2-59")
@@ -667,25 +545,28 @@ def test_selection_factors(pcp_df, burrito_func):
         neutral_crepe,
     )
     for seq in pcp_df["parent_h"]:
+        # See Issue #139 for why we use this instead of `translate_sequence`
         aa_parent = translate_sequence_mask_codons(seq)
 
         _token_nt_parent, _ = sequences.prepare_heavy_light_pair(
             seq,
             "",
-            burrito.model.known_token_count,
+            generic_burrito.model.known_token_count,
         )
         _token_aa_parent = translate_sequence(_token_nt_parent)
         _token_aa_parent_idxs = sequences.aa_idx_tensor_of_str_ambig(_token_aa_parent)
         _token_aa_mask = sequences.codon_mask_tensor_of(_token_nt_parent)
         print("from burrito")
-        sel_matrix = burrito.build_selection_matrix_from_parent_aa(_token_aa_parent_idxs, _token_aa_mask)[:len(aa_parent)]
+        sel_matrix = generic_burrito.build_selection_matrix_from_parent_aa(_token_aa_parent_idxs, _token_aa_mask)[:len(aa_parent)]
+        comparison_mask = aa_mask_tensor_of(aa_parent)
 
         print("from crepe")
-        from_crepe = burrito.to_crepe()([(aa_parent, "")])[0][0]
-        if burrito.model.model_type == "dnsm":
+        from_crepe = generic_burrito.to_crepe()([(aa_parent, "")])[0][0]
+        if generic_burrito.model.model_type == "dnsm":
             from_crepe = molevol.lift_to_per_aa_selection_factors(from_crepe, sequences.aa_idx_tensor_of_str_ambig(aa_parent))
-        if not torch.allclose(from_crepe, sel_matrix):
+        if not torch.allclose(from_crepe[comparison_mask], sel_matrix[comparison_mask]):
             diff_mask = ~torch.isclose(from_crepe, sel_matrix, equal_nan=True)
+            diff_mask = diff_mask & comparison_mask
             print("Differences in selection factors")
             print((from_crepe - sel_matrix)[diff_mask])
             print("from crepe:")
@@ -697,11 +578,7 @@ def test_selection_factors(pcp_df, burrito_func):
             assert False
 
 
-# TODO add dasm_burrito back
-@pytest.mark.parametrize("burrito_func", [single_dnsm_burrito])
-# @pytest.mark.parametrize("burrito_func", [dasm_burrito, dnsm_burrito])
-def test_build_codon_mutsel(pcp_df, burrito_func):
-    burrito = burrito_func(pcp_df)
+def test_build_codon_mutsel(pcp_df, generic_burrito):
     # There are two ways of computing codon probabilities. Let's make sure
     # they're the same:
     neutral_crepe = pretrained.load("ThriftyHumV0.2-59")
@@ -726,7 +603,7 @@ def test_build_codon_mutsel(pcp_df, burrito_func):
             _token_nt_parent, _ = sequences.prepare_heavy_light_pair(
                 seq,
                 "",
-                burrito.model.known_token_count,
+                generic_burrito.model.known_token_count,
             )
             _token_aa_parent = translate_sequence(_token_nt_parent)
             _token_aa_parent_idxs = sequences.aa_idx_tensor_of_str_ambig(_token_aa_parent)
@@ -734,7 +611,7 @@ def test_build_codon_mutsel(pcp_df, burrito_func):
             aa_mask = _token_aa_mask[:len(aa_parent)]
             # sel_matrix = torch.ones((aa_seq_len, 20))
             # This is in linear space.
-            sel_matrix = burrito.build_selection_matrix_from_parent_aa(_token_aa_parent_idxs, _token_aa_mask)[:len(aa_parent)]
+            sel_matrix = generic_burrito.build_selection_matrix_from_parent_aa(_token_aa_parent_idxs, _token_aa_mask)[:len(aa_parent)]
             # neutral_sel_matrix[torch.arange(aa_seq_len), aa_parent_idxs]
 
             # First way:
@@ -767,16 +644,17 @@ def test_build_codon_mutsel(pcp_df, burrito_func):
 
             # Now let's compare to the simulation probs:
             sim_probs = clamp_probability(codon_probs_of_parent_seq(
-                burrito.to_crepe(),
+                generic_burrito.to_crepe(),
                 (seq, ""),
                 branch_length,
                 neutral_crepe=neutral_crepe,
                 multihit_model=multihit_model,
             )[0]).log()
 
-            # adjusted_codon_probs = molevol.set_parent_codon_prob(adjusted_codon_probs.exp(), codon_parent_idxs,).log()
-            # sim_probs = molevol.set_parent_codon_prob(sim_probs.exp(), codon_parent_idxs,).log()
-            # flat_log_codon_mutsel = molevol.set_parent_codon_prob(flat_log_codon_mutsel.exp(), codon_parent_idxs,).log()
+            # These atol values can made more strict if netam.common.SMALL_PROB
+            # is made smaller, so the differences are just cause of different
+            # amounts of clamping in different code paths
+
             # Compare mutsel path with adjust by selection factors path:
             if not torch.allclose(adjusted_codon_probs, flat_log_codon_mutsel, equal_nan=True, atol=1e-07):
                 diff_mask = ~torch.isclose(adjusted_codon_probs, flat_log_codon_mutsel, equal_nan=True)

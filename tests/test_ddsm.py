@@ -12,12 +12,14 @@ from netam.sequences import (
     MAX_KNOWN_TOKEN_COUNT,
     TOKEN_STR_SORTED,
 )
+from conftest import get_pcp_df
 
 torch.set_printoptions(precision=10)
 
 
-@pytest.fixture(scope="module", params=["pcp_df", "pcp_df_paired"])
-def ddsm_burrito(pcp_df):
+@pytest.fixture(scope="module", params=["heavy", "paired"])
+def ddsm_burrito(request):
+    pcp_df = get_pcp_df(request.param)
     force_spawn()
     """Fixture that returns the DNSM Burrito object."""
     pcp_df["in_train"] = True
