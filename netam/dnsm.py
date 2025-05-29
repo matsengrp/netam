@@ -160,7 +160,9 @@ class DNSMBurrito(DXSMBurrito):
         containing a selection factor per site and amino acid. The wildtype aa selection
         factor is set to 1, and the rest are set to the selection factor.
         """
-        return molevol.lift_to_per_aa_selection_factors(selection_factors, aa_parent_idxs)
+        return molevol.lift_to_per_aa_selection_factors(
+            selection_factors, aa_parent_idxs
+        )
 
     def build_selection_matrix_from_parent_aa(
         self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor

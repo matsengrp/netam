@@ -136,6 +136,7 @@ def generic_burrito(request, pcp_df):
 # Test that the dasm burrito computes the same predictions as
 # framework.codon_probs_of_parent_seq:
 
+
 def test_neutral_probs(pcp_df, dasm_pred_burrito):
     """Test that the DASM burrito computes the same predictions as
     codon_probs_of_parent_seq."""
@@ -295,7 +296,9 @@ def test_sequence_sampling(pcp_df, dasm_pred_burrito):
             parent_seq,
             branch_length,
             neutral_crepe=neutral_crepe,
-            multihit_model=pretrained.load_multihit(dasm_crepe.model.multihit_model_name),
+            multihit_model=pretrained.load_multihit(
+                dasm_crepe.model.multihit_model_name
+            ),
         )
 
         # Use only the heavy chain for sampling
@@ -370,7 +373,8 @@ def test_sequence_sampling(pcp_df, dasm_pred_burrito):
 
 
 def test_refit_branch_lengths(pcp_df, dasm_pred_burrito):
-    """Test that after simulating with a fixed branch length, branch length optimization recovers the original branch length, on average."""
+    """Test that after simulating with a fixed branch length, branch length optimization
+    recovers the original branch length, on average."""
     selection_crepe = dasm_pred_burrito.to_crepe()
     fixed_branch_length = 0.1
     replicates = 100
@@ -420,7 +424,11 @@ def test_refit_branch_lengths(pcp_df, dasm_pred_burrito):
     )
 
     burrito.standardize_and_optimize_branch_lengths()
-    assert torch.allclose(burrito.val_dataset.branch_lengths.mean().double(), torch.tensor(fixed_branch_length).double(), rtol=1e-2)
+    assert torch.allclose(
+        burrito.val_dataset.branch_lengths.mean().double(),
+        torch.tensor(fixed_branch_length).double(),
+        rtol=1e-2,
+    )
 
 
 def test_selection_factors_with_crepe(pcp_df, dasm_pred_burrito):
@@ -557,13 +565,17 @@ def test_selection_factors(pcp_df, generic_burrito):
         _token_aa_parent_idxs = sequences.aa_idx_tensor_of_str_ambig(_token_aa_parent)
         _token_aa_mask = sequences.codon_mask_tensor_of(_token_nt_parent)
         print("from burrito")
-        sel_matrix = generic_burrito.build_selection_matrix_from_parent_aa(_token_aa_parent_idxs, _token_aa_mask)[:len(aa_parent)]
+        sel_matrix = generic_burrito.build_selection_matrix_from_parent_aa(
+            _token_aa_parent_idxs, _token_aa_mask
+        )[: len(aa_parent)]
         comparison_mask = aa_mask_tensor_of(aa_parent)
 
         print("from crepe")
         from_crepe = generic_burrito.to_crepe()([(aa_parent, "")])[0][0]
         if generic_burrito.model.model_type == "dnsm":
-            from_crepe = molevol.lift_to_per_aa_selection_factors(from_crepe, sequences.aa_idx_tensor_of_str_ambig(aa_parent))
+            from_crepe = molevol.lift_to_per_aa_selection_factors(
+                from_crepe, sequences.aa_idx_tensor_of_str_ambig(aa_parent)
+            )
         if not torch.allclose(from_crepe[comparison_mask], sel_matrix[comparison_mask]):
             diff_mask = ~torch.isclose(from_crepe, sel_matrix, equal_nan=True)
             diff_mask = diff_mask & comparison_mask
@@ -574,7 +586,13 @@ def test_selection_factors(pcp_df, generic_burrito):
             print("From burrito:")
             print(sel_matrix[diff_mask])
             print("Parent sequence values at sites with differences")
-            print("".join(char for char, m in zip(aa_parent, diff_mask.any(dim=-1).tolist()) if m))
+            print(
+                "".join(
+                    char
+                    for char, m in zip(aa_parent, diff_mask.any(dim=-1).tolist())
+                    if m
+                )
+            )
             assert False
 
 
@@ -591,7 +609,9 @@ def test_build_codon_mutsel(pcp_df, generic_burrito):
     multihit_model = pretrained.load_multihit(DEFAULT_MULTIHIT_MODEL)
     for multihit_model in [None, pretrained.load_multihit(DEFAULT_MULTIHIT_MODEL)]:
         branch_length = 0.06
-        for seq, nt_rates, nt_csps in zip(pcp_df["parent_h"], pcp_df["nt_rates_h"], pcp_df["nt_csps_h"]):
+        for seq, nt_rates, nt_csps in zip(
+            pcp_df["parent_h"], pcp_df["nt_rates_h"], pcp_df["nt_csps_h"]
+        ):
             parent_idxs = sequences.nt_idx_tensor_of_str(seq.replace("N", "A"))
             aa_parent = translate_sequence(seq)
             codon_parent_idxs = sequences.codon_idx_tensor_of_str_ambig(seq)
@@ -606,12 +626,16 @@ def test_build_codon_mutsel(pcp_df, generic_burrito):
                 generic_burrito.model.known_token_count,
             )
             _token_aa_parent = translate_sequence(_token_nt_parent)
-            _token_aa_parent_idxs = sequences.aa_idx_tensor_of_str_ambig(_token_aa_parent)
+            _token_aa_parent_idxs = sequences.aa_idx_tensor_of_str_ambig(
+                _token_aa_parent
+            )
             _token_aa_mask = sequences.codon_mask_tensor_of(_token_nt_parent)
-            aa_mask = _token_aa_mask[:len(aa_parent)]
+            aa_mask = _token_aa_mask[: len(aa_parent)]
             # sel_matrix = torch.ones((aa_seq_len, 20))
             # This is in linear space.
-            sel_matrix = generic_burrito.build_selection_matrix_from_parent_aa(_token_aa_parent_idxs, _token_aa_mask)[:len(aa_parent)]
+            sel_matrix = generic_burrito.build_selection_matrix_from_parent_aa(
+                _token_aa_parent_idxs, _token_aa_mask
+            )[: len(aa_parent)]
             # neutral_sel_matrix[torch.arange(aa_seq_len), aa_parent_idxs]
 
             # First way:
@@ -639,25 +663,31 @@ def test_build_codon_mutsel(pcp_df, generic_burrito):
             adjusted_codon_probs = molevol.adjust_codon_probs_by_aa_selection_factors(
                 codon_parent_idxs.unsqueeze(0),
                 neutral_codon_probs.unsqueeze(0).log(),
-                sel_matrix.unsqueeze(0).log()
+                sel_matrix.unsqueeze(0).log(),
             ).squeeze(0)
 
             # Now let's compare to the simulation probs:
-            sim_probs = clamp_probability(codon_probs_of_parent_seq(
-                generic_burrito.to_crepe(),
-                (seq, ""),
-                branch_length,
-                neutral_crepe=neutral_crepe,
-                multihit_model=multihit_model,
-            )[0]).log()
+            sim_probs = clamp_probability(
+                codon_probs_of_parent_seq(
+                    generic_burrito.to_crepe(),
+                    (seq, ""),
+                    branch_length,
+                    neutral_crepe=neutral_crepe,
+                    multihit_model=multihit_model,
+                )[0]
+            ).log()
 
             # These atol values can made more strict if netam.common.SMALL_PROB
             # is made smaller, so the differences are just cause of different
             # amounts of clamping in different code paths
 
             # Compare mutsel path with adjust by selection factors path:
-            if not torch.allclose(adjusted_codon_probs, flat_log_codon_mutsel, equal_nan=True, atol=1e-07):
-                diff_mask = ~torch.isclose(adjusted_codon_probs, flat_log_codon_mutsel, equal_nan=True)
+            if not torch.allclose(
+                adjusted_codon_probs, flat_log_codon_mutsel, equal_nan=True, atol=1e-07
+            ):
+                diff_mask = ~torch.isclose(
+                    adjusted_codon_probs, flat_log_codon_mutsel, equal_nan=True
+                )
                 print(flat_hit_classes[diff_mask])
                 print((adjusted_codon_probs - flat_log_codon_mutsel)[diff_mask])
                 print(adjusted_codon_probs[diff_mask])
@@ -665,8 +695,12 @@ def test_build_codon_mutsel(pcp_df, generic_burrito):
                 assert False
 
             # adjusted_codon_probs = molevol.zero_stop_codon_probs(clamp_probability(adjusted_codon_probs.exp()).log())
-            if not torch.allclose(adjusted_codon_probs, sim_probs, equal_nan=True, atol=1e-06):
-                diff_mask = ~torch.isclose(adjusted_codon_probs, sim_probs, equal_nan=True)
+            if not torch.allclose(
+                adjusted_codon_probs, sim_probs, equal_nan=True, atol=1e-06
+            ):
+                diff_mask = ~torch.isclose(
+                    adjusted_codon_probs, sim_probs, equal_nan=True
+                )
                 print(flat_hit_classes[diff_mask])
                 print((adjusted_codon_probs - sim_probs)[diff_mask])
                 print(adjusted_codon_probs[diff_mask])

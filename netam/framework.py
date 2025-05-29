@@ -404,10 +404,17 @@ def trimmed_shm_model_outputs_of_crepe(crepe, parents):
     return trimmed_rates, trimmed_csps
 
 
-def trimmed_shm_outputs_of_parent_pair(crepe, parent_pair, light_chain_rate_adjustment=DEFAULT_LIGHT_CHAIN_RATE_ADJUSTMENT):
-    """Model outputs for a heavy, light chain sequence pair. Light chain rates are adjusted
-    by `light_chain_rate_adjustment` factor."""
-    assert len(parent_pair) == 2, "Parent pair must contain a heavy and light chain sequence."
+def trimmed_shm_outputs_of_parent_pair(
+    crepe, parent_pair, light_chain_rate_adjustment=DEFAULT_LIGHT_CHAIN_RATE_ADJUSTMENT
+):
+    """Model outputs for a heavy, light chain sequence pair.
+
+    Light chain rates are adjusted
+    by `light_chain_rate_adjustment` factor.
+    """
+    assert (
+        len(parent_pair) == 2
+    ), "Parent pair must contain a heavy and light chain sequence."
     rates, csps = trimmed_shm_model_outputs_of_crepe(crepe, parent_pair)
     rates[1] *= light_chain_rate_adjustment
     return rates, csps
@@ -523,7 +530,9 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
     return pcp_df
 
 
-def add_shm_model_outputs_to_pcp_df(pcp_df, crepe, light_chain_rate_adjustment=DEFAULT_LIGHT_CHAIN_RATE_ADJUSTMENT):
+def add_shm_model_outputs_to_pcp_df(
+    pcp_df, crepe, light_chain_rate_adjustment=DEFAULT_LIGHT_CHAIN_RATE_ADJUSTMENT
+):
     """Evaluate a neutral model on PCPs.
 
     Args:
@@ -1266,11 +1275,15 @@ def codon_probs_of_parent_seq(
         new_selection_factors = []
         for aa_seq, old_selection_factors in zip(aa_seqs, log_selection_factors):
             if len(aa_seq) == 0:
-                new_selection_factors.append(torch.empty(0, 20, dtype=old_selection_factors.dtype))
+                new_selection_factors.append(
+                    torch.empty(0, 20, dtype=old_selection_factors.dtype)
+                )
             else:
                 parent_indices = aa_idx_tensor_of_str(aa_seq)
                 new_selection_factors.append(
-                    molevol.lift_to_per_aa_selection_factors(old_selection_factors.exp(), parent_indices).log()
+                    molevol.lift_to_per_aa_selection_factors(
+                        old_selection_factors.exp(), parent_indices
+                    ).log()
                 )
         log_selection_factors = tuple(new_selection_factors)
 
@@ -1292,13 +1305,16 @@ def codon_probs_of_parent_seq(
     )
 
     return tuple(
-        _nan_masked_sites(molevol.zero_stop_codon_probs(
-            molevol.adjust_codon_probs_by_aa_selection_factors(
-                chain_parent_codon_idxs,
-                chain_log_codon_probs,
-                chain_log_aa_selection_factors,
-            ).exp()
-        ), chain_mask)
+        _nan_masked_sites(
+            molevol.zero_stop_codon_probs(
+                molevol.adjust_codon_probs_by_aa_selection_factors(
+                    chain_parent_codon_idxs,
+                    chain_log_codon_probs,
+                    chain_log_aa_selection_factors,
+                ).exp()
+            ),
+            chain_mask,
+        )
         for chain_parent_codon_idxs, chain_log_codon_probs, chain_log_aa_selection_factors, chain_mask in zip(
             parent_codon_idxs, log_codon_probs, log_selection_factors, mask
         )

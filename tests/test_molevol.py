@@ -14,9 +14,17 @@ from netam.sequences import (
     CODONS,
     NT_STR_SORTED,
 )
-from netam.framework import add_shm_model_outputs_to_pcp_df, codon_probs_of_parent_seq, load_crepe
+from netam.framework import (
+    add_shm_model_outputs_to_pcp_df,
+    codon_probs_of_parent_seq,
+    load_crepe,
+)
 from netam.hit_class import parent_specific_hit_classes
-from netam.common import clamp_probability, clamp_log_probability, clamp_probability_above
+from netam.common import (
+    clamp_probability,
+    clamp_log_probability,
+    clamp_probability_above,
+)
 from netam.dasm import (
     DASMBurrito,
     DASMDataset,
@@ -25,6 +33,7 @@ from netam.dnsm import (
     DNSMBurrito,
     DNSMDataset,
 )
+
 _dxsm_classes_of_name = {
     "dasm": (DASMDataset, DASMBurrito),
     "dnsm": (DNSMDataset, DNSMBurrito),
@@ -211,8 +220,12 @@ def _check_non_stop_neutral_aa_mut_probs(
     if multihit_model is not None:
         codon_probs = multihit_model.forward(parent_codon_idxs, codon_probs)
 
-    flat_codon_probs = molevol.zero_stop_codon_probs(molevol.flatten_codons(codon_probs))
-    flat_codon_probs = molevol.set_parent_codon_prob(flat_codon_probs, flat_parent_codon_idxs)
+    flat_codon_probs = molevol.zero_stop_codon_probs(
+        molevol.flatten_codons(codon_probs)
+    )
+    flat_codon_probs = molevol.set_parent_codon_prob(
+        flat_codon_probs, flat_parent_codon_idxs
+    )
     aa_probs = flat_codon_probs @ molevol.CODON_AA_INDICATOR_MATRIX
 
     parent_aa_idxs = molevol.aa_idxs_of_codon_idxs(parent_codon_idxs)
@@ -224,7 +237,9 @@ def _check_non_stop_neutral_aa_mut_probs(
 def test_non_stop_neutral_aa_mut_probs(pcp_df):
     branch_length = 0.05
     for multihit_model in [None, pretrained.load_multihit(DEFAULT_MULTIHIT_MODEL)]:
-        for seq, rates, csps in zip(pcp_df["parent_h"], pcp_df["nt_rates_h"], pcp_df["nt_csps_h"]):
+        for seq, rates, csps in zip(
+            pcp_df["parent_h"], pcp_df["nt_rates_h"], pcp_df["nt_csps_h"]
+        ):
             neutral_aa_probs = molevol.non_stop_neutral_aa_mut_probs(
                 nt_idx_tensor_of_str(seq),
                 rates,

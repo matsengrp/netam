@@ -231,6 +231,7 @@ def test_codon_indices():
         print(true_codon_indices)
         assert False
 
+
 def test_codon_mask_tensor_of():
     cases = [
         [

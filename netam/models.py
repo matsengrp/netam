@@ -1033,9 +1033,7 @@ class HitClassModel(nn.Module):
         )
         # clamp only above to avoid summing a bunch of small fake values when
         # computing wild type prob
-        unnormalized_corrected_probs = clamp_probability_above(
-            result
-        )
+        unnormalized_corrected_probs = clamp_probability_above(result)
         result = molevol.set_parent_codon_prob(
             molevol.flatten_codons(unnormalized_corrected_probs),
             flatten_codon_idxs(parent_codon_idxs),
@@ -1046,8 +1044,11 @@ class HitClassModel(nn.Module):
     def apply_multihit_correction(
         self, parent_codon_idxs: torch.Tensor, uncorrected_codon_probs: torch.Tensor
     ):
-        """Apply the correction to the uncorrected codon probabilities. Unlike `forward` this does
-        not clamp or recompute parent codon probability. Otherwise, it is identical to `forward`."""
+        """Apply the correction to the uncorrected codon probabilities.
+
+        Unlike `forward` this does
+        not clamp or recompute parent codon probability. Otherwise, it is identical to `forward`.
+        """
         return apply_multihit_correction(
             parent_codon_idxs, uncorrected_codon_probs, self.values
         )

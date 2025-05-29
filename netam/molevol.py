@@ -11,7 +11,11 @@ import torch
 from torch import Tensor
 from warnings import warn
 
-from netam.codon_table import CODON_AA_INDICATOR_MATRIX, STOP_CODON_ZAPPER, aa_idxs_of_codon_idxs
+from netam.codon_table import (
+    CODON_AA_INDICATOR_MATRIX,
+    STOP_CODON_ZAPPER,
+    aa_idxs_of_codon_idxs,
+)
 
 import netam.sequences as sequences
 from netam.common import clamp_probability, clamp_probability_above
@@ -522,9 +526,8 @@ def non_stop_neutral_aa_mut_probs(
     branch_length: float,
     multihit_model=None,
 ) -> Tensor:
-    """For every site, what is the probability that the amino acid will have a
-    non-stop substution under neutral evolution?
-    """
+    """For every site, what is the probability that the amino acid will have a non-stop
+    substution under neutral evolution?"""
     mut_probs = 1.0 - torch.exp(-branch_length * nt_rates)
     parent_codon_idxs = nt_parent_idxs.reshape(-1, 3)
     aa_probs = neutral_aa_probs(
@@ -800,11 +803,8 @@ def set_parent_codon_prob(codon_probs, parent_codon_idxs):
     return preds
 
 
-def lift_to_per_aa_selection_factors(
-        selection_factors, aa_parent_idxs
-):
-    """Build a selection matrix from a selection factor tensor for a single
-    sequence.
+def lift_to_per_aa_selection_factors(selection_factors, aa_parent_idxs):
+    """Build a selection matrix from a selection factor tensor for a single sequence.
 
     upgrades the provided tensor containing a selection factor per site to a matrix
     containing a selection factor per site and amino acid. The wildtype aa selection
