@@ -6,6 +6,7 @@ import bisect
 import matplotlib.pyplot as plt
 from netam.sequences import (
     AA_STR_SORTED,
+    translate_sequence,
 )
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Rectangle
@@ -492,6 +493,60 @@ def get_subs_and_preds_from_mutabilities_df(df, pcp_df):
     return (pcp_indices, pcp_sub_locations, top_k_sub_locations, pcp_sample_family_dict)
 
 
+def get_site_substitutions_df(
+    subs_and_preds_tuple,
+    numbering_dict=None,
+):
+    """Returns a dataframe that annotates for each site of observed and/or predicted
+    substitution: the index of the PCP it belongs to, the site position in the amino
+    acid sequence, whether the site has an observed substutition, and whether the site
+    is predicted to have a substitution.
+
+    Parameters:
+    subs_and_preds_tuple (tuple): 4-tuple of
+                                  pcp_indices - list of indices to the reference PCP file,
+                                  pcp_sub_locations - list of per-PCP lists of substitution locations,
+                                  top_k_sub_locations - list of per-PCP lists of top-k mutability locations,
+                                  pcp_sample_family_dict - dictionary mapping PCP index to (sample_id, family) 2-tuple.
+    numbering_dict (dict): mapping (sample_id, family) to numbering list.
+
+    Returns:
+    output_df (pd.DataFrame): dataframe with columns 'pcp_index', 'site', 'obs', 'pred'.
+    """
+    pcp_indices = subs_and_preds_tuple[0]
+    pcp_sub_locations = subs_and_preds_tuple[1]
+    top_k_sub_locations = subs_and_preds_tuple[2]
+    pcp_sample_family_dict = subs_and_preds_tuple[3]
+
+    pcp_index_col = []
+    site_col = []
+    obs_col = []
+    pred_col = []
+    for i in range(len(pcp_indices)):
+        obs_pred_sites = np.union1d(top_k_sub_locations[i], pcp_sub_locations[i])
+
+        nbkey = pcp_sample_family_dict[pcp_indices[i]]
+        if (numbering_dict is not None) and (nbkey not in numbering_dict):
+            continue
+
+        for site in obs_pred_sites:
+            pcp_index_col.append(pcp_indices[i])
+            if numbering_dict is None:
+                site_col.append(site)
+            else:
+                site_col.append(numbering_dict[nbkey][site])
+            obs_col.append(site in pcp_sub_locations[i])
+            pred_col.append(site in top_k_sub_locations[i])
+
+    output_df = pd.DataFrame(columns=["pcp_index", "site", "obs", "pred"])
+    output_df["pcp_index"] = pcp_index_col
+    output_df["site"] = site_col
+    output_df["obs"] = obs_col
+    output_df["pred"] = pred_col
+
+    return output_df
+
+
 def plot_sites_observed_vs_top_k_predictions(
     df,
     ax,
@@ -680,6 +735,63 @@ def get_sub_acc_from_csp_df(df, pcp_df, top_k=1):
         pcp_is_cdr,
         pcp_sample_family_dict,
     )
+
+
+def get_site_subs_acc_df(
+    sub_acc_tuple,
+    numbering_dict=None,
+):
+    """
+    Returns a dataframe that annotates for each site of observed substitution:
+    the index of the PCP it belongs to,
+    the site position in the amino acid sequence,
+    whether the predicted amino acid substitution is correct.
+
+    Parameters:
+    subs_and_preds_tuple (tuple): 5-tuple of
+                                  pcp_indices - list of indices to the reference PCP file,
+                                  pcp_sub_locations - list of per-PCP lists of substitution locations,
+                                  pcp_sub_correct - list of per-PCP lists whether amino acid prediction is correct,
+                                  pcp_is_cdr = list of per-PCP lists whether amino acid site is in a CDR,
+                                  pcp_sample_family_dict - dictionary mapping PCP index to (sample_id, family) 2-tuple.
+    numbering_dict (dict): mapping (sample_id, family) to numbering list.
+
+    Returns:
+    output_df (pd.DataFrame): dataframe with columns 'pcp_index', 'site', 'correct', 'is_cdr'.
+    """
+
+    pcp_indices = sub_acc_tuple[0]
+    pcp_sub_locations = sub_acc_tuple[1]
+    pcp_sub_correct = sub_acc_tuple[2]
+    pcp_is_cdr = sub_acc_tuple[3]
+    pcp_sample_family_dict = sub_acc_tuple[4]
+
+    pcp_index_col = []
+    site_col = []
+    pred_col = []
+    is_cdr_col = []
+    for i in range(len(pcp_indices)):
+        nbkey = pcp_sample_family_dict[pcp_indices[i]]
+        if (numbering_dict is not None) and (nbkey not in numbering_dict):
+            continue
+
+        for j in range(len(pcp_sub_locations[i])):
+            site = pcp_sub_locations[i][j]
+            pcp_index_col.append(pcp_indices[i])
+            if numbering_dict is None:
+                site_col.append(site)
+            else:
+                site_col.append(numbering_dict[nbkey][site])
+            pred_col.append(pcp_sub_correct[i][j])
+            is_cdr_col.append(pcp_is_cdr[i][j])
+
+    output_df = pd.DataFrame(columns=["pcp_index", "site", "correct", "is_cdr"])
+    output_df["pcp_index"] = pcp_index_col
+    output_df["site"] = site_col
+    output_df["correct"] = pred_col
+    output_df["is_cdr"] = is_cdr_col
+
+    return output_df
 
 
 def plot_sites_subs_acc(
@@ -1030,6 +1142,147 @@ def annotate_site_csp_df(
         return output_df
     else:
         return output_df[output_df["site"] != "None"]
+
+
+def is_imgt_cdr(site):
+    """Determines whether an amino acid site is in a CDR according to IMGT numbering.
+
+    Parameters:
+    site (str): IMGT number of an amino acid site.
+
+    Returns:
+    True or False whether the site is in a CDR.
+    """
+    IMGT_CDR1 = (27, 38)
+    IMGT_CDR2 = (56, 65)
+    IMGT_CDR3 = (105, 117)
+
+    # Note: IMGT uses decimals for insertions (e.g. '111.3')
+    if "." in site:
+        sitei = int(site.split(".")[0])
+    else:
+        sitei = int(site)
+
+    return (
+        (sitei >= IMGT_CDR1[0] and sitei <= IMGT_CDR1[1])
+        or (sitei >= IMGT_CDR2[0] and sitei <= IMGT_CDR2[1])
+        or (sitei >= IMGT_CDR3[0] and sitei <= IMGT_CDR3[1])
+    )
+
+
+def get_numbering_dict(anarci_path, pcp_df=None, verbose=False, checks="imgt"):
+    """Process ANARCI output to make site numbering lists for each clonal family.
+
+    Parameters:
+    anarci_path (str): path to ANARCI output for sequence numbering.
+    pcp_df (pd.Dataframe): PCP file to filter for relevant clonal families and check ANARCI sequence lengths.
+    verbose (bool): whether to print (sample ID, family ID) info when clonal family is excluded.
+    checks (str): perform checks and updates for a specified numbering scheme.
+                  Currently, 'imgt' is the only input that has an effect.
+
+    Returns:
+    Two dictionaries where the keys are 2-tuples of (sample_id, family).
+    The first dictionary have values that are lists of numberings for each site in the clonal family.
+    Note that the numberings are lists of strings.
+    The dictionary also has an entry with key ('reference', 0) and value the list of all site numberings,
+    to be used for setting x-axis tick labels when plotting.
+    The second dictionary consists of clonal families that excluded from the first due to issues with the ANARCI output.
+    The values describe the reasons for exclusion.
+    """
+    if anarci_path is None:
+        return None
+
+    numbering_dict = {}
+    exclusion_dict = {}
+
+    anarci_df = pd.read_csv(anarci_path)
+
+    # assumes numbering starts at column 13 in ANARCI output
+    numbering_cols = list(anarci_df.columns[13:])
+    numbering_used = [False] * len(numbering_cols)
+
+    for i, row in anarci_df.iterrows():
+        # assumes clonal family ID has format "{sample_id}|{family}|{seq_name}"
+        cfinfos = row["Id"].split("|")
+        sample_id = cfinfos[0]
+        # try-block to cast family ID to integer if appropriate
+        try:
+            int(cfinfos[1])
+        except ValueError:
+            family = cfinfos[1]
+        else:
+            family = int(cfinfos[1])
+
+        seqlist = [row[col] for col in numbering_cols]
+        numbering = [nn for nn, aa in zip(numbering_cols, seqlist) if aa != "-"]
+
+        if checks == "imgt":
+            # For IMGT, numbered insertions can only be 111.* or 112.*.
+            # Other numbered insertions come from ANARCI and the clonal family will be excluded
+            exclude = False
+            for nn in numbering:
+                if "." in nn and nn[:3] != "111" and nn[:3] != "112":
+                    exclusion_dict[(sample_id, family)] = (
+                        f"Invalid IMGT insertion: {nn}"
+                    )
+                    if verbose == True:
+                        print(f"Invalid IMGT insertion: {nn}", sample_id, family)
+                    exclude = True
+                    break
+            if exclude == True:
+                continue
+
+        if pcp_df is not None:
+            # Check if clonal family is in PCP file, and that ANARCI preserved sequence length.
+            # If not, exclude clonal family from output.
+            test_df = pcp_df[
+                (pcp_df["sample_id"] == sample_id) & (pcp_df["family"] == family)
+            ]
+            if test_df.shape[0] == 0:
+                continue
+            else:
+                pcp_row = test_df.iloc[0]
+                test_seq = translate_sequence(pcp_row["parent"])
+                if len(test_seq) != len(numbering):
+                    exclusion_dict[(sample_id, family)] = "ANARCI seq length mismatch!"
+                    if verbose == True:
+                        print("ANARCI seq length mismatch!", sample_id, family)
+                    continue
+
+                if checks == "imgt":
+                    # Check CDR annotation in PCP file is consistent with IMGT numbering.
+                    # If not, exclude the clonal family.
+                    cdr_anno = pcp_sites_cdr_annotation(pcp_row)
+
+                    exclude = False
+                    for nn, is_cdr in zip(numbering, cdr_anno):
+                        if is_imgt_cdr(nn) != is_cdr:
+                            exclusion_dict[(sample_id, family)] = (
+                                "IMGT mismatch with CDR annotation!"
+                            )
+                            if verbose == True:
+                                print(
+                                    "IMGT mismatch with CDR annotation!",
+                                    sample_id,
+                                    family,
+                                )
+                            exclude = True
+                            break
+                    if exclude == True:
+                        continue
+
+        numbering_dict[(sample_id, family)] = numbering
+
+        # keep track of which site numbers are used
+        for nn in numbering:
+            numbering_used[numbering_cols.index(nn)] = True
+
+    # make a numbering reference of site numbers that are used
+    numbering_dict[("reference", 0)] = [
+        nn for nn, used in zip(numbering_cols, numbering_used) if used == True
+    ]
+
+    return (numbering_dict, exclusion_dict)
 
 
 def pcp_sites_cdr_annotation(pcp_row):
