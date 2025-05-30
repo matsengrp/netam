@@ -6,13 +6,16 @@ It was inspired by the `load_model` module of [AbLang2](https://github.com/oxpig
 import os
 import zipfile
 from importlib.resources import files
+import numpy as np
 
 import requests
 
 from netam.framework import load_crepe
+from netam.models import HitClassModel
 
-with files(__package__).joinpath("_pretrained") as pretrained_path:
-    PRETRAINED_DIR = str(pretrained_path)
+
+pretrained_path = files(__package__).joinpath("_pretrained")
+PRETRAINED_DIR = str(pretrained_path)
 
 PACKAGE_LOCATIONS_AND_CONTENTS = (
     # Order of entries:
@@ -41,6 +44,17 @@ for local_file, remote, models_dir, models in PACKAGE_LOCATIONS_AND_CONTENTS:
 
     for model in models:
         MODEL_TO_LOCAL[model] = (local_file, models_dir)
+
+
+# Names here are arbitrarily chosen (they are not processed or interpreted in
+# any way by the code), and should describe the origin of the
+# multihit model.
+PRETRAINED_MULTIHIT_MODELS = {
+    # Trained using the notebook
+    # thrifty-experiments-1/human/multihit_model_exploration.ipynb
+    "ThriftyHumV0.2-59-hc-tangshm": (-0.1626, 0.0692, 0.5076),
+    "ThriftyHumV0.2-59-hc-shmoof": (-0.2068, 0.1603, 0.6317),
+}
 
 
 def local_path_for_model(model_name: str):
@@ -85,6 +99,37 @@ def load(model_name: str, device=None):
     If the model is not already downloaded, it will be downloaded from the appropriate
     URL and stashed in the PRETRAINED_DIR.
     """
-
+    print(f"Loading model {model_name}")
     local_crepe_path = local_path_for_model(model_name)
     return load_crepe(local_crepe_path, device=device)
+
+
+def load_multihit(model_name: str, device=None):
+    """Load a pre-trained multihit model."""
+    if model_name is None:
+        return None
+    else:
+        try:
+            parameters = PRETRAINED_MULTIHIT_MODELS[model_name]
+        except KeyError:
+            raise ValueError(
+                f"Model {model_name} not found in pre-trained multihit models."
+            )
+        print(f"Loading multihit model {model_name}")
+        model = HitClassModel.from_weights(parameters)
+        return model.to(device)
+
+
+def name_and_multihit_model_match(model_name: str, multihit_model: HitClassModel):
+    """Check if the model name and multihit model match."""
+    if model_name is None:
+        return multihit_model is None
+    else:
+        if multihit_model is None:
+            return False
+        elif model_name in PRETRAINED_MULTIHIT_MODELS:
+            return np.allclose(
+                multihit_model.to_weights(), PRETRAINED_MULTIHIT_MODELS[model_name]
+            )
+        else:
+            return model_name == str(multihit_model.to_weights())

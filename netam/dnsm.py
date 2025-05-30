@@ -44,13 +44,13 @@ class DNSMDataset(DXSMDataset):
             nt_mask = mask.repeat_interleave(3)[:parent_len]
             molevol.check_csps(parent_idxs[nt_mask], nt_csps[:parent_len][nt_mask])
 
-            mut_probs = 1.0 - torch.exp(-branch_length * nt_rates[:parent_len])
             nt_csps = nt_csps[:parent_len, :]
 
-            neutral_aa_mut_probs = molevol.neutral_aa_mut_probs(
-                parent_idxs.reshape(-1, 3),
-                mut_probs.reshape(-1, 3),
-                nt_csps.reshape(-1, 3, 4),
+            neutral_aa_mut_probs = molevol.non_stop_neutral_aa_mut_probs(
+                parent_idxs,
+                nt_rates[:parent_len],
+                nt_csps,
+                branch_length,
                 multihit_model=self.multihit_model,
             )
 
@@ -158,18 +158,11 @@ class DNSMBurrito(DXSMBurrito):
 
         upgrades the provided tensor containing a selection factor per site to a matrix
         containing a selection factor per site and amino acid. The wildtype aa selection
-        factor is set ot 1, and the rest are set to the selection factor.
+        factor is set to 1, and the rest are set to the selection factor.
         """
-        selection_matrix = torch.zeros((len(selection_factors), 20), dtype=torch.float)
-        # Every "off-diagonal" entry of the selection matrix is set to the selection
-        # factor, where "diagonal" means keeping the same amino acid.
-        selection_matrix[:, :] = selection_factors[:, None]
-        valid_mask = aa_parent_idxs < 20
-        selection_matrix[
-            torch.arange(len(aa_parent_idxs))[valid_mask], aa_parent_idxs[valid_mask]
-        ] = 1.0
-        selection_matrix[~valid_mask] = 1.0
-        return selection_matrix
+        return molevol.lift_to_per_aa_selection_factors(
+            selection_factors, aa_parent_idxs
+        )
 
     def build_selection_matrix_from_parent_aa(
         self, aa_parent_idxs: torch.Tensor, mask: torch.Tensor

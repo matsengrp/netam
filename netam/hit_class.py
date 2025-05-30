@@ -1,8 +1,5 @@
 import torch
 import numpy as np
-from netam import molevol
-from netam.common import clamp_probability
-from netam.sequences import flatten_codon_idxs
 
 
 # Define the number of bases (e.g., 4 for DNA/RNA)
@@ -66,13 +63,7 @@ def apply_multihit_correction(
     per_parent_hit_class = parent_specific_hit_classes(parent_codon_idxs)
     corrections = torch.cat([torch.tensor([0.0]), log_hit_class_factors]).exp()
     reshaped_corrections = corrections[per_parent_hit_class]
-    unnormalized_corrected_probs = clamp_probability(codon_probs * reshaped_corrections)
-    result = molevol.set_parent_codon_prob(
-        molevol.flatten_codons(unnormalized_corrected_probs),
-        flatten_codon_idxs(parent_codon_idxs),
-    )
-    result = clamp_probability(result)
-    return molevol.unflatten_codons(result)
+    return codon_probs * reshaped_corrections
 
 
 def hit_class_probs_tensor(
