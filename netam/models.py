@@ -36,7 +36,7 @@ from typing import Tuple
 # in their metadata
 DEFAULT_NEUTRAL_MODEL = "ThriftyHumV0.2-59"
 DEFAULT_MULTIHIT_MODEL = None
-# # TODO when done with dnsm retrainings, switch back to this:
+# # ATTENTION!!! when done with dnsm retrainings, switch back to this:
 # DEFAULT_MULTIHIT_MODEL = "ThriftyHumV0.2-59-hc-tangshm"
 
 

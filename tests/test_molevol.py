@@ -1,4 +1,3 @@
-import pickle
 import torch
 import pytest
 
@@ -14,17 +13,7 @@ from netam.sequences import (
     CODONS,
     NT_STR_SORTED,
 )
-from netam.framework import (
-    add_shm_model_outputs_to_pcp_df,
-    codon_probs_of_parent_seq,
-    load_crepe,
-)
-from netam.hit_class import parent_specific_hit_classes
-from netam.common import (
-    clamp_probability,
-    clamp_log_probability,
-    clamp_probability_above,
-)
+from netam.common import clamp_probability
 from netam.dasm import (
     DASMBurrito,
     DASMDataset,
@@ -38,9 +27,6 @@ _dxsm_classes_of_name = {
     "dasm": (DASMDataset, DASMBurrito),
     "dnsm": (DNSMDataset, DNSMBurrito),
 }
-
-# from test_dnsm import dnsm_burrito
-# from test_dasm import dasm_burrito
 
 # These happen to be the same as some examples in test_models.py but that's fine.
 # If it was important that they were shared, we should put them in a conftest.py.

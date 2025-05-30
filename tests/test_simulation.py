@@ -4,14 +4,12 @@ import pytest
 import torch
 import pandas as pd
 
-from netam.codon_table import CODON_AA_INDICATOR_MATRIX
 from netam.pretrained import load_multihit
 from netam.framework import (
     add_shm_model_outputs_to_pcp_df,
     codon_probs_of_parent_seq,
     trimmed_shm_model_outputs_of_crepe,
     sample_sequence_from_codon_probs,
-    load_crepe,
 )
 from netam import pretrained
 from netam.common import force_spawn, clamp_probability, clamp_log_probability
@@ -43,7 +41,6 @@ from netam.sequences import (
     iter_codons,
     hamming_distance,
 )
-from test_dnsm import dnsm_burrito
 from netam.codon_table import STOP_CODON_INDICATOR
 from netam.hit_class import parent_specific_hit_classes
 

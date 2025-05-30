@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-import pickle
 import copy
 import os
 from time import time
@@ -23,7 +22,6 @@ from netam.common import (
     tensor_to_np_if_needed,
     BIG,
     parallelize_function,
-    clamp_probability,
 )
 from netam.sequences import (
     codon_mask_tensor_of,
@@ -31,18 +29,14 @@ from netam.sequences import (
     BASES_AND_N_TO_INDEX,
     BASES,
     AMBIGUOUS_CODON_IDX,
-    AA_AMBIG_IDX,
     VRC01_NT_SEQ,
     generate_kmers,
     kmer_to_index_of,
     nt_mask_tensor_of,
     encode_sequences,
-    translate_sequences,
     translate_sequences_mask_codons,
     CODONS,
     aa_idx_tensor_of_str,
-    aa_idx_tensor_of_str_ambig,
-    nt_idx_tensor_of_str,
 )
 from netam import models
 import netam.molevol as molevol
