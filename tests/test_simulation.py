@@ -691,7 +691,6 @@ def test_build_codon_mutsel(pcp_df, generic_burrito):
                 print(flat_log_codon_mutsel[diff_mask])
                 assert False
 
-            # adjusted_codon_probs = molevol.zero_stop_codon_probs(clamp_probability(adjusted_codon_probs.exp()).log())
             if not torch.allclose(
                 adjusted_codon_probs, sim_probs, equal_nan=True, atol=1e-06
             ):

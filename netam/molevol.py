@@ -18,7 +18,7 @@ from netam.codon_table import (
 )
 
 import netam.sequences as sequences
-from netam.common import clamp_probability, clamp_probability_above
+from netam.common import clamp_probability, clamp_probability_above_only
 
 
 def check_csps(parent_idxs: Tensor, csps: Tensor) -> Tensor:
@@ -490,7 +490,7 @@ def adjust_codon_probs_by_aa_selection_factors(
 
     # clamp only above to avoid summing a bunch of small fake values when
     # computing wild type prob
-    preds = clamp_probability_above(preds)
+    preds = clamp_probability_above_only(preds)
 
     preds = set_parent_codon_prob(preds, parent_codon_idxs)
 

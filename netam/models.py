@@ -18,7 +18,7 @@ from netam.common import (
     chunk_function,
     zap_predictions_along_diagonal,
     clamp_probability,
-    clamp_probability_above,
+    clamp_probability_above_only,
 )
 from netam.sequences import (
     generate_kmers,
@@ -1033,11 +1033,13 @@ class HitClassModel(nn.Module):
         )
         # clamp only above to avoid summing a bunch of small fake values when
         # computing wild type prob
-        unnormalized_corrected_probs = clamp_probability_above(result)
+        unnormalized_corrected_probs = clamp_probability_above_only(result)
+        # Recompute parent codon probability
         result = molevol.set_parent_codon_prob(
             molevol.flatten_codons(unnormalized_corrected_probs),
             flatten_codon_idxs(parent_codon_idxs),
         )
+        # Clamp again to ensure parent codon probabilities are valid.
         result = clamp_probability(result)
         return molevol.unflatten_codons(result)
 
@@ -1046,8 +1048,8 @@ class HitClassModel(nn.Module):
     ):
         """Apply the correction to the uncorrected codon probabilities.
 
-        Unlike `forward` this does
-        not clamp or recompute parent codon probability. Otherwise, it is identical to `forward`.
+        Unlike `forward` this does not clamp or recompute parent codon probability.
+        Otherwise, it is identical to `forward`.
         """
         return apply_multihit_correction(
             parent_codon_idxs, uncorrected_codon_probs, self.values
