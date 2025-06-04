@@ -11,10 +11,14 @@ import torch
 from torch import Tensor
 from warnings import warn
 
-from netam.codon_table import CODON_AA_INDICATOR_MATRIX, STOP_CODON_ZAPPER
+from netam.codon_table import (
+    CODON_AA_INDICATOR_MATRIX,
+    STOP_CODON_ZAPPER,
+    aa_idxs_of_codon_idxs,
+)
 
 import netam.sequences as sequences
-from netam.common import clamp_probability
+from netam.common import clamp_probability, clamp_probability_above_only
 
 
 def check_csps(parent_idxs: Tensor, csps: Tensor) -> Tensor:
@@ -320,7 +324,7 @@ def build_codon_mutsel(
     codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
 
     if multihit_model is not None:
-        codon_probs = multihit_model(parent_codon_idxs, codon_probs)
+        codon_probs = multihit_model.forward(parent_codon_idxs, codon_probs)
 
     # Calculate the codon selection matrix for each sequence via Einstein
     # summation, in which we sum over the repeated indices.
@@ -383,7 +387,7 @@ def neutral_codon_probs(
     codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
 
     if multihit_model is not None:
-        codon_probs = multihit_model(parent_codon_idxs, codon_probs)
+        codon_probs = multihit_model.forward(parent_codon_idxs, codon_probs)
 
     return codon_probs.view(-1, 64)
 
@@ -484,6 +488,10 @@ def adjust_codon_probs_by_aa_selection_factors(
     # Convert to linear space so we can add probabilities.
     preds = torch.exp(log_preds)
 
+    # clamp only above to avoid summing a bunch of small fake values when
+    # computing wild type prob
+    preds = clamp_probability_above_only(preds)
+
     preds = set_parent_codon_prob(preds, parent_codon_idxs)
 
     # We have to clamp the predictions to avoid log(0) issues.
@@ -505,21 +513,36 @@ def mut_probs_of_aa_probs(
         parent_codon_idxs (torch.Tensor): The parent codons for each sequence. Shape: (codon_count, 3)
         aa_probs (torch.Tensor): The probability that each site will change to each amino acid. Shape: (codon_count, 20)
     """
-    # We build a table that will allow us to look up the amino acid index
-    # from the codon indices. Argmax gets the aa index.
-    aa_idx_from_codon = CODON_AA_INDICATOR_MATRIX.argmax(dim=1).view(4, 4, 4)
-
-    # Get the amino acid index for each parent codon.
-    parent_aa_idxs = aa_idx_from_codon[
-        (
-            parent_codon_idxs[:, 0],
-            parent_codon_idxs[:, 1],
-            parent_codon_idxs[:, 2],
-        )
-    ]
+    parent_aa_idxs = aa_idxs_of_codon_idxs(parent_codon_idxs)
     p_staying_same = aa_probs[(torch.arange(len(parent_aa_idxs)), parent_aa_idxs)]
 
     return 1.0 - p_staying_same
+
+
+def non_stop_neutral_aa_mut_probs(
+    nt_parent_idxs: Tensor,
+    nt_rates: Tensor,
+    nt_csps: Tensor,
+    branch_length: float,
+    multihit_model=None,
+) -> Tensor:
+    """For every site, what is the probability that the amino acid will have a non-stop
+    substution under neutral evolution?"""
+    mut_probs = 1.0 - torch.exp(-branch_length * nt_rates)
+    parent_codon_idxs = nt_parent_idxs.reshape(-1, 3)
+    aa_probs = neutral_aa_probs(
+        parent_codon_idxs,
+        mut_probs.reshape(-1, 3),
+        nt_csps.reshape(-1, 3, 4),
+        multihit_model=multihit_model,
+    )
+
+    parent_aa_idxs = aa_idxs_of_codon_idxs(parent_codon_idxs)
+    aa_probs[torch.arange(len(parent_aa_idxs)), parent_aa_idxs] = 0.0
+    # We exclude stops by summing the probabilities of non-wt aa's, instead of
+    # taking 1 - p(wt).
+    sums = aa_probs.sum(dim=-1)
+    return clamp_probability(sums)
 
 
 def neutral_aa_mut_probs(
@@ -778,3 +801,22 @@ def set_parent_codon_prob(codon_probs, parent_codon_idxs):
     # Set ambiguous codons to nan to make sure that we handle them correctly downstream.
     preds[~valid_mask, :] = float("nan")
     return preds
+
+
+def lift_to_per_aa_selection_factors(selection_factors, aa_parent_idxs):
+    """Build a selection matrix from a selection factor tensor for a single sequence.
+
+    upgrades the provided tensor containing a selection factor per site to a matrix
+    containing a selection factor per site and amino acid. The wildtype aa selection
+    factor is set to 1, and the rest are set to the selection factor.
+    """
+    selection_matrix = torch.zeros((len(selection_factors), 20), dtype=torch.float)
+    # Every "off-diagonal" entry of the selection matrix is set to the selection
+    # factor, where "diagonal" means keeping the same amino acid.
+    selection_matrix[:, :] = selection_factors[:, None]
+    valid_mask = aa_parent_idxs < 20
+    selection_matrix[
+        torch.arange(len(aa_parent_idxs))[valid_mask], aa_parent_idxs[valid_mask]
+    ] = 1.0
+    selection_matrix[~valid_mask] = 1.0
+    return selection_matrix

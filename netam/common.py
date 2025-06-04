@@ -67,6 +67,10 @@ def clamp_probability(x: Tensor) -> Tensor:
     return torch.clamp(x, min=SMALL_PROB, max=(1.0 - SMALL_PROB))
 
 
+def clamp_probability_above_only(x: Tensor) -> Tensor:
+    return torch.clamp(x, max=(1.0 - SMALL_PROB))
+
+
 def clamp_log_probability(x: Tensor) -> Tensor:
     return torch.clamp(x, max=np.log(1.0 - SMALL_PROB))
 

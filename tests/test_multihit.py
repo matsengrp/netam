@@ -26,6 +26,7 @@ from netam.sequences import (
     aa_idx_tensor_of_str_ambig,
     apply_aa_mask_to_nt_sequence,
     translate_sequence,
+    hamming_distance,
 )
 from netam.models import SingleValueBinarySelectionModel, HitClassModel
 from netam.dasm import DASMDataset, DASMBurrito
@@ -127,8 +128,8 @@ def test_multihit_correction():
     hit_class_factors = torch.tensor([-0.1, 1, 2.3])
     # We'll verify that aggregating by hit class then adjusting is the same as adjusting then aggregating by hit class.
     codon_idxs = reshape_for_codons(ex_parent_codon_idxs)
-    adjusted_codon_probs = hit_class.apply_multihit_correction(
-        codon_idxs, ex_codon_probs, hit_class_factors
+    adjusted_codon_probs = HitClassModel.from_weights(hit_class_factors)(
+        codon_idxs, ex_codon_probs
     )
     aggregate_last = hit_class.hit_class_probs_tensor(codon_idxs, adjusted_codon_probs)
 
@@ -182,9 +183,15 @@ def make_dasm_burrito(multihit_model, pcp_df):
     dataset = DASMDataset.of_pcp_df(
         pcp_df, MAX_KNOWN_TOKEN_COUNT, multihit_model=multihit_model
     )
+    if multihit_model is not None:
+        multihit_model_name = str(multihit_model.to_weights())
+    else:
+        multihit_model_name = None
     model = SingleValueBinarySelectionModel(
         output_dim=20,
         known_token_count=MAX_KNOWN_TOKEN_COUNT,
+        model_type="dasm",
+        multihit_model_name=multihit_model_name,
     )
     model.single_value = torch.nn.Parameter(torch.tensor(0.0))
     burrito = DASMBurrito(
@@ -202,7 +209,13 @@ def make_dnsm_burrito(multihit_model, pcp_df):
     dataset = DNSMDataset.of_pcp_df(
         pcp_df, MAX_KNOWN_TOKEN_COUNT, multihit_model=multihit_model
     )
-    model = SingleValueBinarySelectionModel()
+    if multihit_model is not None:
+        multihit_model_name = str(multihit_model.to_weights())
+    else:
+        multihit_model_name = None
+    model = SingleValueBinarySelectionModel(
+        model_type="dnsm", multihit_model_name=multihit_model_name
+    )
     model.single_value = torch.nn.Parameter(torch.tensor(0.0))
     burrito = DNSMBurrito(
         dataset,
@@ -230,8 +243,8 @@ def make_test_pcp_df(len_factor=1, extend_same=0):
     df = pd.DataFrame(
         {"parent": [parent_seq] * 4, "child": child_seqs, "v_gene": ["IGHV1-39*01"] * 4}
     )
-    for child in child_seqs:
-        print(sum(c1 != c2 for c1, c2 in zip(parent_seq, child)))
+    # for child in child_seqs:
+    #     print(sum(c1 != c2 for c1, c2 in zip(parent_seq, child)))
     # df = pd.DataFrame({"parent": ["ATGTAC"] * 3, "child": ["ATGTAT", "ATGTTG", "ATGGTG"], "v_gene": ["IGHV1-39*01"] * 3})
     pcp_df = framework.standardize_heavy_light_columns(df)
     pcp_df = framework.add_shm_model_outputs_to_pcp_df(
@@ -293,7 +306,9 @@ def _codon_prob_of_hit_class_stop_zapped(
         # Add probabilities of all the stop codons to prob.
         for sc in STOP_CODONS:
             prob += _codon_prob_of_hit_class(
-                _hamming_dist(sc, parent_codon), branch_length=branch_length, rate=rate
+                hamming_distance(sc, parent_codon),
+                branch_length=branch_length,
+                rate=rate,
             )
     return prob
 
@@ -306,9 +321,11 @@ def _codon_prob_of_hit_class_multihit_adjusted(
     if hit_class == 0:
         return torch.tensor(1.0) - sum(
             _codon_prob_of_hit_class(
-                _hamming_dist(cod, parent_codon), branch_length=branch_length, rate=rate
+                hamming_distance(cod, parent_codon),
+                branch_length=branch_length,
+                rate=rate,
             )
-            * multihit_vals[_hamming_dist(cod, parent_codon)]
+            * multihit_vals[hamming_distance(cod, parent_codon)]
             for cod in CODONS
             if cod not in STOP_CODONS + [parent_codon]
         )
@@ -324,7 +341,7 @@ def multihit_adjusted_codon_probs_of_seqs(nt_parent, multihit_vals, branch_lengt
         [
             [
                 _codon_prob_of_hit_class_multihit_adjusted(
-                    _hamming_dist(cod, parent_codon),
+                    hamming_distance(cod, parent_codon),
                     cod,
                     multihit_vals,
                     branch_length=branch_length,
@@ -419,13 +436,9 @@ def test_codon_probs_of_burrito():
             assert False
 
 
-def _hamming_dist(seq1, seq2):
-    return sum(c1 != c2 for c1, c2 in zip(seq1, seq2))
-
-
 def _hit_classes_of_seqs(nt_parent, nt_child):
     for c1, c2 in zip(iter_codons(nt_parent), iter_codons(nt_child)):
-        yield _hamming_dist(c1, c2)
+        yield hamming_distance(c1, c2)
 
 
 def _prob_of_branch_simplest(nt_parent, nt_child):

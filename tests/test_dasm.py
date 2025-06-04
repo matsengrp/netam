@@ -7,6 +7,7 @@ from netam.framework import (
     crepe_exists,
     load_crepe,
 )
+from netam.pretrained import load_multihit
 from netam.common import BIG, force_spawn
 from netam.models import TransformerBinarySelectionModelWiggleAct
 from netam.dasm import (
@@ -21,17 +22,16 @@ from netam.sequences import (
     token_mask_of_aa_idxs,
 )
 from netam.codon_table import CODON_AA_INDICATOR_MATRIX
+from conftest import get_pcp_df
 
 
-@pytest.fixture(scope="module", params=["pcp_df", "pcp_df_paired"])
-def dasm_burrito(pcp_df):
+@pytest.fixture(scope="module", params=["heavy", "paired"])
+def dasm_burrito(request):
+    pcp_df = get_pcp_df(request.param)
     force_spawn()
     """Fixture that returns the DASM Burrito object."""
     pcp_df["in_train"] = True
     pcp_df.loc[pcp_df.index[-15:], "in_train"] = False
-    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(
-        pcp_df, MAX_KNOWN_TOKEN_COUNT
-    )
 
     model = TransformerBinarySelectionModelWiggleAct(
         nhead=2,
@@ -39,6 +39,13 @@ def dasm_burrito(pcp_df):
         dim_feedforward=256,
         layer_count=2,
         output_dim=20,
+        model_type="dasm",
+    )
+
+    train_dataset, val_dataset = DASMDataset.train_val_datasets_of_pcp_df(
+        pcp_df,
+        MAX_KNOWN_TOKEN_COUNT,
+        multihit_model=load_multihit(model.multihit_model_name),
     )
 
     burrito = DASMBurrito(
