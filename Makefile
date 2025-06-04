@@ -7,7 +7,7 @@ test:
 	pytest tests
 
 format:
-	docformatter --in-place --black --recursive netam tests
+	docformatter --in-place --black --recursive netam tests || echo "Docformatter made changes"
 	black netam tests
 
 checkformat:
