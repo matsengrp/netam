@@ -224,7 +224,7 @@ def test_non_stop_neutral_aa_mut_probs(pcp_df):
     branch_length = 0.05
     for multihit_model in [None, pretrained.load_multihit(DEFAULT_MULTIHIT_MODEL)]:
         for seq, rates, csps in zip(
-            pcp_df["parent_h"], pcp_df["nt_rates_h"], pcp_df["nt_csps_h"]
+            pcp_df["parent_heavy"], pcp_df["nt_rates_heavy"], pcp_df["nt_csps_heavy"]
         ):
             neutral_aa_probs = molevol.non_stop_neutral_aa_mut_probs(
                 nt_idx_tensor_of_str(seq),

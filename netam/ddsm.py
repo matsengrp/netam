@@ -14,7 +14,7 @@ from typing import Tuple
 class DDSMDataset(DXSMDataset):
 
     def update_neutral_probs(self):
-        neutral_aa_probs_l = []
+        neutral_aa_probs_light = []
 
         for nt_parent, mask, nt_rates, nt_csps, branch_length in zip(
             self.nt_parents,
@@ -60,11 +60,11 @@ class DDSMDataset(DXSMDataset):
             # Here we zero out masked positions.
             neutral_aa_probs *= mask[:, None]
 
-            neutral_aa_probs_l.append(neutral_aa_probs)
+            neutral_aa_probs_light.append(neutral_aa_probs)
 
         # Note that our masked out positions will have a nan log probability,
         # which will require us to handle them correctly downstream.
-        self.log_neutral_aa_probss = torch.log(torch.stack(neutral_aa_probs_l))
+        self.log_neutral_aa_probss = torch.log(torch.stack(neutral_aa_probs_light))
 
     def __getitem__(self, idx):
         return {

@@ -47,7 +47,7 @@ def test_aa_strs_from_idx_tensor():
 def test_mask_functions_agree(pcp_df, pcp_df_paired):
     for input_pcp_df in (pcp_df, pcp_df_paired):
         first_row = next(input_pcp_df.itertuples())
-        seq = (first_row.parent_h, first_row.parent_l)
+        seq = (first_row.parent_heavy, first_row.parent_light)
 
         for token_count in range(AA_AMBIG_IDX + 1, MAX_KNOWN_TOKEN_COUNT + 1):
             nt_seq_with_tokens = prepare_heavy_light_pair(
