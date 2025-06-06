@@ -185,7 +185,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         """Alternative constructor that takes in a pcp_df and calculates the initial
         branch lengths."""
         assert (
-            "nt_rates_l" in pcp_df.columns
+            "nt_rates_light" in pcp_df.columns
         ), "pcp_df must have a neutral nt_rates column"
         # use sequences.prepare_heavy_light_pair and the resulting
         # added_indices to get the parent and child sequences and neutral model

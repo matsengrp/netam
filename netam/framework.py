@@ -4,6 +4,7 @@ import os
 from time import time
 import multiprocessing as mp
 from functools import partial
+from collections import defaultdict
 
 import pandas as pd
 import numpy as np
@@ -17,6 +18,11 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from tensorboardX import SummaryWriter
 
+from netam.data_format import (
+    _all_pcp_df_columns,
+    _required_pcp_df_columns,
+    _pcp_df_differentiated_columns,
+)
 from netam.common import (
     optimizer_of_name,
     tensor_to_np_if_needed,
@@ -421,77 +427,41 @@ def standardize_heavy_light_columns(pcp_df):
     If only `parent` and `child` column is present, we assume this is bulk data and determine heavy/light chain from
     V gene family.
     """
-    light_names = {"IGK", "IGL"}
-    required_columns = ["parent", "child", "v_gene"]
-    differentiated_columns = [
-        "parent",
-        "child",
-        "v_gene",
-        "cdr1_codon_start",
-        "cdr1_codon_end",
-        "cdr2_codon_start",
-        "cdr2_codon_end",
-        "cdr3_codon_start",
-        "cdr3_codon_end",
-    ]
+    v_family_names = {"_heavy": {"IGH"}, "_light": {"IGK", "IGL"}}
+    possible_chain_suffixes = ("_heavy", "_light")
     cols = pcp_df.columns
     # Do some checking first:
-    if "parent_h" in cols:
-        for col in required_columns:
-            assert col + "_h" in cols, f"{col}_h column missing from pcp file!"
-            assert col + "_l" in cols, f"{col}_l column missing from pcp file!"
-        pcp_df["v_family_h"] = pcp_df["v_gene_h"].str.split("-").str[0]
-        pcp_df["v_family_l"] = pcp_df["v_gene_l"].str.split("-").str[0]
-        # Check that V gene families are in the correct columns:
-        if not pcp_df["v_family_l"].str[:3].isin(light_names).all():
-            _non_light_names = pcp_df[~pcp_df["v_family_l"].str[:3].isin(light_names)][
-                "v_family_l"
-            ].unique()
-            raise ValueError(
-                f"Unexpected light chain V gene families: {_non_light_names}"
-            )
-        if not (pcp_df["v_family_h"].str[:3] == "IGH").all():
-            _non_heavy_names = pcp_df[pcp_df["v_family_h"].str[:3] != "IGH"][
-                "v_family_h"
-            ].unique()
-            raise ValueError(
-                f"Unexpected heavy chain V gene families: {_non_heavy_names}"
-            )
-    elif "parent" in cols:
-        for col in required_columns:
-            assert col in cols, f"{col} column missing from pcp file!"
-        pcp_df["v_family"] = pcp_df["v_gene"].str.split("-").str[0]
-        is_heavy_chain = pcp_df["v_family"].str[:3] == "IGH"
-        _non_heavy_names = pcp_df[~is_heavy_chain]["v_family"]
-        if not _non_heavy_names.str[:3].isin(light_names).all():
-            raise ValueError(
-                f"V gene families not recognized: {_non_heavy_names[~_non_heavy_names.str[:3].isin(light_names)].unique()}"
-            )
-        # Make _h and _l versions of all columns and transfer data from
-        # undifferentiated columns to the correct version using is_heavy_chain
-        for col in differentiated_columns + ["v_family"]:
-            if col in pcp_df.columns:
-                pcp_df[col + "_h"] = pcp_df[col]
-                pcp_df[col + "_l"] = pcp_df[col]
-                if pd.api.types.is_string_dtype(pcp_df[col]):
-                    fill_value = ""
-                else:
-                    fill_value = pd.NA
-                pcp_df.loc[is_heavy_chain, col + "_l"] = fill_value
-                pcp_df.loc[~is_heavy_chain, col + "_h"] = fill_value
-                # Avoid implicit cast to float, even when column contains no NaNs
-                if pd.api.types.is_integer_dtype(pcp_df[col]):
-                    for dcol in [col + "_h", col + "_l"]:
-                        pcp_df[dcol] = pcp_df[dcol].astype("Int64")
+    chain_suffixes = [sfx for sfx in possible_chain_suffixes if "parent" + sfx in cols]
 
-    if (pcp_df["parent_h"].str.len() + pcp_df["parent_l"].str.len()).min() < 3:
+    assert len(chain_suffixes) > 0, "No heavy or light chain columns found in PCP file!"
+
+    for suffix in chain_suffixes:
+        for col in _required_pcp_df_columns:
+            assert col + suffix in cols, f"{col + suffix} column missing from pcp file!"
+        pcp_df["v_family" + suffix] = pcp_df["v_gene" + suffix].str.split("-").str[0]
+        # Check that V gene families are in the correct columns:
+        suffix_names = v_family_names[suffix]
+        if not pcp_df["v_family" + suffix].str[:3].isin(suffix_names).all():
+            _non_suffix_names = pcp_df[~pcp_df["v_family" + suffix].str[:3].isin(suffix_names)][
+                "v_family" + suffix
+            ].unique()
+            raise ValueError(
+                f"Unexpected {suffix[1:]} chain V gene families: {_non_suffix_names}"
+            )
+
+    # Add missing columns for bulk data
+    if len(chain_suffixes) == 1:
+        missing_suffix = next(sfx for sfx in possible_chain_suffixes if sfx not in chain_suffixes)
+        for col, dtype in _pcp_df_differentiated_columns.items():
+            if dtype == str:
+                fill_value = ""
+            else:
+                fill_value = pd.NA
+            pcp_df[col + missing_suffix] = pd.Series([fill_value] * len(pcp_df), dtype=dtype)
+
+    if (pcp_df["parent_heavy"].str.len() + pcp_df["parent_light"].str.len()).min() < 3:
         raise ValueError("At least one PCP has fewer than three nucleotides.")
 
-    pcp_df.drop(
-        columns=differentiated_columns + ["v_family"],
-        inplace=True,
-        errors="ignore",
-    )
     return pcp_df
 
 
@@ -506,7 +476,12 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
     sequence is present, this separator will be added to the appropriate side of the available sequence.
     """
     pcp_df = (
-        pd.read_csv(pcp_df_path_gz, compression="gzip", index_col=0)
+        pd.read_csv(
+            pcp_df_path_gz,
+            compression="gzip",
+            index_col=0,
+            dtype=(defaultdict(lambda: "object") | _all_pcp_df_columns)
+        )
         .reset_index()
         .rename(columns={"index": "orig_pcp_idx"})
     )
@@ -515,8 +490,8 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
     if chosen_v_families is not None:
         chosen_v_families = set(chosen_v_families)
         pcp_df = pcp_df[
-            pcp_df["v_family_h"].isin(chosen_v_families)
-            | pcp_df["v_family_l"].isin(chosen_v_families)
+            pcp_df["v_family_heavy"].isin(chosen_v_families)
+            | pcp_df["v_family_light"].isin(chosen_v_families)
         ]
     if sample_count is not None:
         pcp_df = pcp_df.sample(sample_count)
@@ -530,15 +505,15 @@ def add_shm_model_outputs_to_pcp_df(
     """Evaluate a neutral model on PCPs.
 
     Args:
-        pcp_df: DataFrame with columns `parent_h`, `parent_l`, `child_h`, `child_l`
+        pcp_df: DataFrame with columns `parent_heavy`, `parent_light`, `child_heavy`, `child_light`
         crepe: A neutral Crepe
         light_chain_rate_adjustment: A scaling factor for the light chain rates. This is
             used to account for the fact that the light chain mutation rate is usually lower than the heavy chain mutation rate.
     Returns:
-        pcp_df: the input DataFrame with columns `nt_rates_h`, `nt_csps_h`, `nt_rates_l`, and `nt_csps_l` added.
+        pcp_df: the input DataFrame with columns `nt_rates_heavy`, `nt_csps_heavy`, `nt_rates_light`, and `nt_csps_light` added.
     """
     max_seq_len = max(
-        pcp_df["parent_h"].str.len().max(), pcp_df["parent_l"].str.len().max()
+        pcp_df["parent_heavy"].str.len().max(), pcp_df["parent_light"].str.len().max()
     )
     if crepe.encoder.site_count < max_seq_len:
         print(
@@ -546,16 +521,16 @@ def add_shm_model_outputs_to_pcp_df(
             f"but the longest sequence in the dataset is {max_seq_len}. "
             "Filtering out sequences that are too long."
         )
-        pcp_df = pcp_df[pcp_df["parent_h"].str.len() <= crepe.encoder.site_count]
-        pcp_df = pcp_df[pcp_df["parent_l"].str.len() <= crepe.encoder.site_count]
+        pcp_df = pcp_df[pcp_df["parent_heavy"].str.len() <= crepe.encoder.site_count]
+        pcp_df = pcp_df[pcp_df["parent_light"].str.len() <= crepe.encoder.site_count]
 
-    pcp_df["nt_rates_h"], pcp_df["nt_csps_h"] = trimmed_shm_model_outputs_of_crepe(
-        crepe, pcp_df["parent_h"]
+    pcp_df["nt_rates_heavy"], pcp_df["nt_csps_heavy"] = trimmed_shm_model_outputs_of_crepe(
+        crepe, pcp_df["parent_heavy"]
     )
-    light_rates, pcp_df["nt_csps_l"] = trimmed_shm_model_outputs_of_crepe(
-        crepe, pcp_df["parent_l"]
+    light_rates, pcp_df["nt_csps_light"] = trimmed_shm_model_outputs_of_crepe(
+        crepe, pcp_df["parent_light"]
     )
-    pcp_df["nt_rates_l"] = [
+    pcp_df["nt_rates_light"] = [
         rates * light_chain_rate_adjustment for rates in light_rates
     ]
     return pcp_df
@@ -953,7 +928,7 @@ class Burrito(ABC):
             optimize_branch_lengths = lambda: None
         else:
             raise ValueError(f"Unknown training method {training_method}")
-        loss_history_l = []
+        loss_history_light = []
         if optimize_bl_first_cycle:
             optimize_branch_lengths()
         self.mark_branch_lengths_optimized(0)
@@ -969,12 +944,12 @@ class Burrito(ABC):
                 weight * np.log(current_lr) + (1 - weight) * np.log(self.learning_rate)
             )
             self.reset_optimization(new_lr)
-            loss_history_l.append(self.simple_train(epochs, out_prefix=out_prefix))
+            loss_history_light.append(self.simple_train(epochs, out_prefix=out_prefix))
             # We standardize and optimize the branch lengths after each cycle, even the last one.
             optimize_branch_lengths()
             self.mark_branch_lengths_optimized(cycle + 1)
 
-        return pd.concat(loss_history_l, ignore_index=True)
+        return pd.concat(loss_history_light, ignore_index=True)
 
     @abstractmethod
     def loss_of_batch(self, batch):

@@ -57,7 +57,7 @@ class DASMDataset(DXSMDataset):
 
         In this case it's the neutral codon probabilities.
         """
-        neutral_codon_probs_l = []
+        neutral_codon_probs_light = []
 
         for nt_parent, mask, nt_rates, nt_csps, branch_length in zip(
             self.nt_parents,
@@ -80,11 +80,11 @@ class DASMDataset(DXSMDataset):
                     neutral_codon_probs, (0, 0, 0, pad_len), value=SMALL_PROB
                 )
 
-            neutral_codon_probs_l.append(neutral_codon_probs)
+            neutral_codon_probs_light.append(neutral_codon_probs)
 
         # Note that our masked out positions will have a nan log probability,
         # which will require us to handle them correctly downstream.
-        self.log_neutral_codon_probss = torch.log(torch.stack(neutral_codon_probs_l))
+        self.log_neutral_codon_probss = torch.log(torch.stack(neutral_codon_probs_light))
 
     def __getitem__(self, idx):
         return {

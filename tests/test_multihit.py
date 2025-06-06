@@ -251,12 +251,12 @@ def make_test_pcp_df(len_factor=1, extend_same=0):
         pcp_df, pretrained.load("ThriftyHumV0.2-45")
     )
     # Neutralize neutral rates
-    pcp_df["nt_rates_h"] = [torch.tensor([1.0] * len(parent_seq))] * len(pcp_df)
-    nt_csps = list(pcp_df["nt_csps_h"])
+    pcp_df["nt_rates_heavy"] = [torch.tensor([1.0] * len(parent_seq))] * len(pcp_df)
+    nt_csps = list(pcp_df["nt_csps_heavy"])
     for i in range(len(nt_csps)):
         val = nt_csps[i]
         val[val > 0.0] = 1.0 / 3.0
-    pcp_df["nt_csps_h"] = nt_csps
+    pcp_df["nt_csps_heavy"] = nt_csps
     return pcp_df
 
 
@@ -400,7 +400,7 @@ def test_codon_probs_of_burrito():
     for row, burrito_probs, prediction_probs in zip(
         pcp_df.itertuples(), burrito_neutral_probs, predictions
     ):
-        nt_parent = row.parent_h
+        nt_parent = row.parent_heavy
         nt_idx_parent = nt_idx_tensor_of_str(nt_parent)
         parent_hit_classes = parent_specific_hit_classes(nt_idx_parent.reshape(-1, 3))
         test_probs = simple_codon_probs_of_seqs(nt_parent, branch_length=branch_length)
@@ -423,8 +423,8 @@ def test_codon_probs_of_burrito():
         # Test molevol.build_codon_mutsel:
         codon_mutsel_probs, _ = molevol.build_codon_mutsel(
             nt_idx_parent.reshape(-1, 3),
-            (1.0 - torch.exp(-branch_length * row.nt_rates_h.reshape(-1, 3))),
-            row.nt_csps_h.reshape(-1, 3, 4),
+            (1.0 - torch.exp(-branch_length * row.nt_rates_heavy.reshape(-1, 3))),
+            row.nt_csps_heavy.reshape(-1, 3, 4),
             torch.full((len(nt_parent) // 3, 20), 1.0),
             multihit_model=None,
         )
@@ -545,11 +545,11 @@ def test_manual_branch_lengths():
     pcp_df = make_test_pcp_df(1)
     validated_branch_lengths = [
         _fit_branch_length(parent, child, _prob_of_branch_simple_zapped)
-        for parent, child in zip(pcp_df["parent_h"], pcp_df["child_h"])
+        for parent, child in zip(pcp_df["parent_heavy"], pcp_df["child_heavy"])
     ]
     branch_lengths_from_used_func = [
         _fit_branch_length(parent, child, _prob_of_branch_mutsel_log_pcp_prob)
-        for parent, child in zip(pcp_df["parent_h"], pcp_df["child_h"])
+        for parent, child in zip(pcp_df["parent_heavy"], pcp_df["child_heavy"])
     ]
     if not torch.allclose(
         torch.tensor(validated_branch_lengths),
@@ -566,7 +566,7 @@ def test_pcp_prob_dxsm():
     pcp_df = make_test_pcp_df(len_factor=len_factor)
 
     for parent, child, nt_rates, nt_csps in zip(
-        pcp_df["parent_h"], pcp_df["child_h"], pcp_df["nt_rates_h"], pcp_df["nt_csps_h"]
+        pcp_df["parent_heavy"], pcp_df["child_heavy"], pcp_df["nt_rates_heavy"], pcp_df["nt_csps_heavy"]
     ):
         sample_branch_length = torch.tensor(0.5)
         val_prob_func = _prob_of_branch_simple_zapped(
@@ -585,7 +585,7 @@ def test_pcp_prob_dxsm():
 
     null_mh_model = HitClassModel()
     for parent, child, nt_rates, nt_csps in zip(
-        pcp_df["parent_h"], pcp_df["child_h"], pcp_df["nt_rates_h"], pcp_df["nt_csps_h"]
+        pcp_df["parent_heavy"], pcp_df["child_heavy"], pcp_df["nt_rates_heavy"], pcp_df["nt_csps_heavy"]
     ):
         sample_branch_length = torch.tensor(0.5)
         val_prob = _prob_of_branch_simple_zapped(
@@ -620,7 +620,7 @@ def test_multihit_branch_lengths_dasm():
     validated_no_mh_lengths = torch.tensor(
         [
             _fit_branch_length(parent, child, _prob_of_branch_simple_zapped)
-            for parent, child in zip(pcp_df["parent_h"], pcp_df["child_h"])
+            for parent, child in zip(pcp_df["parent_heavy"], pcp_df["child_heavy"])
         ]
     )
 
@@ -668,7 +668,7 @@ def test_multihit_branch_lengths_dasm():
     validated_mh_lengths = torch.tensor(
         [
             _fit_branch_length(parent, child, prob_func_func)
-            for parent, child in zip(pcp_df["parent_h"], pcp_df["child_h"])
+            for parent, child in zip(pcp_df["parent_heavy"], pcp_df["child_heavy"])
         ]
     )
     assert not torch.allclose(
@@ -685,8 +685,8 @@ def test_multihit_branch_lengths_dasm():
 def test_multihit_branch_lengths_dnsm():
     pcp_df = make_test_pcp_df()
 
-    print(list(pcp_df["nt_rates_h"]))
-    print(list(pcp_df["nt_csps_h"]))
+    print(list(pcp_df["nt_rates_heavy"]))
+    print(list(pcp_df["nt_csps_heavy"]))
 
     no_mh_burrito = make_dnsm_burrito(None, pcp_df)
     optimization_kwargs = {"learning_rate": 0.01, "optimization_tol": 1e-3}

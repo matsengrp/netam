@@ -122,8 +122,8 @@ def ambig_pcp_df():
         "data/wyatt-10x-1p5m_pcp_2023-11-30_NI.first100.csv.gz",
     )
     # Apply the random N adding function to each row
-    df[["parent_h", "child_h"]] = df.apply(
-        lambda row: tuple(randomize_with_ns(row["parent_h"][:-3], row["child_h"][:-3])),
+    df[["parent_heavy", "child_heavy"]] = df.apply(
+        lambda row: tuple(randomize_with_ns(row["parent_heavy"][:-3], row["child_heavy"][:-3])),
         axis=1,
         result_type="expand",
     )
