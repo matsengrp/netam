@@ -31,24 +31,34 @@ def annotate_sites_df(
     df,
     pcp_df,
     numbering_dict=None,
+    add_codons_aas=False,
 ):
-    """Add annotations to a per-site DataFrame to indicate position of each site and
-    whether each site is in a CDR. The input DataFrame describes a site in each row is
-    expected to have the 'pcp_index' column, indicating the index of the PCP the site
-    belongs to.
+    """Add annotations to a per-site DataFrame to indicate position of each site,
+    whether each site is in a CDR, and optionally parent/child codon and amino acid
+    information. The input DataFrame describes a site in each row is expected to have
+    the 'pcp_index' column, indicating the index of the PCP the site belongs to.
 
     Parameters:
     df (pd.DataFrame): site mutabilities DataFrame.
     pcp_df (pd.DataFrame): PCP file of the dataset.
     numbering_dict (dict): mapping (sample_id, family) to numbering list.
+    add_codons_aas (bool): whether to add codon and amino acid information from parent/child sequences.
 
     Returns:
     output_df (pd.DataFrame): dataframe with additional columns 'site' and 'is_cdr'.
+                              If add_codons_aas=True, also adds columns 'parent_codon', 'parent_aa',
+                              'child_codon', and 'child_aa'.
                               Note that if numbering_dict is provided and there are clonal families with missing
                               ANARCI numberings, the associated sites (rows) will be excluded.
     """
     sites_col = []
     is_cdr_col = []
+
+    if add_codons_aas:
+        parent_codon_col = []
+        parent_aa_col = []
+        child_codon_col = []
+        child_aa_col = []
 
     pcp_groups = df.groupby("pcp_index")
     for pcp_index in df["pcp_index"].drop_duplicates():
@@ -56,9 +66,14 @@ def annotate_sites_df(
 
         group_df = pcp_groups.get_group(pcp_index)
         nsites = group_df.shape[0]
+
+        # Assert that sequence length is divisible by 3 and check the number of sites in substitution df vs nuclotide sequence
+        assert (
+            len(pcp_row["parent"]) % 3 == 0
+        ), f"Parent sequence length ({len(pcp_row['parent'])}) is not divisible by 3"
         assert (
             nsites == len(pcp_row["parent"]) // 3
-        ), f"number of sites ({nsites}) does not match sequence length ({len(pcp_row['parent']) // 3})"
+        ), f"Number of sites ({nsites}) does not match sequence length ({len(pcp_row['parent']) // 3})"
 
         if numbering_dict is None:
             sites_col.append(np.arange(nsites))
@@ -72,8 +87,31 @@ def annotate_sites_df(
 
         is_cdr_col.append(pcp_sites_cdr_annotation(pcp_row))
 
+        if add_codons_aas:
+            parent_seq = pcp_row["parent"]
+            child_seq = pcp_row["child"]
+            parent_aa_seq = translate_sequence(parent_seq)
+            child_aa_seq = translate_sequence(child_seq)
+
+            parent_codons = [parent_seq[(3 * i) : (3 * i) + 3] for i in range(nsites)]
+            parent_aas = list(parent_aa_seq)
+            child_codons = [child_seq[(3 * i) : (3 * i) + 3] for i in range(nsites)]
+            child_aas = list(child_aa_seq)
+
+            parent_codon_col.append(parent_codons)
+            parent_aa_col.append(parent_aas)
+            child_codon_col.append(child_codons)
+            child_aa_col.append(child_aas)
+
     df["site"] = np.concatenate(sites_col)
     df["is_cdr"] = np.concatenate(is_cdr_col)
+
+    if add_codons_aas:
+        df["parent_codon"] = np.concatenate(parent_codon_col)
+        df["parent_aa"] = np.concatenate(parent_aa_col)
+        df["child_codon"] = np.concatenate(child_codon_col)
+        df["child_aa"] = np.concatenate(child_aa_col)
+
     if numbering_dict is None:
         return df
     else:
