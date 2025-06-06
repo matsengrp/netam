@@ -341,17 +341,17 @@ def dataset_inputs_of_pcp_df(pcp_df, known_token_count):
     nt_cspss = []
     for row in pcp_df.itertuples():
         parent, parent_token_idxs = prepare_heavy_light_pair(
-            row.parent_h, row.parent_l, known_token_count, is_nt=True
+            row.parent_heavy, row.parent_light, known_token_count, is_nt=True
         )
         child = prepare_heavy_light_pair(
-            row.child_h, row.child_l, known_token_count, is_nt=True
+            row.child_heavy, row.child_light, known_token_count, is_nt=True
         )[0]
         # These are the fill values that the neutral model returns when given N's:
         nt_rates = combine_and_pad_tensors(
-            row.nt_rates_h, row.nt_rates_l, parent_token_idxs, fill=1.0
+            row.nt_rates_heavy, row.nt_rates_light, parent_token_idxs, fill=1.0
         )[: len(parent)]
         nt_csps = combine_and_pad_tensors(
-            row.nt_csps_h, row.nt_csps_l, parent_token_idxs, fill=0.0
+            row.nt_csps_heavy, row.nt_csps_light, parent_token_idxs, fill=0.0
         )[: len(parent)]
         parents.append(parent)
         children.append(child)
