@@ -241,11 +241,12 @@ def make_test_pcp_df(len_factor=1, extend_same=0):
         (child * len_factor) + (_parent_seq * extend_same) for child in _child_seqs
     ]
     df = pd.DataFrame(
-        {"parent": [parent_seq] * 4, "child": child_seqs, "v_gene": ["IGHV1-39*01"] * 4}
+        {"parent_heavy": [parent_seq] * 4, "child_heavy": child_seqs, "v_gene_heavy": ["IGHV1-39*01"] * 4}
     )
     # for child in child_seqs:
     #     print(sum(c1 != c2 for c1, c2 in zip(parent_seq, child)))
-    # df = pd.DataFrame({"parent": ["ATGTAC"] * 3, "child": ["ATGTAT", "ATGTTG", "ATGGTG"], "v_gene": ["IGHV1-39*01"] * 3})
+    # df = pd.DataFrame({"parent_heavy": ["ATGTAC"] * 3, "child": ["ATGTAT",
+    # "ATGTTG", "ATGGTG"], "v_gene_heavy": ["IGHV1-39*01"] * 3})
     pcp_df = framework.standardize_heavy_light_columns(df)
     pcp_df = framework.add_shm_model_outputs_to_pcp_df(
         pcp_df, pretrained.load("ThriftyHumV0.2-45")

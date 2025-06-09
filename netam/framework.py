@@ -214,18 +214,18 @@ class SHMoofDataset(BranchLengthDataset):
 
         for _, row in dataframe.iterrows():
             encoded_parent, wt_base_modifier = self.encoder.encode_sequence(
-                row["parent"]
+                row["parent_heavy"]
             )
-            mask = nt_mask_tensor_of(row["child"], self.encoder.site_count)
+            mask = nt_mask_tensor_of(row["child_heavy"], self.encoder.site_count)
             # Assert that anything that is masked in the child is also masked in
             # the parent. We only use the parent_mask for this check.
-            parent_mask = nt_mask_tensor_of(row["parent"], self.encoder.site_count)
+            parent_mask = nt_mask_tensor_of(row["parent_heavy"], self.encoder.site_count)
             assert (mask <= parent_mask).all()
             (
                 mutation_indicator,
                 new_base_idxs,
             ) = encode_mut_pos_and_base(
-                row["parent"], row["child"], self.encoder.site_count
+                row["parent_heavy"], row["child_heavy"], self.encoder.site_count
             )
 
             encoded_parents.append(encoded_parent)
@@ -424,8 +424,8 @@ def standardize_heavy_light_columns(pcp_df):
     """Ensure that heavy and light chain columns are present, and fill missing ones with
     placeholder values.
 
-    If only `parent` and `child` column is present, we assume this is bulk data and determine heavy/light chain from
-    V gene family.
+    If only heavy or light columns are present, as in bulk data, the other chain columns will be filled with
+    appropriate placeholder values.
     """
     v_family_names = {"_heavy": {"IGH"}, "_light": {"IGK", "IGL"}}
     possible_chain_suffixes = ("_heavy", "_light")
@@ -433,7 +433,7 @@ def standardize_heavy_light_columns(pcp_df):
     # Do some checking first:
     chain_suffixes = [sfx for sfx in possible_chain_suffixes if "parent" + sfx in cols]
 
-    assert len(chain_suffixes) > 0, "No heavy or light chain columns found in PCP file!"
+    assert len(chain_suffixes) > 0, f"No heavy or light chain columns found in PCP file! Found columns {cols}"
 
     for suffix in chain_suffixes:
         for col in _required_pcp_df_columns:
