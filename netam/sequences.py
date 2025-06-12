@@ -286,7 +286,7 @@ def prepare_heavy_light_pair(heavy_seq, light_seq, known_token_count, is_nt=True
 def heavy_light_mask_of_aa_idxs(aa_idxs):
     """Return a mask indicating which positions in a single amino acid sequence are in
     the heavy chain, and which positions are in the light chain. The returned value is a
-    dictionary with keys `h` and `l`, and torch mask tensors as values.
+    dictionary with keys `heavy` and `light`, and torch mask tensors as values.
 
     The returned masks are True only for actual amino acid positions, never for reserved
     tokens.
@@ -298,15 +298,15 @@ def heavy_light_mask_of_aa_idxs(aa_idxs):
     if len(separator_indices) < 1:
         # assume all heavy chain
         return {
-            "h": is_not_token,
-            "l": torch.full_like(aa_idxs, False, dtype=torch.bool),
+            "heavy": is_not_token,
+            "light": torch.full_like(aa_idxs, False, dtype=torch.bool),
         }
     elif len(separator_indices) == 1:
         before_separator = torch.arange(len(aa_idxs)) < separator_indices[0]
         after_separator = torch.arange(len(aa_idxs)) > separator_indices[0]
         return {
-            "h": is_not_token & before_separator,
-            "l": is_not_token & after_separator,
+            "heavy": is_not_token & before_separator,
+            "light": is_not_token & after_separator,
         }
     else:
         raise ValueError(

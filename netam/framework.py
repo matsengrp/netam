@@ -4,7 +4,6 @@ import os
 from time import time
 import multiprocessing as mp
 from functools import partial
-from collections import defaultdict
 
 import pandas as pd
 import numpy as np
@@ -466,7 +465,7 @@ def standardize_heavy_light_columns(pcp_df):
 
 
 def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
-    """Load a PCP dataframe from a gzipped CSV file.
+    """Load a PCP dataframe from a (possibly gzipped) CSV file.
 
     `orig_pcp_idx` is the index column from the original file, even if we subset by
     sampling or by choosing V families.
@@ -478,9 +477,8 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
     pcp_df = (
         pd.read_csv(
             pcp_df_path_gz,
-            compression="gzip",
             index_col=0,
-            dtype=(defaultdict(lambda: "object") | _all_pcp_df_columns)
+            dtype=_all_pcp_df_columns
         )
         .reset_index()
         .rename(columns={"index": "orig_pcp_idx"})
