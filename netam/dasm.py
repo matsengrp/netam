@@ -84,7 +84,9 @@ class DASMDataset(DXSMDataset):
 
         # Note that our masked out positions will have a nan log probability,
         # which will require us to handle them correctly downstream.
-        self.log_neutral_codon_probss = torch.log(torch.stack(neutral_codon_probs_light))
+        self.log_neutral_codon_probss = torch.log(
+            torch.stack(neutral_codon_probs_light)
+        )
 
     def __getitem__(self, idx):
         return {

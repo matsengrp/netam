@@ -241,7 +241,11 @@ def make_test_pcp_df(len_factor=1, extend_same=0):
         (child * len_factor) + (_parent_seq * extend_same) for child in _child_seqs
     ]
     df = pd.DataFrame(
-        {"parent_heavy": [parent_seq] * 4, "child_heavy": child_seqs, "v_gene_heavy": ["IGHV1-39*01"] * 4}
+        {
+            "parent_heavy": [parent_seq] * 4,
+            "child_heavy": child_seqs,
+            "v_gene_heavy": ["IGHV1-39*01"] * 4,
+        }
     )
     # for child in child_seqs:
     #     print(sum(c1 != c2 for c1, c2 in zip(parent_seq, child)))
@@ -567,7 +571,10 @@ def test_pcp_prob_dxsm():
     pcp_df = make_test_pcp_df(len_factor=len_factor)
 
     for parent, child, nt_rates, nt_csps in zip(
-        pcp_df["parent_heavy"], pcp_df["child_heavy"], pcp_df["nt_rates_heavy"], pcp_df["nt_csps_heavy"]
+        pcp_df["parent_heavy"],
+        pcp_df["child_heavy"],
+        pcp_df["nt_rates_heavy"],
+        pcp_df["nt_csps_heavy"],
     ):
         sample_branch_length = torch.tensor(0.5)
         val_prob_func = _prob_of_branch_simple_zapped(
@@ -586,7 +593,10 @@ def test_pcp_prob_dxsm():
 
     null_mh_model = HitClassModel()
     for parent, child, nt_rates, nt_csps in zip(
-        pcp_df["parent_heavy"], pcp_df["child_heavy"], pcp_df["nt_rates_heavy"], pcp_df["nt_csps_heavy"]
+        pcp_df["parent_heavy"],
+        pcp_df["child_heavy"],
+        pcp_df["nt_rates_heavy"],
+        pcp_df["nt_csps_heavy"],
     ):
         sample_branch_length = torch.tensor(0.5)
         val_prob = _prob_of_branch_simple_zapped(

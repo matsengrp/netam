@@ -219,7 +219,9 @@ class SHMoofDataset(BranchLengthDataset):
             mask = nt_mask_tensor_of(row["child_heavy"], self.encoder.site_count)
             # Assert that anything that is masked in the child is also masked in
             # the parent. We only use the parent_mask for this check.
-            parent_mask = nt_mask_tensor_of(row["parent_heavy"], self.encoder.site_count)
+            parent_mask = nt_mask_tensor_of(
+                row["parent_heavy"], self.encoder.site_count
+            )
             assert (mask <= parent_mask).all()
             (
                 mutation_indicator,
@@ -424,8 +426,8 @@ def standardize_heavy_light_columns(pcp_df):
     """Ensure that heavy and light chain columns are present, and fill missing ones with
     placeholder values.
 
-    If only heavy or light columns are present, as in bulk data, the other chain columns will be filled with
-    appropriate placeholder values.
+    If only heavy or light columns are present, as in bulk data, the other chain columns
+    will be filled with appropriate placeholder values.
     """
     v_family_names = {"_heavy": {"IGH"}, "_light": {"IGK", "IGL"}}
     possible_chain_suffixes = ("_heavy", "_light")
@@ -433,7 +435,9 @@ def standardize_heavy_light_columns(pcp_df):
     # Do some checking first:
     chain_suffixes = [sfx for sfx in possible_chain_suffixes if "parent" + sfx in cols]
 
-    assert len(chain_suffixes) > 0, f"No heavy or light chain columns found in PCP file! Found columns {cols}"
+    assert (
+        len(chain_suffixes) > 0
+    ), f"No heavy or light chain columns found in PCP file! Found columns {cols}"
 
     for suffix in chain_suffixes:
         for col in _required_pcp_df_columns:
@@ -442,22 +446,26 @@ def standardize_heavy_light_columns(pcp_df):
         # Check that V gene families are in the correct columns:
         suffix_names = v_family_names[suffix]
         if not pcp_df["v_family" + suffix].str[:3].isin(suffix_names).all():
-            _non_suffix_names = pcp_df[~pcp_df["v_family" + suffix].str[:3].isin(suffix_names)][
-                "v_family" + suffix
-            ].unique()
+            _non_suffix_names = pcp_df[
+                ~pcp_df["v_family" + suffix].str[:3].isin(suffix_names)
+            ]["v_family" + suffix].unique()
             raise ValueError(
                 f"Unexpected {suffix[1:]} chain V gene families: {_non_suffix_names}"
             )
 
     # Add missing columns for bulk data
     if len(chain_suffixes) == 1:
-        missing_suffix = next(sfx for sfx in possible_chain_suffixes if sfx not in chain_suffixes)
+        missing_suffix = next(
+            sfx for sfx in possible_chain_suffixes if sfx not in chain_suffixes
+        )
         for col, dtype in _pcp_df_differentiated_columns.items():
             if dtype == str:
                 fill_value = ""
             else:
                 fill_value = pd.NA
-            pcp_df[col + missing_suffix] = pd.Series([fill_value] * len(pcp_df), dtype=dtype)
+            pcp_df[col + missing_suffix] = pd.Series(
+                [fill_value] * len(pcp_df), dtype=dtype
+            )
 
     if (pcp_df["parent_heavy"].str.len() + pcp_df["parent_light"].str.len()).min() < 3:
         raise ValueError("At least one PCP has fewer than three nucleotides.")
@@ -476,11 +484,7 @@ def load_pcp_df(pcp_df_path_gz, sample_count=None, chosen_v_families=None):
     sequence is present, this separator will be added to the appropriate side of the available sequence.
     """
     pcp_df = (
-        pd.read_csv(
-            pcp_df_path_gz,
-            index_col=0,
-            dtype=_all_pcp_df_columns
-        )
+        pd.read_csv(pcp_df_path_gz, index_col=0, dtype=_all_pcp_df_columns)
         .reset_index()
         .rename(columns={"index": "orig_pcp_idx"})
     )
@@ -523,8 +527,8 @@ def add_shm_model_outputs_to_pcp_df(
         pcp_df = pcp_df[pcp_df["parent_heavy"].str.len() <= crepe.encoder.site_count]
         pcp_df = pcp_df[pcp_df["parent_light"].str.len() <= crepe.encoder.site_count]
 
-    pcp_df["nt_rates_heavy"], pcp_df["nt_csps_heavy"] = trimmed_shm_model_outputs_of_crepe(
-        crepe, pcp_df["parent_heavy"]
+    pcp_df["nt_rates_heavy"], pcp_df["nt_csps_heavy"] = (
+        trimmed_shm_model_outputs_of_crepe(crepe, pcp_df["parent_heavy"])
     )
     light_rates, pcp_df["nt_csps_light"] = trimmed_shm_model_outputs_of_crepe(
         crepe, pcp_df["parent_light"]
@@ -577,7 +581,9 @@ class Burrito(ABC):
             )
 
     def build_val_loader(self):
-        return create_optimized_dataloader(self.val_dataset, batch_size=self.batch_size, shuffle=False)
+        return create_optimized_dataloader(
+            self.val_dataset, batch_size=self.batch_size, shuffle=False
+        )
 
     @property
     def device(self):

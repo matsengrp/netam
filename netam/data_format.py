@@ -1,4 +1,5 @@
-"""Constants defining data format for pcp dataframes and other data"""
+"""Constants defining data format for pcp dataframes and other data."""
+
 from collections import defaultdict
 
 
@@ -31,10 +32,10 @@ _pcp_df_undifferentiated_columns = {
 }
 
 _all_pcp_df_columns = (
-    defaultdict(lambda: "object") |
-    {col + "_heavy": dtype for col, dtype in _pcp_df_differentiated_columns.items()} |
-    {col + "_light": dtype for col, dtype in _pcp_df_differentiated_columns.items()} |
-    _pcp_df_undifferentiated_columns
+    defaultdict(lambda: "object")
+    | {col + "_heavy": dtype for col, dtype in _pcp_df_differentiated_columns.items()}
+    | {col + "_light": dtype for col, dtype in _pcp_df_differentiated_columns.items()}
+    | _pcp_df_undifferentiated_columns
 )
 
 _required_pcp_df_columns = ("parent", "child", "v_gene")

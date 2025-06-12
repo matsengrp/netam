@@ -80,7 +80,9 @@ class DNSMDataset(DXSMDataset):
 
         # Note that our masked out positions will have a nan log probability,
         # which will require us to handle them correctly downstream.
-        self.log_neutral_aa_mut_probss = torch.log(torch.stack(neutral_aa_mut_prob_light))
+        self.log_neutral_aa_mut_probss = torch.log(
+            torch.stack(neutral_aa_mut_prob_light)
+        )
 
     def __getitem__(self, idx):
         return {

@@ -137,7 +137,9 @@ def generic_burrito(request, pcp_df):
 def test_neutral_probs(pcp_df, dasm_pred_burrito):
     """Test that the DASM burrito computes the same predictions as
     codon_probs_of_parent_seq."""
-    parent_seqs = list(zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist()))
+    parent_seqs = list(
+        zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist())
+    )
 
     print("recomputing branch lengths")
     dasm_pred_burrito.standardize_and_optimize_branch_lengths()
@@ -212,7 +214,9 @@ def test_selection_probs(pcp_df, dasm_pred_burrito):
     codon_probs_of_parent_seq."""
     # TO make the same test for dnsm, things are more complicated because the
     # burrito only produces aa-level probabilities.
-    parent_seqs = list(zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist()))
+    parent_seqs = list(
+        zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist())
+    )
 
     print("recomputing branch lengths")
     dasm_pred_burrito.standardize_and_optimize_branch_lengths()
@@ -270,7 +274,9 @@ def test_sequence_sampling(pcp_df, dasm_pred_burrito):
     real data."""
     # Check that on average, the difference in Hamming distance between
     # sampled sequences and actual sequences to their parents is close to 0
-    parent_seqs = list(zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist()))
+    parent_seqs = list(
+        zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist())
+    )
 
     print("recomputing branch lengths")
     dasm_pred_burrito.standardize_and_optimize_branch_lengths()
@@ -431,7 +437,9 @@ def test_refit_branch_lengths(pcp_df, dasm_pred_burrito):
 def test_selection_factors_with_crepe(pcp_df, dasm_pred_burrito):
     """Test that the DASM burrito computes the same selection factors as the crepe
     model."""
-    parent_seqs = list(zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist()))
+    parent_seqs = list(
+        zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist())
+    )
 
     print("recomputing branch lengths")
     dasm_pred_burrito.standardize_and_optimize_branch_lengths()
@@ -477,7 +485,9 @@ def test_sequence_sample_dnsm(pcp_df, dnsm_pred_burrito):
     real data."""
     # Check that on average, the difference in Hamming distance between
     # sampled sequences and actual sequences to their parents is close to 0
-    parent_seqs = list(zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist()))
+    parent_seqs = list(
+        zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist())
+    )
     branch_lengths = dnsm_pred_burrito.val_dataset.branch_lengths
 
     # Get the predictions from codon_probs_of_parent_seq
@@ -514,7 +524,9 @@ def test_ambig_sample_dnsm(pcp_df, dnsm_pred_burrito):
     """Test that the DASM burrito can sample sequences with mutation counts similar to
     real data."""
     # Check that ambiguous sites are propagated to the child
-    parent_seqs = list(zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist()))
+    parent_seqs = list(
+        zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist())
+    )
     branch_lengths = dnsm_pred_burrito.val_dataset.branch_lengths
 
     # Get the predictions from codon_probs_of_parent_seq

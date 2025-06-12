@@ -493,6 +493,7 @@ def create_optimized_dataloader(
     num_workers: int = 2,
 ) -> DataLoader:
     """Create a DataLoader with optimizations for GPU training.
+
     Args:
         dataset: PyTorch dataset
         batch_size: Batch size for the dataloader
