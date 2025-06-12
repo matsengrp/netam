@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torch import Tensor
+from torch.utils.data import DataLoader
 import multiprocessing as mp
 
 
@@ -482,3 +483,31 @@ def parallelize_function(
             return torch.cat(results)
 
     return wrapper
+
+
+def create_optimized_dataloader(
+    dataset,
+    batch_size: int,
+    shuffle: bool = True,
+    collate_fn=None,
+    num_workers: int = 2,
+) -> DataLoader:
+    """Create a DataLoader with optimizations for GPU training.
+    Args:
+        dataset: PyTorch dataset
+        batch_size: Batch size for the dataloader
+        shuffle: Whether to shuffle the data
+        collate_fn: Optional collate function
+        num_workers: Number of worker processes for data loading
+    Returns:
+        DataLoader with GPU optimization settings
+    """
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        collate_fn=collate_fn,
+        num_workers=num_workers,
+        persistent_workers=True,
+        pin_memory=torch.cuda.is_available(),
+    )

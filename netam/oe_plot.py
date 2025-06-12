@@ -1243,13 +1243,7 @@ def get_numbering_dict(anarci_path, pcp_df=None, verbose=False, checks="imgt"):
         # assumes clonal family ID has format "{sample_id}|{family}|{seq_name}"
         cfinfos = row["Id"].split("|")
         sample_id = cfinfos[0]
-        # try-block to cast family ID to integer if appropriate
-        try:
-            int(cfinfos[1])
-        except ValueError:
-            family = cfinfos[1]
-        else:
-            family = int(cfinfos[1])
+        family = cfinfos[1]
 
         seqlist = [row[col] for col in numbering_cols]
         numbering = [nn for nn, aa in zip(numbering_cols, seqlist) if aa != "-"]

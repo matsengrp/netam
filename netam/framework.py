@@ -27,6 +27,7 @@ from netam.common import (
     tensor_to_np_if_needed,
     BIG,
     parallelize_function,
+    create_optimized_dataloader,
 )
 from netam.sequences import (
     codon_mask_tensor_of,
@@ -571,12 +572,12 @@ class Burrito(ABC):
         if self.train_dataset is None:
             return None
         else:
-            return DataLoader(
+            return create_optimized_dataloader(
                 self.train_dataset, batch_size=self.batch_size, shuffle=True
             )
 
     def build_val_loader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False)
+        return create_optimized_dataloader(self.val_dataset, batch_size=self.batch_size, shuffle=False)
 
     @property
     def device(self):
