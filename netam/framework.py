@@ -463,7 +463,9 @@ def standardize_heavy_light_columns(pcp_df):
                 fill_value = ""
             else:
                 fill_value = pd.NA
-            pcp_df[col + missing_suffix] = pd.Series(
+            # This cannot be a Series because if the index is sparse it will
+            # introduce NaNs in the DataFrame.
+            pcp_df[col + missing_suffix] = pd.array(
                 [fill_value] * len(pcp_df), dtype=dtype
             )
 
