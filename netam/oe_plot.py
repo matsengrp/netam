@@ -519,9 +519,7 @@ def get_subs_and_preds_from_mutabilities_df(df, pcp_df):
     for pcp_index in pcp_indices:
         probs = list(df[df["pcp_index"] == pcp_index]["prob"])
         mutations = list(df[df["pcp_index"] == pcp_index]["mutation"])
-        pcp_sub_locations.append(
-            list(i for i in range(len(mutations)) if mutations[i])
-        )
+        pcp_sub_locations.append(list(i for i in range(len(mutations)) if mutations[i]))
         top_k_sub_locations.append(locate_top_k_substitutions(probs, sum(mutations)))
         pcp_sample_family_dict[pcp_index] = tuple(
             pcp_df.loc[pcp_index][["sample_id", "family"]]
@@ -652,9 +650,7 @@ def plot_sites_observed_vs_top_k_predictions(
     residual = np.sqrt(np.sum(diff * diff)) / np.sum(predicted)
 
     # compute R-precision
-    tmpdf = (
-        df[df["obs"]][["pcp_index", "obs", "pred"]].groupby("pcp_index").sum()
-    )
+    tmpdf = df[df["obs"]][["pcp_index", "obs", "pred"]].groupby("pcp_index").sum()
     pcp_rprec = tmpdf["pred"].to_numpy() / tmpdf["obs"].to_numpy()
     rprec = sum(pcp_rprec) / len(pcp_rprec)
 
@@ -881,9 +877,7 @@ def plot_sites_subs_acc(
 
         fwr_nobs = site_df[~site_df["is_cdr"]].shape[0]
         fwr_observed.append(fwr_nobs)
-        fwr_ncorr = site_df[
-            site_df["correct"] & (~site_df["is_cdr"])
-        ].shape[0]
+        fwr_ncorr = site_df[site_df["correct"] & (~site_df["is_cdr"])].shape[0]
         fwr_correct.append(fwr_ncorr)
     observed = np.array(observed)
     correct = np.array(correct)
