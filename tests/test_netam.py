@@ -18,13 +18,17 @@ from netam.models import (
 
 @pytest.fixture
 def tiny_dataset():
-    df = pd.DataFrame({"parent": ["ATGTA", "GTAC"], "child": ["ACGTA", "ATAC"]})
+    df = pd.DataFrame(
+        {"parent_heavy": ["ATGTA", "GTAC"], "child_heavy": ["ACGTA", "ATAC"]}
+    )
     return SHMoofDataset(df, site_count=6, kmer_length=3)
 
 
 @pytest.fixture
 def tiny_val_dataset():
-    df = pd.DataFrame({"parent": ["ATGTA", "GTAA"], "child": ["ACGTA", "TACG"]})
+    df = pd.DataFrame(
+        {"parent_heavy": ["ATGTA", "GTAA"], "child_heavy": ["ACGTA", "TACG"]}
+    )
     return SHMoofDataset(df, site_count=6, kmer_length=3)
 
 
