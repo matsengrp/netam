@@ -3,7 +3,6 @@
 import numpy as np
 import pandas as pd
 import bisect
-import matplotlib.pyplot as plt
 from netam.sequences import (
     AA_STR_SORTED,
     translate_sequence,
@@ -201,14 +200,14 @@ def plot_observed_vs_expected(
     # count observed mutations
     if logprobs:
         obs_probs = np.log10(df[df["mutation"] > 0]["prob"].to_numpy())
-        xlabel = "$\log_{10}$(amino acid substitution probability)"
+        xlabel = r"$\log_{10}$(amino acid substitution probability)"
     else:
         obs_probs = df[df["mutation"] > 0]["prob"].to_numpy()
         xlabel = "amino acid substitution probability"
     observed = np.histogram(obs_probs, binning)[0]
 
     # normalize total expected to equal total observed
-    if normalize == True:
+    if normalize:
         fnorm = np.sum(observed) / np.sum(expected)
         expected = fnorm * expected
         exp_err = fnorm * exp_err
@@ -390,7 +389,7 @@ def plot_sites_observed_vs_expected(
         expected.append(np.sum(site_probs))
         exp_err.append(np.sqrt(np.sum(site_probs * (1 - site_probs))))
         observed.append(df[(df["mutation"] == 1) & (df["site"] == site)].shape[0])
-        site_fwr_probs = site_df[site_df["is_cdr"] == False]["prob"].to_numpy()
+        site_fwr_probs = site_df[~site_df["is_cdr"]]["prob"].to_numpy()
         fwr_expected.append(np.sum(site_fwr_probs))
 
     expected = np.array(expected)
@@ -521,7 +520,7 @@ def get_subs_and_preds_from_mutabilities_df(df, pcp_df):
         probs = list(df[df["pcp_index"] == pcp_index]["prob"])
         mutations = list(df[df["pcp_index"] == pcp_index]["mutation"])
         pcp_sub_locations.append(
-            list(i for i in range(len(mutations)) if mutations[i] == True)
+            list(i for i in range(len(mutations)) if mutations[i])
         )
         top_k_sub_locations.append(locate_top_k_substitutions(probs, sum(mutations)))
         pcp_sample_family_dict[pcp_index] = tuple(
@@ -633,11 +632,11 @@ def plot_sites_observed_vs_top_k_predictions(
     correct = []
     for site in xvals:
         site_df = df[df["site"] == site]
-        npred = site_df[site_df["pred"] == True].shape[0]
+        npred = site_df[site_df["pred"]].shape[0]
         predicted.append(npred)
-        nobs = site_df[site_df["obs"] == True].shape[0]
+        nobs = site_df[site_df["obs"]].shape[0]
         observed.append(nobs)
-        ncorr = site_df[(site_df["pred"] == True) & (site_df["obs"] == True)].shape[0]
+        ncorr = site_df[site_df["pred"] & site_df["obs"]].shape[0]
         correct.append(ncorr)
     predicted = np.array(predicted)
     observed = np.array(observed)
@@ -654,7 +653,7 @@ def plot_sites_observed_vs_top_k_predictions(
 
     # compute R-precision
     tmpdf = (
-        df[df["obs"] == True][["pcp_index", "obs", "pred"]].groupby("pcp_index").sum()
+        df[df["obs"]][["pcp_index", "obs", "pred"]].groupby("pcp_index").sum()
     )
     pcp_rprec = tmpdf["pred"].to_numpy() / tmpdf["obs"].to_numpy()
     rprec = sum(pcp_rprec) / len(pcp_rprec)
@@ -877,13 +876,13 @@ def plot_sites_subs_acc(
         site_df = df[df["site"] == site]
         nobs = site_df.shape[0]
         observed.append(nobs)
-        ncorr = site_df[site_df["correct"] == True].shape[0]
+        ncorr = site_df[site_df["correct"]].shape[0]
         correct.append(ncorr)
 
-        fwr_nobs = site_df[site_df["is_cdr"] == False].shape[0]
+        fwr_nobs = site_df[~site_df["is_cdr"]].shape[0]
         fwr_observed.append(fwr_nobs)
         fwr_ncorr = site_df[
-            (site_df["correct"] == True) & (site_df["is_cdr"] == False)
+            site_df["correct"] & (~site_df["is_cdr"])
         ].shape[0]
         fwr_correct.append(fwr_ncorr)
     observed = np.array(observed)
@@ -892,7 +891,7 @@ def plot_sites_subs_acc(
     fwr_correct = np.array(fwr_correct)
 
     # compute substitution accuracy
-    total_subacc = df[df["correct"] == True].shape[0] / df.shape[0]
+    total_subacc = df[df["correct"]].shape[0] / df.shape[0]
     site_subacc = [c / o if o > 0 else -1 for c, o in zip(correct, observed)]
 
     if counts_ax is not None:
@@ -1019,7 +1018,7 @@ def plot_sites_multi_subacc(
             if i == 0:
                 nobs = site_df.shape[0]
                 observed.append(nobs)
-            ncorr = site_df[site_df["correct"] == True].shape[0]
+            ncorr = site_df[site_df["correct"]].shape[0]
             correct.append(ncorr)
         correct = np.array(correct)
         correct_list.append(correct)
@@ -1120,8 +1119,8 @@ def annotate_site_csp_df(
     output_df (pd.DataFrame): a new dataframe with columns pcp_index, site, prob, aa, mutation, is_cdr.
     Notes:
     The `site` column will be changed if a numbering scheme was specified by numbering_dict.
-    `mutation` column is the same content as `is_target`, the column name change allows it to be usable by various plotting functions.
-    `aa` is in terms of alphabet symbols
+    `mutation` column is the same content as `is_target`, the column name change allows it to be usable
+    by various plotting functions. `aa` is in terms of alphabet symbols.
     The size of output_df may be different from input df if there were PCPs that did not have a valid ANARCI numbering.
     """
 
@@ -1133,20 +1132,6 @@ def annotate_site_csp_df(
         pcp_row = pcp_df.loc[pcp_index]
 
         pcp_group_df = pcp_groups.get_group(pcp_index)
-        nsites = pcp_group_df.shape[0]
-        # assert (
-        #     nsites == len(pcp_row["parent"]) // 3
-        # ), f"number of sites ({nsites}) does not match sequence length ({len(pcp_row['parent']) // 3})"
-
-        if numbering_dict is None:
-            numbering = np.arange(nsites)
-        else:
-            nbkey = tuple(pcp_row[["sample_id", "family"]])
-            if nbkey in numbering_dict:
-                numbering = numbering_dict[nbkey]
-            else:
-                # Assign sites as "None", marking them for exclusion from output.
-                numbering = ["None"] * nsites
 
         pcp_is_cdr = pcp_sites_cdr_annotation(pcp_row)
 
@@ -1257,11 +1242,11 @@ def get_numbering_dict(anarci_path, pcp_df=None, verbose=False, checks="imgt"):
                     exclusion_dict[(sample_id, family)] = (
                         f"Invalid IMGT insertion: {nn}"
                     )
-                    if verbose == True:
+                    if verbose:
                         print(f"Invalid IMGT insertion: {nn}", sample_id, family)
                     exclude = True
                     break
-            if exclude == True:
+            if exclude:
                 continue
 
         if pcp_df is not None:
@@ -1277,7 +1262,7 @@ def get_numbering_dict(anarci_path, pcp_df=None, verbose=False, checks="imgt"):
                 test_seq = translate_sequence(pcp_row["parent"])
                 if len(test_seq) != len(numbering):
                     exclusion_dict[(sample_id, family)] = "ANARCI seq length mismatch!"
-                    if verbose == True:
+                    if verbose:
                         print("ANARCI seq length mismatch!", sample_id, family)
                     continue
 
@@ -1292,7 +1277,7 @@ def get_numbering_dict(anarci_path, pcp_df=None, verbose=False, checks="imgt"):
                             exclusion_dict[(sample_id, family)] = (
                                 "IMGT mismatch with CDR annotation!"
                             )
-                            if verbose == True:
+                            if verbose:
                                 print(
                                     "IMGT mismatch with CDR annotation!",
                                     sample_id,
@@ -1300,7 +1285,7 @@ def get_numbering_dict(anarci_path, pcp_df=None, verbose=False, checks="imgt"):
                                 )
                             exclude = True
                             break
-                    if exclude == True:
+                    if exclude:
                         continue
 
         numbering_dict[(sample_id, family)] = numbering
@@ -1311,7 +1296,7 @@ def get_numbering_dict(anarci_path, pcp_df=None, verbose=False, checks="imgt"):
 
     # make a numbering reference of site numbers that are used
     numbering_dict[("reference", 0)] = [
-        nn for nn, used in zip(numbering_cols, numbering_used) if used == True
+        nn for nn, used in zip(numbering_cols, numbering_used) if used
     ]
 
     return (numbering_dict, exclusion_dict)
