@@ -63,9 +63,13 @@ def test_predictions_of_batch(fixed_ddsm_val_burrito):
         "tests/old_models/val_predictions.pt", weights_only=True
     ).double()
     if not torch.allclose(predictions.exp(), these_predictions.exp()):
-        print(predictions[0].exp())
-        print(these_predictions[0].exp())
-        print((predictions[0].exp() - these_predictions[0].exp()).abs().max())
+        m = torch.isclose(predictions.exp(), these_predictions.exp())
+        print(predictions.exp()[~m])
+        print(these_predictions.exp()[~m])
+        print((predictions.exp() - these_predictions.exp())[~m])
+        # Where is m False?
+        print("predictions have shape", predictions.shape)
+        print("predictions don't match at indices:", torch.nonzero(~m, as_tuple=False))
         assert False
 
 

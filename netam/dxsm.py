@@ -1,13 +1,7 @@
 from warnings import warn
 from abc import ABC, abstractmethod
 import copy
-
 import torch
-
-# Amazingly, using one thread makes things 50x faster for branch length
-# optimization on our server.
-torch.set_num_threads(1)
-
 import numpy as np
 import pandas as pd
 
@@ -34,6 +28,14 @@ from netam.sequences import (
     RESERVED_TOKEN_REGEX,
     AA_PADDING_TOKEN,
 )
+
+# Amazingly, using one thread makes things 50x faster for branch length
+# optimization on our server.
+torch.set_num_threads(1)
+
+# Enable cuDNN autotuner for better GPU performance
+torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.enabled = True
 
 
 class DXSMDataset(framework.BranchLengthDataset, ABC):
@@ -185,7 +187,7 @@ class DXSMDataset(framework.BranchLengthDataset, ABC):
         """Alternative constructor that takes in a pcp_df and calculates the initial
         branch lengths."""
         assert (
-            "nt_rates_l" in pcp_df.columns
+            "nt_rates_light" in pcp_df.columns
         ), "pcp_df must have a neutral nt_rates column"
         # use sequences.prepare_heavy_light_pair and the resulting
         # added_indices to get the parent and child sequences and neutral model

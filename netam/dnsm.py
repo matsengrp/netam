@@ -26,7 +26,7 @@ class DNSMDataset(DXSMDataset):
 
         This is the case of the DNSM, but the DDSM will override this method.
         """
-        neutral_aa_mut_prob_l = []
+        neutral_aa_mut_prob_light = []
 
         for nt_parent, mask, nt_rates, nt_csps, branch_length in zip(
             self.nt_parents,
@@ -76,11 +76,13 @@ class DNSMDataset(DXSMDataset):
             # Here we zero out masked positions.
             neutral_aa_mut_probs *= mask
 
-            neutral_aa_mut_prob_l.append(neutral_aa_mut_probs)
+            neutral_aa_mut_prob_light.append(neutral_aa_mut_probs)
 
         # Note that our masked out positions will have a nan log probability,
         # which will require us to handle them correctly downstream.
-        self.log_neutral_aa_mut_probss = torch.log(torch.stack(neutral_aa_mut_prob_l))
+        self.log_neutral_aa_mut_probss = torch.log(
+            torch.stack(neutral_aa_mut_prob_light)
+        )
 
     def __getitem__(self, idx):
         return {

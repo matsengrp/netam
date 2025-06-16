@@ -286,7 +286,7 @@ def prepare_heavy_light_pair(heavy_seq, light_seq, known_token_count, is_nt=True
 def heavy_light_mask_of_aa_idxs(aa_idxs):
     """Return a mask indicating which positions in a single amino acid sequence are in
     the heavy chain, and which positions are in the light chain. The returned value is a
-    dictionary with keys `h` and `l`, and torch mask tensors as values.
+    dictionary with keys `heavy` and `light`, and torch mask tensors as values.
 
     The returned masks are True only for actual amino acid positions, never for reserved
     tokens.
@@ -298,15 +298,15 @@ def heavy_light_mask_of_aa_idxs(aa_idxs):
     if len(separator_indices) < 1:
         # assume all heavy chain
         return {
-            "h": is_not_token,
-            "l": torch.full_like(aa_idxs, False, dtype=torch.bool),
+            "heavy": is_not_token,
+            "light": torch.full_like(aa_idxs, False, dtype=torch.bool),
         }
     elif len(separator_indices) == 1:
         before_separator = torch.arange(len(aa_idxs)) < separator_indices[0]
         after_separator = torch.arange(len(aa_idxs)) > separator_indices[0]
         return {
-            "h": is_not_token & before_separator,
-            "l": is_not_token & after_separator,
+            "heavy": is_not_token & before_separator,
+            "light": is_not_token & after_separator,
         }
     else:
         raise ValueError(
@@ -341,17 +341,17 @@ def dataset_inputs_of_pcp_df(pcp_df, known_token_count):
     nt_cspss = []
     for row in pcp_df.itertuples():
         parent, parent_token_idxs = prepare_heavy_light_pair(
-            row.parent_h, row.parent_l, known_token_count, is_nt=True
+            row.parent_heavy, row.parent_light, known_token_count, is_nt=True
         )
         child = prepare_heavy_light_pair(
-            row.child_h, row.child_l, known_token_count, is_nt=True
+            row.child_heavy, row.child_light, known_token_count, is_nt=True
         )[0]
         # These are the fill values that the neutral model returns when given N's:
         nt_rates = combine_and_pad_tensors(
-            row.nt_rates_h, row.nt_rates_l, parent_token_idxs, fill=1.0
+            row.nt_rates_heavy, row.nt_rates_light, parent_token_idxs, fill=1.0
         )[: len(parent)]
         nt_csps = combine_and_pad_tensors(
-            row.nt_csps_h, row.nt_csps_l, parent_token_idxs, fill=0.0
+            row.nt_csps_heavy, row.nt_csps_light, parent_token_idxs, fill=0.0
         )[: len(parent)]
         parents.append(parent)
         children.append(child)

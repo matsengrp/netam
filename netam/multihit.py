@@ -436,10 +436,10 @@ class MultihitBurrito(Burrito):
 def hit_class_dataset_from_pcp_df(
     pcp_df: pd.DataFrame, branch_length_multiplier: int = 1.0
 ) -> HitClassDataset:
-    nt_parents = pcp_df["parent"].reset_index(drop=True)
-    nt_children = pcp_df["child"].reset_index(drop=True)
-    nt_rates = pcp_df["nt_rates"].reset_index(drop=True)
-    nt_csps = pcp_df["nt_csps"].reset_index(drop=True)
+    nt_parents = pcp_df["parent_heavy"].reset_index(drop=True)
+    nt_children = pcp_df["child_heavy"].reset_index(drop=True)
+    nt_rates = pcp_df["nt_rates_heavy"].reset_index(drop=True)
+    nt_csps = pcp_df["nt_csps_heavy"].reset_index(drop=True)
 
     return HitClassDataset(
         nt_parents,
@@ -455,10 +455,10 @@ def train_test_datasets_of_pcp_df(
 ) -> Tuple[HitClassDataset, HitClassDataset]:
     """Splits a pcp_df prepared by `prepare_pcp_df` into a training and testing
     HitClassDataset."""
-    nt_parents = pcp_df["parent"].reset_index(drop=True)
-    nt_children = pcp_df["child"].reset_index(drop=True)
-    nt_rates = pcp_df["nt_rates"].reset_index(drop=True)
-    nt_csps = pcp_df["nt_csps"].reset_index(drop=True)
+    nt_parents = pcp_df["parent_heavy"].reset_index(drop=True)
+    nt_children = pcp_df["child_heavy"].reset_index(drop=True)
+    nt_rates = pcp_df["nt_rates_heavy"].reset_index(drop=True)
+    nt_csps = pcp_df["nt_csps_heavy"].reset_index(drop=True)
 
     train_len = int(train_frac * len(nt_parents))
     train_parents, val_parents = nt_parents[:train_len], nt_parents[train_len:]
@@ -496,12 +496,18 @@ def prepare_pcp_df(
 
     Returns the modified dataframe, which is the input dataframe modified in-place.
     """
-    pcp_df["parent"] = _trim_to_codon_boundary_and_max_len(pcp_df["parent"], site_count)
-    pcp_df["child"] = _trim_to_codon_boundary_and_max_len(pcp_df["child"], site_count)
-    pcp_df = pcp_df[pcp_df["parent"] != pcp_df["child"]].reset_index(drop=True)
-    ratess, cspss = framework.trimmed_shm_model_outputs_of_crepe(
-        crepe, pcp_df["parent"]
+    pcp_df["parent_heavy"] = _trim_to_codon_boundary_and_max_len(
+        pcp_df["parent_heavy"], site_count
     )
-    pcp_df["nt_rates"] = ratess
-    pcp_df["nt_csps"] = cspss
+    pcp_df["child_heavy"] = _trim_to_codon_boundary_and_max_len(
+        pcp_df["child_heavy"], site_count
+    )
+    pcp_df = pcp_df[pcp_df["parent_heavy"] != pcp_df["child_heavy"]].reset_index(
+        drop=True
+    )
+    ratess, cspss = framework.trimmed_shm_model_outputs_of_crepe(
+        crepe, pcp_df["parent_heavy"]
+    )
+    pcp_df["nt_rates_heavy"] = ratess
+    pcp_df["nt_csps_heavy"] = cspss
     return pcp_df

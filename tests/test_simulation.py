@@ -137,7 +137,9 @@ def generic_burrito(request, pcp_df):
 def test_neutral_probs(pcp_df, dasm_pred_burrito):
     """Test that the DASM burrito computes the same predictions as
     codon_probs_of_parent_seq."""
-    parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
+    parent_seqs = list(
+        zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist())
+    )
 
     print("recomputing branch lengths")
     dasm_pred_burrito.standardize_and_optimize_branch_lengths()
@@ -212,7 +214,9 @@ def test_selection_probs(pcp_df, dasm_pred_burrito):
     codon_probs_of_parent_seq."""
     # TO make the same test for dnsm, things are more complicated because the
     # burrito only produces aa-level probabilities.
-    parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
+    parent_seqs = list(
+        zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist())
+    )
 
     print("recomputing branch lengths")
     dasm_pred_burrito.standardize_and_optimize_branch_lengths()
@@ -270,7 +274,9 @@ def test_sequence_sampling(pcp_df, dasm_pred_burrito):
     real data."""
     # Check that on average, the difference in Hamming distance between
     # sampled sequences and actual sequences to their parents is close to 0
-    parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
+    parent_seqs = list(
+        zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist())
+    )
 
     print("recomputing branch lengths")
     dasm_pred_burrito.standardize_and_optimize_branch_lengths()
@@ -316,7 +322,7 @@ def test_sequence_sampling(pcp_df, dasm_pred_burrito):
 
         # Calculate distance from parent to actual child in the dataset
         reference_distance = hamming_distance(
-            heavy_parent_seq, pcp_df["child_h"].iloc[i]
+            heavy_parent_seq, pcp_df["child_heavy"].iloc[i]
         )
 
         # Calculate the difference between sampled and reference distances
@@ -379,7 +385,7 @@ def test_refit_branch_lengths(pcp_df, dasm_pred_burrito):
     neutral_crepe = pretrained.load(selection_crepe.model.neutral_model_name)
 
     new_pcps = []
-    for parent in pcp_df["parent_h"]:
+    for parent in pcp_df["parent_heavy"]:
         # Get the codon probabilities for the parent sequence
         heavy_codon_probs, _ = codon_probs_of_parent_seq(
             selection_crepe,
@@ -401,10 +407,10 @@ def test_refit_branch_lengths(pcp_df, dasm_pred_burrito):
     multihit_model = pretrained.load_multihit(selection_crepe.model.multihit_model_name)
     new_pcp_df = pd.DataFrame(
         new_pcps,
-        columns=["parent_h", "child_h"],
+        columns=["parent_heavy", "child_heavy"],
     )
     for col in pcp_df.columns:
-        if col not in ["parent_h", "child_h"]:
+        if col not in ["parent_heavy", "child_heavy"]:
             new_pcp_df[col] = list(pcp_df[col]) * replicates
     # Make val dataset from pcp_df:
     new_pcp_df = add_shm_model_outputs_to_pcp_df(new_pcp_df, neutral_crepe)
@@ -431,7 +437,9 @@ def test_refit_branch_lengths(pcp_df, dasm_pred_burrito):
 def test_selection_factors_with_crepe(pcp_df, dasm_pred_burrito):
     """Test that the DASM burrito computes the same selection factors as the crepe
     model."""
-    parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
+    parent_seqs = list(
+        zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist())
+    )
 
     print("recomputing branch lengths")
     dasm_pred_burrito.standardize_and_optimize_branch_lengths()
@@ -477,7 +485,9 @@ def test_sequence_sample_dnsm(pcp_df, dnsm_pred_burrito):
     real data."""
     # Check that on average, the difference in Hamming distance between
     # sampled sequences and actual sequences to their parents is close to 0
-    parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
+    parent_seqs = list(
+        zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist())
+    )
     branch_lengths = dnsm_pred_burrito.val_dataset.branch_lengths
 
     # Get the predictions from codon_probs_of_parent_seq
@@ -514,7 +524,9 @@ def test_ambig_sample_dnsm(pcp_df, dnsm_pred_burrito):
     """Test that the DASM burrito can sample sequences with mutation counts similar to
     real data."""
     # Check that ambiguous sites are propagated to the child
-    parent_seqs = list(zip(pcp_df["parent_h"].tolist(), pcp_df["parent_l"].tolist()))
+    parent_seqs = list(
+        zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist())
+    )
     branch_lengths = dnsm_pred_burrito.val_dataset.branch_lengths
 
     # Get the predictions from codon_probs_of_parent_seq
@@ -543,13 +555,13 @@ def test_ambig_sample_dnsm(pcp_df, dnsm_pred_burrito):
 def test_selection_factors(pcp_df, generic_burrito):
     # Make sure selection factors from the generic_burrito match those from the crepe model:
     pcp_df = pcp_df.copy()
-    pcp_df["parent_h"] = [introduce_ns(seq) for seq in pcp_df["parent_h"]]
+    pcp_df["parent_heavy"] = [introduce_ns(seq) for seq in pcp_df["parent_heavy"]]
     neutral_crepe = pretrained.load("ThriftyHumV0.2-59")
     pcp_df = add_shm_model_outputs_to_pcp_df(
         pcp_df.copy(),
         neutral_crepe,
     )
-    for seq in pcp_df["parent_h"]:
+    for seq in pcp_df["parent_heavy"]:
         # See Issue #139 for why we use this instead of `translate_sequence`
         aa_parent = translate_sequence_mask_codons(seq)
 
@@ -598,7 +610,7 @@ def test_build_codon_mutsel(pcp_df, generic_burrito):
     # they're the same:
     neutral_crepe = pretrained.load("ThriftyHumV0.2-59")
     pcp_df = pcp_df.copy()
-    pcp_df["parent_h"] = [introduce_ns(seq) for seq in pcp_df["parent_h"]]
+    pcp_df["parent_heavy"] = [introduce_ns(seq) for seq in pcp_df["parent_heavy"]]
     pcp_df = add_shm_model_outputs_to_pcp_df(
         pcp_df.copy(),
         neutral_crepe,
@@ -607,7 +619,7 @@ def test_build_codon_mutsel(pcp_df, generic_burrito):
     for multihit_model in [None, pretrained.load_multihit(DEFAULT_MULTIHIT_MODEL)]:
         branch_length = 0.06
         for seq, nt_rates, nt_csps in zip(
-            pcp_df["parent_h"], pcp_df["nt_rates_h"], pcp_df["nt_csps_h"]
+            pcp_df["parent_heavy"], pcp_df["nt_rates_heavy"], pcp_df["nt_csps_heavy"]
         ):
             parent_idxs = sequences.nt_idx_tensor_of_str(seq.replace("N", "A"))
             aa_parent = translate_sequence(seq)
