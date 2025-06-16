@@ -35,9 +35,7 @@ from typing import Tuple
 # If this changes, we need to update old models that may not have neutral model
 # in their metadata
 DEFAULT_NEUTRAL_MODEL = "ThriftyHumV0.2-59"
-DEFAULT_MULTIHIT_MODEL = None
-# # ATTENTION!!! when done with dnsm retrainings, switch back to this:
-# DEFAULT_MULTIHIT_MODEL = "ThriftyHumV0.2-59-hc-tangshm"
+DEFAULT_MULTIHIT_MODEL = "ThriftyHumV0.2-59-hc-tangshm"
 
 
 warnings.filterwarnings(
@@ -1068,3 +1066,4 @@ class HitClassModel(nn.Module):
         model.reinitialize_weights(weights)
         model.eval()
         return model
+                                                                                                       
