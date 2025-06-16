@@ -1066,4 +1066,3 @@ class HitClassModel(nn.Module):
         model.reinitialize_weights(weights)
         model.eval()
         return model
-                                                                                                       
