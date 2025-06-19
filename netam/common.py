@@ -502,7 +502,7 @@ def parallel_df_apply(
     parallelize=True,
     force_parallel=None,
     *args,
-    **kwargs
+    **kwargs,
 ):
     """Apply a function to DataFrame rows in parallel.
 
@@ -528,13 +528,13 @@ def parallel_df_apply(
     data_length = len(df)
 
     max_worker_count = min(mp.cpu_count() // 2, max_workers)
-    if (force_parallel is None) and (not parallelize or data_length < min_chunk_size or max_worker_count <= 1):
+    if (force_parallel is None) and (
+        not parallelize or data_length < min_chunk_size or max_worker_count <= 1
+    ):
         print("using sequential processing")
         # Fall back to sequential processing.
         if kwargs.pop("use_progress_apply", False):
-            return df.progress_apply(
-                func, axis=1, args=args, **kwargs
-            )
+            return df.progress_apply(func, axis=1, args=args, **kwargs)
         else:
             return df.apply(func, axis=1, args=args, **kwargs)
 
@@ -557,14 +557,7 @@ def parallel_df_apply(
     with mp.Pool(worker_count) as pool:
         results = pool.starmap(
             _apply_func_to_df_chunk,
-            list(
-                zip(
-                    df_chunks,
-                    repeat(func),
-                    repeat(args),
-                    repeat(kwargs)
-                )
-            ),
+            list(zip(df_chunks, repeat(func), repeat(args), repeat(kwargs))),
         )
 
     # Concatenate results preserving original index order.
