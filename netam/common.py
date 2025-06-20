@@ -6,6 +6,7 @@ from tqdm import tqdm
 from functools import wraps
 from itertools import islice, repeat
 
+import pandas as pd
 import numpy as np
 import torch
 import torch.optim as optim
@@ -483,6 +484,85 @@ def parallelize_function(
             return torch.cat(results)
 
     return wrapper
+
+
+def _apply_func_to_df_chunk(df_chunk, func, args, kwargs):
+    """Apply function to a DataFrame chunk using pandas apply."""
+    if kwargs.pop("use_progress_apply", False):
+        return df_chunk.progress_apply(func, axis=1, args=args, **kwargs)
+    else:
+        return df_chunk.apply(func, axis=1, args=args, **kwargs)
+
+
+def parallel_df_apply(
+    df,
+    func,
+    max_workers=10,
+    min_chunk_size=1000,
+    parallelize=True,
+    force_parallel=None,
+    *args,
+    **kwargs,
+):
+    """Apply a function to DataFrame rows in parallel.
+
+    The function receives a row of the Dataframe as input.
+
+    Each process receives a subset of the DataFrame and uses pandas apply() on it.
+    Preserves the original DataFrame index, including sparse/non-contiguous indices.
+
+    Args:
+        df: DataFrame to apply function to.
+        func: Function to apply to each row/column.
+        max_workers: Maximum number of processes to use.
+        min_chunk_size: Minimum chunk size for parallelization.
+        parallelize: Whether to use parallel processing.
+        use_progress_apply: If True, use tqdm to show progress.
+        force_parallel: Provide an integer number of workers to force parallelization.
+        *args: Additional positional arguments to pass to func.
+        **kwargs: Additional keyword arguments to pass to func.
+
+    Returns:
+        Series of results from applying func with original index preserved.
+    """
+    data_length = len(df)
+
+    max_worker_count = min(mp.cpu_count() // 2, max_workers)
+    if (force_parallel is None) and (
+        not parallelize or data_length < min_chunk_size or max_worker_count <= 1
+    ):
+        print("using sequential processing")
+        # Fall back to sequential processing.
+        if kwargs.pop("use_progress_apply", False):
+            return df.progress_apply(func, axis=1, args=args, **kwargs)
+        else:
+            return df.apply(func, axis=1, args=args, **kwargs)
+
+    force_spawn()
+
+    if force_parallel is not None:
+        worker_count = force_parallel
+    else:
+        # Calculate optimal worker count based on data size.
+        min_worker_count = data_length // min_chunk_size
+        worker_count = min(min_worker_count, max_worker_count)
+
+    chunk_size = (data_length // worker_count) + 1
+
+    # Create DataFrame chunks preserving index.
+    # Chunk rows by position but preserve original index.
+    position_chunks = list(chunked(range(len(df)), chunk_size))
+    df_chunks = [df.iloc[chunk_positions] for chunk_positions in position_chunks]
+
+    with mp.Pool(worker_count) as pool:
+        results = pool.starmap(
+            _apply_func_to_df_chunk,
+            list(zip(df_chunks, repeat(func), repeat(args), repeat(kwargs))),
+        )
+
+    # Concatenate results preserving original index order.
+    # pd.concat maintains the index from each chunk, so sparse indices are preserved.
+    return pd.concat(results)
 
 
 def create_optimized_dataloader(
