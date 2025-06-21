@@ -1007,6 +1007,54 @@ class SingleValueBinarySelectionModel(AbstractBinarySelectionModel):
             )
 
 
+class ParentIndependentBinarySelectionModel(AbstractBinarySelectionModel):
+    """A parent-independent (position-specific) selection model.
+
+    This model learns a fixed tensor of log selection factors that depends only on
+    position, not on the parent sequence. It serves as a neural network analog to
+    phylogenetic methods like Bloom & Neher (2023) that estimate position-specific
+    fitness effects.
+
+    The learned parameters represent log selection factors that, when exponentiated and
+    multiplied by neutral rates, give observed mutation rates.
+    """
+
+    def __init__(self, max_seq_len: int = 512, **kwargs):
+        super().__init__(**kwargs)
+        self.max_seq_len = max_seq_len
+
+        # Initialize the log selection factors
+        if self.output_dim == 1:
+            self.log_selection_factors = nn.Parameter(torch.zeros(max_seq_len))
+        else:
+            self.log_selection_factors = nn.Parameter(
+                torch.zeros(max_seq_len, self.output_dim)
+            )
+
+    def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
+        """Return position-specific log selection factors for the given sequences.
+
+        Args:
+            amino_acid_indices: A tensor of shape (B, L) containing the indices of parent AA sequences.
+            mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.
+
+        Returns:
+            A tensor of shape (B, L) or (B, L, output_dim) with log selection factors.
+        """
+        batch_size, seq_len = amino_acid_indices.shape
+
+        # Get the relevant slice of our fixed tensor
+        position_factors = self.log_selection_factors[:seq_len]
+
+        # Expand to match the required output shape
+        if self.output_dim == 1:
+            return position_factors.expand(amino_acid_indices.shape)
+        else:
+            return position_factors.expand(
+                amino_acid_indices.shape + (self.output_dim,)
+            )
+
+
 class HitClassModel(nn.Module):
     def __init__(self):
         super().__init__()
