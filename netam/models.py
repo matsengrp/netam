@@ -1030,6 +1030,12 @@ class ParentIndependentBinarySelectionModel(AbstractBinarySelectionModel):
             self.log_selection_factors = nn.Parameter(
                 torch.zeros(max_seq_len, self.output_dim)
             )
+    
+    @property
+    def hyperparameters(self):
+        return super().hyperparameters | {
+            "max_seq_len": self.max_seq_len,
+        }
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
         """Return position-specific log selection factors for the given sequences.
