@@ -1030,7 +1030,7 @@ class ParentIndependentBinarySelectionModel(AbstractBinarySelectionModel):
             self.log_selection_factors = nn.Parameter(
                 torch.zeros(max_seq_len, self.output_dim)
             )
-    
+
     @property
     def hyperparameters(self):
         return super().hyperparameters | {
