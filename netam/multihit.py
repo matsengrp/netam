@@ -498,15 +498,9 @@ def prepare_pcp_df(
 
     Returns the modified dataframe, which is the input dataframe modified in-place.
     """
-    pcp_df["parent"] = _trim_to_codon_boundary_and_max_len(
-        pcp_df["parent"], site_count
-    )
-    pcp_df["child"] = _trim_to_codon_boundary_and_max_len(
-        pcp_df["child"], site_count
-    )
-    pcp_df = pcp_df[pcp_df["parent"] != pcp_df["child"]].reset_index(
-        drop=True
-    )
+    pcp_df["parent"] = _trim_to_codon_boundary_and_max_len(pcp_df["parent"], site_count)
+    pcp_df["child"] = _trim_to_codon_boundary_and_max_len(pcp_df["child"], site_count)
+    pcp_df = pcp_df[pcp_df["parent"] != pcp_df["child"]].reset_index(drop=True)
     ratess, cspss = framework.trimmed_shm_model_outputs_of_crepe(
         crepe, pcp_df["parent"]
     )
