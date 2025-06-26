@@ -87,6 +87,14 @@ ex_parent_codon_idxs = nt_idx_tensor_of_str("ACG")
 @pytest.fixture
 def mini_multihit_train_val_datasets():
     df = pd.read_csv("data/wyatt-10x-1p5m_pcp_2023-11-30_NI.first100.csv.gz")
+    # Rename _heavy columns to drop _heavy and drop all _light columns
+    # (multihit training is Thrifty territory, and not yet v3 format)
+    df = df.rename(
+        columns={
+            col: col[: -len("_heavy")] for col in df.columns if col.endswith("_heavy")
+        }
+    )
+    df = df.drop(columns=[col for col in df.columns if col.endswith("_light")])
     crepe = pretrained.load("ThriftyHumV0.2-45")
     df = multihit.prepare_pcp_df(df, crepe, 500)
     return multihit.train_test_datasets_of_pcp_df(df)
