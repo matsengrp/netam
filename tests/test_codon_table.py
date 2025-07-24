@@ -4,6 +4,8 @@ from netam.codon_table import (
     generate_codon_single_mutation_map,
     CODON_NEIGHBOR_MATRIX,
     CODON_SINGLE_MUTATIONS,
+    encode_codon_mutations,
+    create_codon_masks,
 )
 from netam.sequences import (
     CODONS,
@@ -112,11 +114,132 @@ def test_codon_utilities_imported():
 
 def test_encode_codon_mutations():
     """Test codon mutation encoding."""
-    # TODO: Implement test for encode_codon_mutations function
-    pass
+    import pandas as pd
+
+    # Test data: simple sequences
+    parent_seqs = pd.Series(["ATGAAACCC", "CCCGGGTTT"])
+    child_seqs = pd.Series(["ATGAAACCG", "CCCGGGTTT"])  # One mutation in first seq
+
+    parent_indices, child_indices, mutation_indicators = encode_codon_mutations(
+        parent_seqs, child_seqs
+    )
+
+    # Check shapes
+    assert parent_indices.shape == (2, 3)  # 2 sequences, 3 codons each
+    assert child_indices.shape == (2, 3)
+    assert mutation_indicators.shape == (2, 3)
+
+    # Check first sequence: ATG AAA CCC -> ATG AAA CCG (mutation in 3rd codon)
+    assert parent_indices[0, 0] == CODONS.index("ATG")
+    assert parent_indices[0, 1] == CODONS.index("AAA")
+    assert parent_indices[0, 2] == CODONS.index("CCC")
+
+    assert child_indices[0, 0] == CODONS.index("ATG")
+    assert child_indices[0, 1] == CODONS.index("AAA")
+    assert child_indices[0, 2] == CODONS.index("CCG")
+
+    # Check mutation indicators
+    assert not mutation_indicators[0, 0]  # No mutation
+    assert not mutation_indicators[0, 1]  # No mutation
+    assert mutation_indicators[0, 2]  # Mutation here
+
+    # Check second sequence: no mutations
+    assert not mutation_indicators[1, :].any()
+
+
+def test_encode_codon_mutations_with_ambiguous():
+    """Test codon mutation encoding with ambiguous codons."""
+    import pandas as pd
+
+    # Test data with N's
+    parent_seqs = pd.Series(["ATGNNNCCG"])
+    child_seqs = pd.Series(["ATGNNNCCG"])
+
+    parent_indices, child_indices, mutation_indicators = encode_codon_mutations(
+        parent_seqs, child_seqs
+    )
+
+    # Check that middle codon gets AMBIGUOUS_CODON_IDX
+    assert parent_indices[0, 0] == CODONS.index("ATG")
+    assert parent_indices[0, 1] == AMBIGUOUS_CODON_IDX  # NNN -> ambiguous
+    assert parent_indices[0, 2] == CODONS.index("CCG")
+
+    assert child_indices[0, 1] == AMBIGUOUS_CODON_IDX
+
+
+def test_encode_codon_mutations_errors():
+    """Test error conditions for encode_codon_mutations."""
+    import pandas as pd
+
+    # Different length sequences
+    parent_seqs = pd.Series(["ATGAAA"])
+    child_seqs = pd.Series(["ATGAAACCC"])
+
+    try:
+        encode_codon_mutations(parent_seqs, child_seqs)
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "same length" in str(e)
+
+    # Non-multiple of 3
+    parent_seqs = pd.Series(["ATGAA"])
+    child_seqs = pd.Series(["ATGAA"])
+
+    try:
+        encode_codon_mutations(parent_seqs, child_seqs)
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "multiple of 3" in str(e)
 
 
 def test_create_codon_masks():
     """Test codon mask creation."""
-    # TODO: Implement test for create_codon_masks function
-    pass
+    import pandas as pd
+
+    # Test data: normal sequences
+    parent_seqs = pd.Series(["ATGAAACCC", "CCCGGGTTT"])
+    child_seqs = pd.Series(["ATGAAACCG", "CCCGGGTTT"])
+
+    masks = create_codon_masks(parent_seqs, child_seqs)
+
+    # Check shape
+    assert masks.shape == (2, 3)  # 2 sequences, 3 codons each
+
+    # All positions should be valid (True)
+    assert masks.all()
+
+
+def test_create_codon_masks_with_ambiguous():
+    """Test codon mask creation with ambiguous codons."""
+    import pandas as pd
+
+    # Test data with N's
+    parent_seqs = pd.Series(["ATGNNNCCG", "CCCGGGTTT"])
+    child_seqs = pd.Series(["ATGNNNCCG", "CCCGGGTNC"])  # N in child too
+
+    masks = create_codon_masks(parent_seqs, child_seqs)
+
+    # First sequence: middle codon should be masked
+    assert masks[0, 0]  # ATG - valid
+    assert not masks[0, 1]  # NNN - masked
+    assert masks[0, 2]  # CCG - valid
+
+    # Second sequence: last codon should be masked
+    assert masks[1, 0]  # CCC - valid
+    assert masks[1, 1]  # GGG - valid
+    assert not masks[1, 2]  # TNC - masked due to N
+
+
+def test_create_codon_masks_stop_codon_error():
+    """Test that stop codons raise an error."""
+    import pandas as pd
+
+    # Test with stop codon
+    parent_seqs = pd.Series(["ATGTAA"])  # TAA is stop codon
+    child_seqs = pd.Series(["ATGTAA"])
+
+    try:
+        create_codon_masks(parent_seqs, child_seqs)
+        assert False, "Should have raised ValueError for stop codon"
+    except ValueError as e:
+        assert "stop codon" in str(e)

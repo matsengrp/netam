@@ -9,7 +9,9 @@ from netam.sequences import (
     AMBIGUOUS_CODON_IDX,
     CODONS,
     STOP_CODONS,
-    # aa_index_of_codon,
+    contains_stop_codon,
+    idx_of_codon_allowing_ambiguous,
+    iter_codons,
     translate_sequences,
 )
 from netam.common import BIG
@@ -161,7 +163,8 @@ CODON_SINGLE_MUTATIONS = generate_codon_single_mutation_map()
 def encode_codon_mutations(
     nt_parents: pd.Series, nt_children: pd.Series
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Convert parent/child nucleotide sequences to codon indices and mutation indicators.
+    """Convert parent/child nucleotide sequences to codon indices and mutation
+    indicators.
 
     Args:
         nt_parents: Parent nucleotide sequences
@@ -173,10 +176,45 @@ def encode_codon_mutations(
         - codon_children_idxss: (N, L_codon) tensor of child codon indices
         - codon_mutation_indicators: (N, L_codon) boolean tensor indicating mutation positions
     """
-    # Implementation will use existing netam functions:
-    # - encode_sequences() for converting to indices
-    # - Compare parent vs child codon indices to identify mutations
-    pass
+    # Convert sequences to lists for processing
+    parent_seqs = nt_parents.tolist()
+    child_seqs = nt_children.tolist()
+
+    # Check that all sequences have same length and are multiples of 3
+    if not all(len(seq) == len(parent_seqs[0]) for seq in parent_seqs + child_seqs):
+        raise ValueError("All sequences must have the same length")
+
+    seq_len = len(parent_seqs[0])
+    if seq_len % 3 != 0:
+        raise ValueError("Sequence length must be a multiple of 3")
+
+    codon_len = seq_len // 3
+    n_sequences = len(parent_seqs)
+
+    # Initialize tensors
+    parent_codon_indices = torch.zeros((n_sequences, codon_len), dtype=torch.long)
+    child_codon_indices = torch.zeros((n_sequences, codon_len), dtype=torch.long)
+    mutation_indicators = torch.zeros((n_sequences, codon_len), dtype=torch.bool)
+
+    # Process each sequence
+    for seq_idx, (parent_seq, child_seq) in enumerate(zip(parent_seqs, child_seqs)):
+        parent_codons = list(iter_codons(parent_seq))
+        child_codons = list(iter_codons(child_seq))
+
+        for codon_idx, (parent_codon, child_codon) in enumerate(
+            zip(parent_codons, child_codons)
+        ):
+            # Get codon indices (handles ambiguous codons with N)
+            parent_idx = idx_of_codon_allowing_ambiguous(parent_codon)
+            child_idx = idx_of_codon_allowing_ambiguous(child_codon)
+
+            parent_codon_indices[seq_idx, codon_idx] = parent_idx
+            child_codon_indices[seq_idx, codon_idx] = child_idx
+
+            # Mark as mutation if codons are different
+            mutation_indicators[seq_idx, codon_idx] = parent_codon != child_codon
+
+    return parent_codon_indices, child_codon_indices, mutation_indicators
 
 
 def create_codon_masks(nt_parents: pd.Series, nt_children: pd.Series) -> torch.Tensor:
@@ -192,9 +230,43 @@ def create_codon_masks(nt_parents: pd.Series, nt_children: pd.Series) -> torch.T
     Raises:
         ValueError: If any sequences contain stop codons
     """
-    # Implementation will:
-    # - Assert no stop codons in any sequences (halt with clear error)
-    # - Check sequence lengths are multiples of 3
-    # - Mask positions with ambiguous codons (containing N) using AMBIGUOUS_CODON_IDX
-    # - Use existing netam masking patterns
-    pass
+    # Convert sequences to lists for processing
+    parent_seqs = nt_parents.tolist()
+    child_seqs = nt_children.tolist()
+
+    # Check for stop codons in all sequences
+    for seq_idx, seq in enumerate(parent_seqs):
+        if contains_stop_codon(seq):
+            raise ValueError(f"Parent sequence {seq_idx} contains a stop codon: {seq}")
+
+    for seq_idx, seq in enumerate(child_seqs):
+        if contains_stop_codon(seq):
+            raise ValueError(f"Child sequence {seq_idx} contains a stop codon: {seq}")
+
+    # Check that all sequences have same length and are multiples of 3
+    if not all(len(seq) == len(parent_seqs[0]) for seq in parent_seqs + child_seqs):
+        raise ValueError("All sequences must have the same length")
+
+    seq_len = len(parent_seqs[0])
+    if seq_len % 3 != 0:
+        raise ValueError("Sequence length must be a multiple of 3")
+
+    codon_len = seq_len // 3
+    n_sequences = len(parent_seqs)
+
+    # Initialize mask tensor (True = valid, False = masked)
+    masks = torch.ones((n_sequences, codon_len), dtype=torch.bool)
+
+    # Process each sequence to identify ambiguous codons
+    for seq_idx, (parent_seq, child_seq) in enumerate(zip(parent_seqs, child_seqs)):
+        parent_codons = list(iter_codons(parent_seq))
+        child_codons = list(iter_codons(child_seq))
+
+        for codon_idx, (parent_codon, child_codon) in enumerate(
+            zip(parent_codons, child_codons)
+        ):
+            # Mask positions where either parent or child has ambiguous codon (containing N)
+            if "N" in parent_codon or "N" in child_codon:
+                masks[seq_idx, codon_idx] = False
+
+    return masks
