@@ -1,8 +1,17 @@
 import numpy as np
+import pandas as pd
 import torch
+from typing import Tuple  # , Dict, List
 
 from Bio.Data import CodonTable
-from netam.sequences import AA_STR_SORTED, CODONS, STOP_CODONS, translate_sequences
+from netam.sequences import (
+    AA_STR_SORTED,
+    AMBIGUOUS_CODON_IDX,
+    CODONS,
+    STOP_CODONS,
+    # aa_index_of_codon,
+    translate_sequences,
+)
 from netam.common import BIG
 
 
@@ -95,3 +104,97 @@ def aa_idxs_of_codon_idxs(codon_idx_tensor):
             codon_idx_tensor[:, 2],
         )
     ]
+
+
+def generate_codon_neighbor_matrix():
+    """Generate codon neighbor matrix for efficient single-mutation lookups.
+
+    Returns:
+        torch.Tensor: A (65, 20) boolean matrix where entry (i, j) is True if
+                     codon i can mutate to amino acid j via single nucleotide substitution.
+                     Row 64 (AMBIGUOUS_CODON_IDX) will be all False.
+    """
+    # Include space for ambiguous codon at index 64
+    matrix = np.zeros((AMBIGUOUS_CODON_IDX + 1, len(AA_STR_SORTED)), dtype=bool)
+
+    # Only process the 64 standard codons, not the ambiguous codon
+    for i, codon in enumerate(CODONS):
+        mutant_aa_indices = single_mutant_aa_indices(codon)
+        matrix[i, mutant_aa_indices] = True
+
+    # Row 64 (AMBIGUOUS_CODON_IDX) remains all False
+
+    return torch.tensor(matrix, dtype=torch.bool)
+
+
+def generate_codon_single_mutation_map():
+    """Generate mapping of codon-to-codon single mutations.
+
+    Returns:
+        Dict[int, List[Tuple[int, int, str]]]: Maps parent codon index to list of
+        (child_codon_idx, nt_position, new_base) for all single mutations.
+        Only includes valid codons (0-63), not AMBIGUOUS_CODON_IDX (64).
+    """
+    mutation_map = {}
+
+    # Only process the 64 valid codons, not the ambiguous codon at index 64
+    for parent_idx, parent_codon in enumerate(CODONS):
+        mutations = []
+        for nt_pos in range(3):
+            for new_base in ["A", "C", "G", "T"]:
+                if new_base != parent_codon[nt_pos]:
+                    child_codon = (
+                        parent_codon[:nt_pos] + new_base + parent_codon[nt_pos + 1 :]
+                    )
+                    child_idx = CODONS.index(child_codon)
+                    mutations.append((child_idx, nt_pos, new_base))
+        mutation_map[parent_idx] = mutations
+
+    return mutation_map
+
+
+# Global tensors/mappings for efficient lookups
+CODON_NEIGHBOR_MATRIX = generate_codon_neighbor_matrix()  # (65, 20)
+CODON_SINGLE_MUTATIONS = generate_codon_single_mutation_map()
+
+
+def encode_codon_mutations(
+    nt_parents: pd.Series, nt_children: pd.Series
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Convert parent/child nucleotide sequences to codon indices and mutation indicators.
+
+    Args:
+        nt_parents: Parent nucleotide sequences
+        nt_children: Child nucleotide sequences
+
+    Returns:
+        Tuple of:
+        - codon_parents_idxss: (N, L_codon) tensor of parent codon indices
+        - codon_children_idxss: (N, L_codon) tensor of child codon indices
+        - codon_mutation_indicators: (N, L_codon) boolean tensor indicating mutation positions
+    """
+    # Implementation will use existing netam functions:
+    # - encode_sequences() for converting to indices
+    # - Compare parent vs child codon indices to identify mutations
+    pass
+
+
+def create_codon_masks(nt_parents: pd.Series, nt_children: pd.Series) -> torch.Tensor:
+    """Create masks for valid codon positions, masking ambiguous codons (containing Ns).
+
+    Args:
+        nt_parents: Parent nucleotide sequences
+        nt_children: Child nucleotide sequences
+
+    Returns:
+        masks: (N, L_codon) boolean tensor indicating valid codon positions
+
+    Raises:
+        ValueError: If any sequences contain stop codons
+    """
+    # Implementation will:
+    # - Assert no stop codons in any sequences (halt with clear error)
+    # - Check sequence lengths are multiples of 3
+    # - Mask positions with ambiguous codons (containing N) using AMBIGUOUS_CODON_IDX
+    # - Use existing netam masking patterns
+    pass
