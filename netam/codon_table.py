@@ -175,6 +175,12 @@ def encode_codon_mutations(
         - codon_parents_idxss: (N, L_codon) tensor of parent codon indices
         - codon_children_idxss: (N, L_codon) tensor of child codon indices
         - codon_mutation_indicators: (N, L_codon) boolean tensor indicating mutation positions
+        
+    Example:
+        >>> parents = pd.Series(['ATGAAACCC'])
+        >>> children = pd.Series(['ATGAAACCG'])  # CCC->CCG mutation
+        >>> p_idx, c_idx, mut = encode_codon_mutations(parents, children)
+        >>> mut[0]  # tensor([False, False, True])
     """
     # Convert sequences to lists for processing
     parent_seqs = nt_parents.tolist()
@@ -191,28 +197,35 @@ def encode_codon_mutations(
     codon_len = seq_len // 3
     n_sequences = len(parent_seqs)
 
-    # Initialize tensors
+    # Extract all codons at once for vectorized processing
+    all_parent_codons = []
+    all_child_codons = []
+    
+    for parent_seq, child_seq in zip(parent_seqs, child_seqs):
+        parent_codons = list(iter_codons(parent_seq))
+        child_codons = list(iter_codons(child_seq))
+        all_parent_codons.append(parent_codons)
+        all_child_codons.append(child_codons)
+
+    # Vectorized codon index lookup
     parent_codon_indices = torch.zeros((n_sequences, codon_len), dtype=torch.long)
     child_codon_indices = torch.zeros((n_sequences, codon_len), dtype=torch.long)
     mutation_indicators = torch.zeros((n_sequences, codon_len), dtype=torch.bool)
 
-    # Process each sequence
-    for seq_idx, (parent_seq, child_seq) in enumerate(zip(parent_seqs, child_seqs)):
-        parent_codons = list(iter_codons(parent_seq))
-        child_codons = list(iter_codons(child_seq))
-
-        for codon_idx, (parent_codon, child_codon) in enumerate(
-            zip(parent_codons, child_codons)
-        ):
-            # Get codon indices (handles ambiguous codons with N)
-            parent_idx = idx_of_codon_allowing_ambiguous(parent_codon)
-            child_idx = idx_of_codon_allowing_ambiguous(child_codon)
-
-            parent_codon_indices[seq_idx, codon_idx] = parent_idx
-            child_codon_indices[seq_idx, codon_idx] = child_idx
-
-            # Mark as mutation if codons are different
-            mutation_indicators[seq_idx, codon_idx] = parent_codon != child_codon
+    # Process in batches for better cache locality
+    for seq_idx in range(n_sequences):
+        parent_codons = all_parent_codons[seq_idx]
+        child_codons = all_child_codons[seq_idx]
+        
+        # Vectorized index lookup using list comprehension (faster than nested loops)
+        parent_indices = [idx_of_codon_allowing_ambiguous(codon) for codon in parent_codons]
+        child_indices = [idx_of_codon_allowing_ambiguous(codon) for codon in child_codons]
+        mutations = [p_codon != c_codon for p_codon, c_codon in zip(parent_codons, child_codons)]
+        
+        # Assign to tensors
+        parent_codon_indices[seq_idx] = torch.tensor(parent_indices, dtype=torch.long)
+        child_codon_indices[seq_idx] = torch.tensor(child_indices, dtype=torch.long)
+        mutation_indicators[seq_idx] = torch.tensor(mutations, dtype=torch.bool)
 
     return parent_codon_indices, child_codon_indices, mutation_indicators
 
@@ -226,6 +239,12 @@ def create_codon_masks(nt_parents: pd.Series, nt_children: pd.Series) -> torch.T
 
     Returns:
         masks: (N, L_codon) boolean tensor indicating valid codon positions
+        
+    Example:
+        >>> parents = pd.Series(['ATGNNNCCG'])  # Middle codon has Ns
+        >>> children = pd.Series(['ATGNNNCCG'])
+        >>> masks = create_codon_masks(parents, children)
+        >>> masks[0]  # tensor([True, False, True])
 
     Raises:
         ValueError: If any sequences contain stop codons
