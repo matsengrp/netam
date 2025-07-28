@@ -175,7 +175,7 @@ def encode_codon_mutations(
         - codon_parents_idxss: (N, L_codon) tensor of parent codon indices
         - codon_children_idxss: (N, L_codon) tensor of child codon indices
         - codon_mutation_indicators: (N, L_codon) boolean tensor indicating mutation positions
-        
+
     Example:
         >>> parents = pd.Series(['ATGAAACCC'])
         >>> children = pd.Series(['ATGAAACCG'])  # CCC->CCG mutation
@@ -200,7 +200,7 @@ def encode_codon_mutations(
     # Extract all codons at once for vectorized processing
     all_parent_codons = []
     all_child_codons = []
-    
+
     for parent_seq, child_seq in zip(parent_seqs, child_seqs):
         parent_codons = list(iter_codons(parent_seq))
         child_codons = list(iter_codons(child_seq))
@@ -216,12 +216,18 @@ def encode_codon_mutations(
     for seq_idx in range(n_sequences):
         parent_codons = all_parent_codons[seq_idx]
         child_codons = all_child_codons[seq_idx]
-        
+
         # Vectorized index lookup using list comprehension (faster than nested loops)
-        parent_indices = [idx_of_codon_allowing_ambiguous(codon) for codon in parent_codons]
-        child_indices = [idx_of_codon_allowing_ambiguous(codon) for codon in child_codons]
-        mutations = [p_codon != c_codon for p_codon, c_codon in zip(parent_codons, child_codons)]
-        
+        parent_indices = [
+            idx_of_codon_allowing_ambiguous(codon) for codon in parent_codons
+        ]
+        child_indices = [
+            idx_of_codon_allowing_ambiguous(codon) for codon in child_codons
+        ]
+        mutations = [
+            p_codon != c_codon for p_codon, c_codon in zip(parent_codons, child_codons)
+        ]
+
         # Assign to tensors
         parent_codon_indices[seq_idx] = torch.tensor(parent_indices, dtype=torch.long)
         child_codon_indices[seq_idx] = torch.tensor(child_indices, dtype=torch.long)
@@ -239,7 +245,7 @@ def create_codon_masks(nt_parents: pd.Series, nt_children: pd.Series) -> torch.T
 
     Returns:
         masks: (N, L_codon) boolean tensor indicating valid codon positions
-        
+
     Example:
         >>> parents = pd.Series(['ATGNNNCCG'])  # Middle codon has Ns
         >>> children = pd.Series(['ATGNNNCCG'])

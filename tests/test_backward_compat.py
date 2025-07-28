@@ -62,8 +62,12 @@ def test_predictions_of_batch(fixed_ddsm_val_burrito):
     predictions = torch.load(
         "tests/old_models/val_predictions.pt", weights_only=True
     ).double()
-    if not torch.allclose(predictions.exp(), these_predictions.exp(), rtol=1e-5, atol=1e-7):
-        m = torch.isclose(predictions.exp(), these_predictions.exp(), rtol=1e-5, atol=1e-7)
+    if not torch.allclose(
+        predictions.exp(), these_predictions.exp(), rtol=1e-5, atol=1e-7
+    ):
+        m = torch.isclose(
+            predictions.exp(), these_predictions.exp(), rtol=1e-5, atol=1e-7
+        )
         print(predictions.exp()[~m])
         print(these_predictions.exp()[~m])
         print((predictions.exp() - these_predictions.exp())[~m])

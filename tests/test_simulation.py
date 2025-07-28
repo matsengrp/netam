@@ -8,11 +8,10 @@ from netam.pretrained import load_multihit
 from netam.framework import (
     add_shm_model_outputs_to_pcp_df,
     codon_probs_of_parent_seq,
-    trimmed_shm_model_outputs_of_crepe,
     sample_sequence_from_codon_probs,
 )
 from netam import pretrained
-from netam.common import force_spawn, clamp_probability, clamp_log_probability
+from netam.common import force_spawn, clamp_probability
 from netam.dasm import (
     DASMBurrito,
     DASMDataset,
@@ -22,11 +21,6 @@ from netam.dnsm import (
     DNSMDataset,
 )
 import netam.molevol as molevol
-from netam.molevol import (
-    neutral_codon_probs_of_seq,
-    zero_stop_codon_probs,
-    set_parent_codon_prob,
-)
 from netam.models import DEFAULT_MULTIHIT_MODEL
 
 from netam.models import TransformerBinarySelectionModelWiggleAct
@@ -34,14 +28,12 @@ import netam.sequences as sequences
 from netam.sequences import (
     MAX_KNOWN_TOKEN_COUNT,
     aa_mask_tensor_of,
-    nt_idx_tensor_of_str,
     translate_sequence,
     translate_sequence_mask_codons,
     translate_sequences,
     iter_codons,
     hamming_distance,
 )
-from netam.codon_table import STOP_CODON_INDICATOR
 from netam.hit_class import parent_specific_hit_classes
 
 
