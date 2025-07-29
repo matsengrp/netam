@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import math
 import warnings
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 
@@ -586,7 +586,7 @@ class AbstractBinarySelectionModel(ABC, nn.Module):
     ):
         super().__init__()
         if train_timestamp is None:
-            train_timestamp = datetime.utcnow().isoformat(timespec="minutes")
+            train_timestamp = datetime.now(timezone.utc).isoformat(timespec="minutes")
         self.train_timestamp = train_timestamp
         self.output_dim = output_dim
         self.known_token_count = known_token_count

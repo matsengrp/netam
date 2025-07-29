@@ -1,0 +1,5 @@
+model_class: ParentIndependentBinarySelectionModel  
+hparams:
+  model_type: dasm
+  known_token_count: 21
+  output_dim: 20

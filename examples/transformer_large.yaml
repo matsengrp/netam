@@ -1,0 +1,10 @@
+model_class: TransformerBinarySelectionModelWiggleAct
+hparams:
+  model_type: dasm
+  known_token_count: 21
+  output_dim: 20
+  nhead: 8
+  d_model_per_head: 8
+  dim_feedforward: 2048
+  layer_count: 6
+  dropout_prob: 0.1
