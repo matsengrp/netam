@@ -30,6 +30,9 @@ CODONS = ["".join(codon_list) for codon_list in itertools.product(BASES, repeat=
 STOP_CODONS = ["TAA", "TAG", "TGA"]
 AMBIGUOUS_CODON_IDX = len(CODONS)
 
+# Create a dictionary for O(1) codon index lookups
+CODON_TO_INDEX = {codon: idx for idx, codon in enumerate(CODONS)}
+
 
 # Add additional tokens to this string:
 RESERVED_TOKENS = "^"
@@ -105,7 +108,7 @@ def idx_of_codon_allowing_ambiguous(codon):
     if "N" in codon:
         return AMBIGUOUS_CODON_IDX
     else:
-        return CODONS.index(codon)
+        return CODON_TO_INDEX[codon]
 
 
 def codon_idx_tensor_of_str_ambig(nt_str):

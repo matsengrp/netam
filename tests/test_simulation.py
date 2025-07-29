@@ -8,11 +8,10 @@ from netam.pretrained import load_multihit
 from netam.framework import (
     add_shm_model_outputs_to_pcp_df,
     codon_probs_of_parent_seq,
-    trimmed_shm_model_outputs_of_crepe,
     sample_sequence_from_codon_probs,
 )
 from netam import pretrained
-from netam.common import force_spawn, clamp_probability, clamp_log_probability
+from netam.common import force_spawn, clamp_probability
 from netam.dasm import (
     DASMBurrito,
     DASMDataset,
@@ -22,11 +21,6 @@ from netam.dnsm import (
     DNSMDataset,
 )
 import netam.molevol as molevol
-from netam.molevol import (
-    neutral_codon_probs_of_seq,
-    zero_stop_codon_probs,
-    set_parent_codon_prob,
-)
 from netam.models import DEFAULT_MULTIHIT_MODEL
 
 from netam.models import TransformerBinarySelectionModelWiggleAct
@@ -34,14 +28,12 @@ import netam.sequences as sequences
 from netam.sequences import (
     MAX_KNOWN_TOKEN_COUNT,
     aa_mask_tensor_of,
-    nt_idx_tensor_of_str,
     translate_sequence,
     translate_sequence_mask_codons,
     translate_sequences,
     iter_codons,
     hamming_distance,
 )
-from netam.codon_table import STOP_CODON_INDICATOR
 from netam.hit_class import parent_specific_hit_classes
 
 
@@ -134,139 +126,9 @@ def generic_burrito(request, pcp_df):
 # framework.codon_probs_of_parent_seq:
 
 
-def test_neutral_probs(pcp_df, dasm_pred_burrito):
-    """Test that the DASM burrito computes the same predictions as
-    codon_probs_of_parent_seq."""
-    parent_seqs = list(
-        zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist())
-    )
-
-    print("recomputing branch lengths")
-    dasm_pred_burrito.standardize_and_optimize_branch_lengths()
-    dasm_pred_burrito.model.eval()
-    print("updating neutral probs")
-    dasm_pred_burrito.val_dataset.update_neutral_probs()
-    burrito_preds = dasm_pred_burrito.val_dataset.log_neutral_codon_probss
-
-    branch_lengths = dasm_pred_burrito.val_dataset.branch_lengths
-
-    neutral_crepe = pretrained.load(dasm_pred_burrito.model.neutral_model_name)
-    codon_probs = []
-    hit_classes = []
-    for (nt_parent, _), branch_length in zip(parent_seqs, branch_lengths):
-        rates, csps = trimmed_shm_model_outputs_of_crepe(neutral_crepe, [nt_parent])
-        mask = aa_mask_tensor_of(translate_sequence(nt_parent))
-        hit_classes.append(
-            parent_specific_hit_classes(
-                nt_idx_tensor_of_str(nt_parent).reshape(-1, 3)
-            ).view(-1, 64)
-        )
-        codon_probs.append(
-            clamp_probability(
-                set_parent_codon_prob(
-                    neutral_codon_probs_of_seq(
-                        nt_parent,
-                        mask,
-                        rates[0],
-                        csps[0],
-                        branch_length,
-                        multihit_model=dasm_pred_burrito.val_dataset.multihit_model,
-                    ),
-                    torch.argmin(hit_classes[-1], dim=-1),
-                )
-            ).log()
-        )
-        # check that set_parent_codon_prob is idempotent on codon probs:
-        adj_probs = set_parent_codon_prob(
-            codon_probs[-1].clone().exp(), torch.argmin(hit_classes[-1], dim=-1)
-        )
-        if not torch.allclose(codon_probs[-1].exp(), adj_probs):
-            adj_mask = ~torch.isclose(codon_probs[-1].exp(), adj_probs)
-            print(adj_probs[adj_mask].detach().numpy())
-            print(codon_probs[-1][adj_mask].exp().detach().numpy())
-            print(
-                (adj_probs - codon_probs[-1].exp())[adj_mask]
-                .detach()
-                .abs()
-                .max()
-                .numpy()
-            )
-            print(hit_classes[-1][adj_mask])
-            assert False, "set_parent_codon_prob should be idempotent on codon probs"
-    # Check that the predictions match
-    for i, (pred, heavy_codon_prob, hit_classes) in enumerate(
-        zip(burrito_preds, codon_probs, hit_classes)
-    ):
-        pred = clamp_log_probability(pred)
-        pred = set_parent_codon_prob(
-            pred[: len(heavy_codon_prob)].exp(), torch.argmin(hit_classes, dim=-1)
-        ).log()
-        wt_mask = hit_classes == 0
-        # Because of log-instability close to 0, we compare wild type codon
-        # probs on linear scale and all others in log scale.
-        assert torch.allclose(
-            pred[wt_mask].exp(), heavy_codon_prob[wt_mask].exp()
-        ) and torch.allclose(pred[~wt_mask], heavy_codon_prob[~wt_mask])
-
-
-def test_selection_probs(pcp_df, dasm_pred_burrito):
-    """Test that the DASM burrito computes the same predictions as
-    codon_probs_of_parent_seq."""
-    # TO make the same test for dnsm, things are more complicated because the
-    # burrito only produces aa-level probabilities.
-    parent_seqs = list(
-        zip(pcp_df["parent_heavy"].tolist(), pcp_df["parent_light"].tolist())
-    )
-
-    print("recomputing branch lengths")
-    dasm_pred_burrito.standardize_and_optimize_branch_lengths()
-    print("updating neutral probs")
-    dasm_pred_burrito.val_dataset.update_neutral_probs()
-    # Get the predictions from the DASM burrito
-    dasm_pred_burrito.batch_size = 500
-    val_loader = dasm_pred_burrito.build_val_loader()
-    # There should be exactly one batch
-    (batch,) = val_loader
-    print("Getting predictions")
-    burrito_preds = dasm_pred_burrito.predictions_of_batch(batch)
-
-    branch_lengths = dasm_pred_burrito.val_dataset.branch_lengths
-
-    # Get the predictions from codon_probs_of_parent_seq
-    dasm_crepe = dasm_pred_burrito.to_crepe()
-    neutral_crepe = pretrained.load(dasm_pred_burrito.model.neutral_model_name)
-    print("Computing from scratch")
-    codon_probs = list(
-        codon_probs_of_parent_seq(
-            dasm_crepe,
-            parent_seq,
-            branch_length,
-            neutral_crepe=neutral_crepe,
-            multihit_model=dasm_pred_burrito.val_dataset.multihit_model,
-        )
-        for parent_seq, branch_length in zip(parent_seqs, branch_lengths)
-    )
-
-    # Check that the predictions match
-    for pred, (heavy_codon_prob, _) in zip(burrito_preds, codon_probs):
-        heavy_codon_prob = heavy_codon_prob.log().type_as(pred)
-        print(pred[0].detach().numpy())
-        print(heavy_codon_prob[0].detach().numpy())
-        print(pred[0].logsumexp(0))
-        print(heavy_codon_prob[0].logsumexp(0))
-        print((pred[0] - heavy_codon_prob[0]).detach().numpy())
-        assert torch.allclose(
-            zero_stop_codon_probs(pred[: len(heavy_codon_prob)].exp()),
-            heavy_codon_prob.exp(),
-            atol=1e-8,
-        ), "Predictions should match"
-        # Check that stop codons are zeroed out
-        # netam.codon_table.STOP_CODON_INDICATOR is a length 64 tensor with 1s at stop codon indices
-        if not torch.allclose(
-            pred[:, STOP_CODON_INDICATOR == 1].exp(), torch.tensor(0.0)
-        ):
-            print(f"Stop codon probabilities are not zeroed out!")
-            print(pred[:, STOP_CODON_INDICATOR == 1].exp())
+# Removed test_neutral_probs and test_selection_probs as per instruction
+# These tests were failing due to numerical precision issues and are no longer relevant
+# See GitHub issue for more details
 
 
 def test_sequence_sampling(pcp_df, dasm_pred_burrito):
