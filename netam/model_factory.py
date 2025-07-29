@@ -1,7 +1,7 @@
 """Model factory functions for creating netam models.
 
 This module provides factory functions to create netam selection models from
-configuration dictionaries and files. Supports all model types including:
+configuration dictionaries and YAML files. Supports all model types including:
 - SingleValueBinarySelectionModel
 - ParentIndependentBinarySelectionModel
 - TransformerBinarySelectionModelLinAct
@@ -16,61 +16,50 @@ Example usage:
 """
 
 import torch
-import json
 import inspect
-from typing import Dict, Any, List
+import yaml
+from typing import Dict, Any, List, Optional
 from pathlib import Path
 
 
-# Model presets for common configurations
-PRESET_CONFIGS = {
-    "single_default": {
-        "model_class": "SingleValueBinarySelectionModel",
-        "hparams": {"model_type": "dasm", "known_token_count": 21, "output_dim": 20},
-    },
-    "parent_independent_default": {
-        "model_class": "ParentIndependentBinarySelectionModel",
-        "hparams": {"model_type": "dasm", "known_token_count": 21, "output_dim": 20},
-    },
-    "transformer_small": {
-        "model_class": "TransformerBinarySelectionModelWiggleAct",
-        "hparams": {
-            "model_type": "dasm",
-            "known_token_count": 21,
-            "output_dim": 20,
-            "nhead": 4,
-            "d_model_per_head": 4,
-            "dim_feedforward": 512,
-            "layer_count": 2,
-            "dropout_prob": 0.1,
-        },
-    },
-    "transformer_large": {
-        "model_class": "TransformerBinarySelectionModelWiggleAct",
-        "hparams": {
-            "model_type": "dasm",
-            "known_token_count": 21,
-            "output_dim": 20,
-            "nhead": 8,
-            "d_model_per_head": 8,
-            "dim_feedforward": 2048,
-            "layer_count": 6,
-            "dropout_prob": 0.1,
-        },
-    },
-    "bidirectional_default": {
-        "model_class": "BidirectionalTransformerBinarySelectionModel",
-        "hparams": {
-            "model_type": "dasm",
-            "known_token_count": 21,
-            "output_dim": 20,
-            "nhead": 4,
-            "d_model_per_head": 6,
-            "dim_feedforward": 256,
-            "layer_count": 2,
-        },
-    },
-}
+# Path to model configurations directory
+MODEL_CONFIGS_DIR = Path(__file__).parent / "model_configs"
+
+
+def _load_preset_config(preset_name: str) -> Dict[str, Any]:
+    """Load a preset configuration from the model_configs directory.
+
+    Args:
+        preset_name: Name of the preset (filename without .yaml extension)
+
+    Returns:
+        Configuration dictionary loaded from YAML file
+
+    Raises:
+        FileNotFoundError: If preset file doesn't exist
+        yaml.YAMLError: If YAML file is malformed
+    """
+    preset_path = MODEL_CONFIGS_DIR / f"{preset_name}.yaml"
+    if not preset_path.exists():
+        available = list_available_presets()
+        raise ValueError(
+            f"Unknown preset: {preset_name}. Available presets: {available}"
+        )
+
+    with open(preset_path, "r") as f:
+        return yaml.safe_load(f)
+
+
+def list_available_presets() -> List[str]:
+    """List all available preset configurations.
+
+    Returns:
+        List of preset names (filenames without .yaml extension)
+    """
+    if not MODEL_CONFIGS_DIR.exists():
+        return []
+
+    return sorted([p.stem for p in MODEL_CONFIGS_DIR.glob("*.yaml") if p.is_file()])
 
 
 def validate_config_schema(config: Dict[str, Any]) -> None:
@@ -224,17 +213,12 @@ def create_model_from_preset(
         >>> model = create_model_from_preset('transformer_small', torch.device('cpu'),
         ...                                   layer_count=4, dropout_prob=0.2)
     """
-    if preset_name not in PRESET_CONFIGS:
-        available = list(PRESET_CONFIGS.keys())
-        raise ValueError(
-            f"Unknown preset: {preset_name}. Available presets: {available}"
-        )
-
-    config = PRESET_CONFIGS[preset_name].copy()
+    # Load preset configuration from file
+    config = _load_preset_config(preset_name)
 
     # Apply overrides to hparams
     if overrides:
-        config["hparams"] = config["hparams"].copy()
+        config["hparams"] = config.get("hparams", {}).copy()
         config["hparams"].update(overrides)
 
     return create_selection_model_from_dict(config, device)
@@ -307,32 +291,6 @@ def create_selection_model_from_dict(
     return model.to(device)
 
 
-def create_selection_model_from_json(
-    json_path: str, device: torch.device
-) -> torch.nn.Module:
-    """Create a selection model from JSON configuration file.
-
-    Args:
-        json_path: Path to JSON file containing model configuration
-        device: Target device for the model
-
-    Returns:
-        torch.nn.Module: Initialized selection model moved to device
-
-    Raises:
-        FileNotFoundError: If JSON file doesn't exist
-        json.JSONDecodeError: If JSON file is malformed
-
-    Example:
-        >>> device = torch.device('cpu')
-        >>> model = create_selection_model_from_json('model_config.json', device)
-    """
-    with open(json_path, "r") as f:
-        config = json.load(f)
-
-    return create_selection_model_from_dict(config, device)
-
-
 def create_selection_model_from_yaml(
     yaml_path: str, device: torch.device
 ) -> torch.nn.Module:
@@ -364,10 +322,10 @@ def create_selection_model_from_yaml(
 def create_selection_model_from_file(
     config_path: str, device: torch.device
 ) -> torch.nn.Module:
-    """Auto-detect file format (YAML/JSON) and create model.
+    """Create model from YAML configuration file.
 
     Args:
-        config_path: Path to configuration file (YAML or JSON)
+        config_path: Path to YAML configuration file (.yaml or .yml)
         device: Target device for the model
 
     Returns:
@@ -380,16 +338,13 @@ def create_selection_model_from_file(
     Example:
         >>> device = torch.device('cpu')
         >>> model = create_selection_model_from_file('config.yaml', device)
-        >>> model = create_selection_model_from_file('config.json', device)
     """
     path = Path(config_path)
 
     if path.suffix.lower() in [".yml", ".yaml"]:
         return create_selection_model_from_yaml(config_path, device)
-    elif path.suffix.lower() == ".json":
-        return create_selection_model_from_json(config_path, device)
     else:
         raise ValueError(
             f"Unsupported file format: {path.suffix}. "
-            f"Supported formats: .yaml, .yml, .json"
+            f"Supported formats: .yaml, .yml"
         )

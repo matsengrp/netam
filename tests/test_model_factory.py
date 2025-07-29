@@ -4,19 +4,18 @@ import pytest
 import torch
 import tempfile
 import yaml
-import json
 import os
 from netam.model_factory import (
     create_selection_model_from_dict,
     create_selection_model_from_yaml,
-    create_selection_model_from_json,
     create_selection_model_from_file,
     create_model_from_preset,
     list_available_models,
+    list_available_presets,
     get_model_info,
     describe_model,
     validate_config_schema,
-    PRESET_CONFIGS,
+    _load_preset_config,
 )
 
 
@@ -354,6 +353,19 @@ def test_list_available_models():
     assert all("SelectionModel" in name for name in models)
 
 
+def test_list_available_presets():
+    """Test listing available preset configurations."""
+    presets = list_available_presets()
+
+    assert isinstance(presets, list)
+    assert len(presets) > 0
+    assert "single_default" in presets
+    assert "transformer_small" in presets
+    assert "transformer_large" in presets
+    assert "bidirectional_default" in presets
+    assert "parent_independent_default" in presets
+
+
 def test_get_model_info():
     """Test getting model information."""
     info = get_model_info("SingleValueBinarySelectionModel")
@@ -391,7 +403,7 @@ def test_create_model_from_preset():
     device = torch.device("cpu")
 
     # Test available presets
-    for preset_name in PRESET_CONFIGS.keys():
+    for preset_name in list_available_presets():
         model = create_model_from_preset(preset_name, device)
         assert model is not None
         assert next(model.parameters()).device == device
@@ -408,32 +420,8 @@ def test_create_model_from_preset():
         create_model_from_preset("nonexistent", device)
 
 
-def test_create_selection_model_from_json():
-    """Test model creation from JSON file."""
-    config = {
-        "model_class": "SingleValueBinarySelectionModel",
-        "hparams": {"model_type": "dasm", "known_token_count": 21, "output_dim": 20},
-    }
-
-    # Write to temporary JSON file
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-        json.dump(config, f)
-        json_path = f.name
-
-    try:
-        device = torch.device("cpu")
-        model = create_selection_model_from_json(json_path, device)
-
-        assert model.__class__.__name__ == "SingleValueBinarySelectionModel"
-        assert model.model_type == "dasm"
-        assert model.known_token_count == 21
-        assert model.output_dim == 20
-    finally:
-        os.unlink(json_path)
-
-
 def test_create_selection_model_from_file():
-    """Test auto-detection of file format."""
+    """Test YAML file format detection."""
     config = {
         "model_class": "SingleValueBinarySelectionModel",
         "hparams": {"model_type": "dasm", "known_token_count": 21, "output_dim": 20},
@@ -451,17 +439,6 @@ def test_create_selection_model_from_file():
         assert model.__class__.__name__ == "SingleValueBinarySelectionModel"
     finally:
         os.unlink(yaml_path)
-
-    # Test JSON
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-        json.dump(config, f)
-        json_path = f.name
-
-    try:
-        model = create_selection_model_from_file(json_path, device)
-        assert model.__class__.__name__ == "SingleValueBinarySelectionModel"
-    finally:
-        os.unlink(json_path)
 
     # Test unsupported format
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
@@ -520,7 +497,10 @@ def test_preset_configs_validity():
     """Test that all preset configurations are valid."""
     device = torch.device("cpu")
 
-    for preset_name, preset_config in PRESET_CONFIGS.items():
+    for preset_name in list_available_presets():
+        # Load preset config
+        preset_config = _load_preset_config(preset_name)
+
         # Each preset should create a valid model
         model = create_selection_model_from_dict(preset_config, device)
         assert model is not None
