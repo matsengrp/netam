@@ -1,0 +1,9 @@
+model_class: BidirectionalTransformerBinarySelectionModel
+hparams:
+  model_type: dasm
+  known_token_count: 21
+  output_dim: 20
+  nhead: 4
+  d_model_per_head: 6
+  dim_feedforward: 256
+  layer_count: 2
