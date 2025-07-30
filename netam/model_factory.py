@@ -18,12 +18,11 @@ Example usage:
 import torch
 import inspect
 import yaml
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from pathlib import Path
+from importlib.resources import files
 
-
-# Path to model configurations directory
-MODEL_CONFIGS_DIR = Path(__file__).parent / "model_configs"
+MODEL_CONFIGS_DIR = files("netam") / "model_configs"
 
 
 def _load_preset_config(preset_name: str) -> Dict[str, Any]:
