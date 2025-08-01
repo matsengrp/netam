@@ -21,34 +21,12 @@ from netam.codon_table import (
     CODON_SINGLE_MUTATIONS,
     encode_codon_mutations,
     create_codon_masks,
-    CODON_AA_INDICATOR_MATRIX,
 )
 from netam.sequences import (
     translate_sequences,
     aa_idx_tensor_of_str_ambig,
     CODONS,
 )
-
-
-def aa_idx_of_flat_codon_idx(codon_idx):
-    """Get amino acid index from flat codon index.
-
-    Args:
-        codon_idx: Integer codon index (0-63 for valid codons, 64 for ambiguous)
-
-    Returns:
-        Integer amino acid index (0-19 for valid AAs, 20 for ambiguous/stop)
-    """
-    if codon_idx >= 64:  # Ambiguous codon
-        return 20  # Ambiguous AA index
-
-    # Check if this is a stop codon (all zeros in the matrix)
-    codon_row = CODON_AA_INDICATOR_MATRIX[codon_idx]
-    if codon_row.sum().item() == 0:  # Stop codon
-        return 20  # Map stop codons to ambiguous AA index
-
-    # Use the codon-AA indicator matrix to get the AA index
-    return codon_row.argmax().item()
 
 
 class WhichmutCodonDataset:
@@ -205,6 +183,9 @@ def compute_whichmut_loss_batch(
     Returns:
         Loss scalar for the batch
     """
+
+    from netam.codon_table import AA_IDX_FROM_CODON_IDX
+
     N, L_codon = codon_parents_idxss.shape
     _, L_aa, _ = selection_factors.shape
 
@@ -240,7 +221,7 @@ def compute_whichmut_loss_batch(
                 aa_pos = codon_pos  # Assuming 1:1 mapping for now
                 if aa_pos < L_aa:  # Ensure we don't go out of bounds
                     # Get child amino acid index from codon
-                    child_aa_idx = aa_idx_of_flat_codon_idx(child_codon_idx.item())
+                    child_aa_idx = AA_IDX_FROM_CODON_IDX[child_codon_idx.item()]
 
                     # Get selection factor for this AA change
                     selection_factor = linear_selection_factors[
@@ -279,6 +260,9 @@ def compute_normalization_constants(
     This implementation uses explicit loops for clarity and correctness verification.
     After testing confirms correctness, replace with vectorized version for performance.
     """
+
+    from netam.codon_table import AA_IDX_FROM_CODON_IDX
+
     N, L_codon, _, _ = neutral_rates_tensor.shape
 
     # Initialize normalization constants
@@ -290,10 +274,10 @@ def compute_normalization_constants(
             Z_j = 0.0
 
             # Sum over all possible single-nucleotide mutations from this codon
-            for parent_codon_idx in range(
-                64
-            ):  # Only consider valid codons, not ambiguous
-                for child_codon_idx in range(64):
+            for parent_codon_idx in list(
+                AA_IDX_FROM_CODON_IDX.keys()
+            ):  # Only consider valid codons, not ambiguous or stop
+                for child_codon_idx in list(AA_IDX_FROM_CODON_IDX.keys()):
                     # Get λ_{j,parent->child}
                     neutral_rate = neutral_rates_tensor[
                         seq_idx, codon_pos, parent_codon_idx, child_codon_idx
@@ -301,7 +285,7 @@ def compute_normalization_constants(
 
                     if neutral_rate > 0:  # Only process non-zero rates
                         # Get corresponding amino acid for child codon
-                        child_aa_idx = aa_idx_of_flat_codon_idx(child_codon_idx)
+                        child_aa_idx = AA_IDX_FROM_CODON_IDX[child_codon_idx]
 
                         # Get selection factor f_{j,aa(child)}
                         aa_pos = codon_pos  # Assuming 1:1 mapping
@@ -418,7 +402,7 @@ class WhichmutTrainer:
                             if self.optimizer:
                                 self.optimizer.zero_grad()
 
-                            selection_factors = self.model(aa_parents_idxss)
+                            selection_factors = self.model(aa_parents_idxss, masks)
 
                             # Compute whichmut loss using precomputed neutral rates
                             loss = compute_whichmut_loss_batch(
@@ -453,7 +437,9 @@ class WhichmutTrainer:
                                             f"Retrying gradient calculation ({grad_retry_count}/{max_grad_retries}) with loss {loss.item()}"
                                         )
                                         # Recompute loss exactly as in framework.py:722
-                                        selection_factors = self.model(aa_parents_idxss)
+                                        selection_factors = self.model(
+                                            aa_parents_idxss, masks
+                                        )
                                         loss = compute_whichmut_loss_batch(
                                             selection_factors,
                                             neutral_rates_tensor,
@@ -477,7 +463,7 @@ class WhichmutTrainer:
 
                 else:
                     # Evaluation mode: no gradients
-                    selection_factors = self.model(aa_parents_idxss)
+                    selection_factors = self.model(aa_parents_idxss, masks)
                     loss = compute_whichmut_loss_batch(
                         selection_factors,
                         neutral_rates_tensor,
@@ -518,7 +504,7 @@ def create_whichmut_trainer(
     """
     import yaml
     import torch.optim as optim
-    from netam.model_factory import create_selection_model_from_config
+    from netam.model_factory import create_selection_model_from_dict
 
     # Load configuration from YAML
     with open(model_config_yaml, "r") as f:
@@ -540,7 +526,7 @@ def create_whichmut_trainer(
     )
 
     # Load and create model from config
-    model = create_selection_model_from_config(config, device)
+    model = create_selection_model_from_dict(config, device)
 
     # Create optimizer if in training mode using dynamic instantiation
     optimizer = None
