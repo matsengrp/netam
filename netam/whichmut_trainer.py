@@ -195,7 +195,7 @@ def compute_whichmut_loss_batch(
 
     # 1. Compute normalization constants Z_j for each codon position
     normalization_constants = compute_normalization_constants(
-        linear_selection_factors, neutral_rates_tensor, aa_parents_idxss
+        linear_selection_factors, neutral_rates_tensor, codon_parents_idxss
     )  # (N, L_codon)
 
     # 2. For each observed mutation, compute log probability
@@ -249,7 +249,8 @@ def compute_whichmut_loss_batch(
 def compute_normalization_constants(
     selection_factors: torch.Tensor,  # (N, L_aa, 20) - linear space f_{j,a->a'}
     neutral_rates_tensor: torch.Tensor,  # (N, L_codon, 65, 65) - λ_{j,c->c'}
-    aa_parents_idxss: torch.Tensor,  # (N, L_aa) - parent AA indices (unused for now)
+    # aa_parents_idxss: torch.Tensor,  # (N, L_aa) - parent AA indices (unused for now)
+    codon_parents_idxss: torch.Tensor,  # (N, L_codon) - parent codon indices
 ) -> torch.Tensor:
     """Compute normalization constants Z_j = sum_{m'} λ_{j,m'}(X) * f_{j,aa(m')}(X) for
     each codon position j.
@@ -272,28 +273,25 @@ def compute_normalization_constants(
     for seq_idx in range(N):
         for codon_pos in range(L_codon):
             Z_j = 0.0
+            parent_codon_idx = codon_parents_idxss[seq_idx, codon_pos].item()
+            for child_codon_idx, _, _ in CODON_SINGLE_MUTATIONS[parent_codon_idx]:
 
-            # Sum over all possible single-nucleotide mutations from this codon
-            for parent_codon_idx in list(
-                AA_IDX_FROM_CODON_IDX.keys()
-            ):  # Only consider valid codons, not ambiguous or stop
-                for child_codon_idx in list(AA_IDX_FROM_CODON_IDX.keys()):
-                    # Get λ_{j,parent->child}
-                    neutral_rate = neutral_rates_tensor[
-                        seq_idx, codon_pos, parent_codon_idx, child_codon_idx
-                    ]
+                # Get λ_{j,parent->possible child codon-mutation}
+                neutral_rate = neutral_rates_tensor[
+                    seq_idx, codon_pos, parent_codon_idx, child_codon_idx
+                ]
 
-                    if neutral_rate > 0:  # Only process non-zero rates
-                        # Get corresponding amino acid for child codon
-                        child_aa_idx = AA_IDX_FROM_CODON_IDX[child_codon_idx]
+                if neutral_rate > 0:  # Only process non-zero rates
+                    # Get corresponding amino acid for child codon
+                    child_aa_idx = AA_IDX_FROM_CODON_IDX[child_codon_idx]
 
-                        # Get selection factor f_{j,aa(child)}
-                        aa_pos = codon_pos  # Assuming 1:1 mapping
-                        if aa_pos < selection_factors.shape[1]:
-                            selection_factor = selection_factors[
-                                seq_idx, aa_pos, child_aa_idx
-                            ]
-                            Z_j += neutral_rate * selection_factor
+                    # Get selection factor f_{j,aa(child)}
+                    aa_pos = codon_pos  # Assuming 1:1 mapping
+                    if aa_pos < selection_factors.shape[1]:
+                        selection_factor = selection_factors[
+                            seq_idx, aa_pos, child_aa_idx
+                        ]
+                        Z_j += neutral_rate * selection_factor
 
             Z[seq_idx, codon_pos] = Z_j
 

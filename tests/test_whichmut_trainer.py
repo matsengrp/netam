@@ -11,9 +11,18 @@ from netam.whichmut_trainer import (
     compute_whichmut_loss_batch,
     compute_normalization_constants,
     compute_neutral_rates_for_sequences,
-    aa_idx_of_flat_codon_idx,
 )
 from netam.sequences import CODONS, AA_STR_SORTED
+from netam.codon_table import AA_IDX_FROM_CODON_IDX
+
+
+def aa_idx_of_flat_codon_idx(codon_idx):
+    """Get amino acid index from codon index using the global mapping."""
+    # Handle ambiguous codon (index 64)
+    if codon_idx == 64:
+        return 20  # Ambiguous AA index
+    # Handle stop codons and regular codons
+    return AA_IDX_FROM_CODON_IDX.get(codon_idx, 20)
 
 
 def test_whichmut_codon_dataset_creation():
