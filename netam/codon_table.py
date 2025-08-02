@@ -129,7 +129,7 @@ def iter_codon_aa_indices():
 AA_IDX_FROM_CODON_IDX = {
     codon_idx: aa_idx for codon_idx, aa_idx in iter_codon_aa_indices()
 }
-# TODO write tests for this mappingS
+# TODO write test for this mapping
 
 
 def generate_codon_neighbor_matrix():
@@ -182,6 +182,21 @@ def generate_codon_single_mutation_map():
 # Global tensors/mappings for efficient lookups
 CODON_NEIGHBOR_MATRIX = generate_codon_neighbor_matrix()  # (65, 20)
 CODON_SINGLE_MUTATIONS = generate_codon_single_mutation_map()
+
+
+STOP_CODON_IDXS = [CODON_TO_INDEX[codon] for codon in STOP_CODONS]
+# CODON_FUNCTIONAL_SINGLE_MUTATIONS
+# is a mapping from parent codon index to a list of tuples
+# (child_codon_idx, nt_position, new_base) for all single mutations except stop codons.
+FUNCTIONAL_CODON_SINGLE_MUTATIONS = {
+    parent_idx: [
+        (child_idx, nt_pos, new_base)
+        for child_idx, nt_pos, new_base in mutations
+        if child_idx not in STOP_CODON_IDXS  # Exclude stop codons
+    ]
+    for parent_idx, mutations in CODON_SINGLE_MUTATIONS.items()
+    if parent_idx not in STOP_CODON_IDXS  # Exclude stop codons
+}
 
 
 def encode_codon_mutations(
