@@ -274,16 +274,16 @@ def compute_normalization_constants(
         for codon_pos in range(L_codon):
             Z_j = 0.0
             parent_codon_idx = codon_parents_idxss[seq_idx, codon_pos].item()
-            for child_codon_idx, _, _ in CODON_SINGLE_MUTATIONS[parent_codon_idx]:
+            for alt_codon_idx, _, _ in CODON_SINGLE_MUTATIONS[parent_codon_idx]:
 
                 # Get λ_{j,parent->possible child codon-mutation}
                 neutral_rate = neutral_rates_tensor[
-                    seq_idx, codon_pos, parent_codon_idx, child_codon_idx
+                    seq_idx, codon_pos, parent_codon_idx, alt_codon_idx
                 ]
 
                 if neutral_rate > 0:  # Only process non-zero rates
                     # Get corresponding amino acid for child codon
-                    child_aa_idx = AA_IDX_FROM_CODON_IDX[child_codon_idx]
+                    child_aa_idx = AA_IDX_FROM_CODON_IDX[alt_codon_idx]
 
                     # Get selection factor f_{j,aa(child)}
                     aa_pos = codon_pos  # Assuming 1:1 mapping

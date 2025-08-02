@@ -253,7 +253,7 @@ def pick_device(gpu_preference=None):
         try:
             torch._C._cuda_init()
             return True
-        except:
+        except Exception:
             return False
 
     if torch.backends.cudnn.is_available() and check_CUDA():
@@ -354,7 +354,7 @@ def light_chain_shim(paired_evaluator):
     """Returns a function that evaluates only light chains given a paired evaluator."""
 
     def evaluate_light_chains(sequences):
-        paired_seqs = [["", l] for l in sequences]
+        paired_seqs = [["", light] for light in sequences]
         paired_outputs = paired_evaluator(paired_seqs)
         return [output[1] for output in paired_outputs]
 
