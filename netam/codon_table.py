@@ -129,7 +129,6 @@ def iter_codon_aa_indices():
 AA_IDX_FROM_CODON_IDX = {
     codon_idx: aa_idx for codon_idx, aa_idx in iter_codon_aa_indices()
 }
-# TODO write test for this mapping
 
 
 def generate_codon_neighbor_matrix():
