@@ -13,7 +13,7 @@ from netam.whichmut_trainer import (
     compute_neutral_rates_for_sequences,
 )
 from netam.sequences import CODONS, AA_STR_SORTED
-from netam.codon_table import AA_IDX_FROM_CODON_IDX
+from netam.codon_table import AA_IDX_FROM_CODON_IDX, FUNCTIONAL_CODON_SINGLE_MUTATIONS
 
 
 def aa_idx_of_flat_codon_idx(codon_idx):
@@ -23,6 +23,17 @@ def aa_idx_of_flat_codon_idx(codon_idx):
         return 20  # Ambiguous AA index
     # Handle stop codons and regular codons
     return AA_IDX_FROM_CODON_IDX.get(codon_idx, 20)
+
+
+def set_neutral_rates_for_codon(
+    neutral_rates_tensor, seq_idx, codon_pos, parent_codon_idx, default_rate=0.01
+):
+    """Set neutral rates for all possible single mutations from a parent codon."""
+    if parent_codon_idx in FUNCTIONAL_CODON_SINGLE_MUTATIONS:
+        for child_idx, _, _ in FUNCTIONAL_CODON_SINGLE_MUTATIONS[parent_codon_idx]:
+            neutral_rates_tensor[seq_idx, codon_pos, parent_codon_idx, child_idx] = (
+                default_rate
+            )
 
 
 def test_whichmut_codon_dataset_creation():
@@ -120,8 +131,18 @@ def test_compute_whichmut_loss_simple_case():
     trp_idx = AA_STR_SORTED.index("W")
     aa_parents_idxss = torch.tensor([[met_idx, trp_idx]])  # (1, 2)
 
-    # Set up neutral rates tensor (only the observed mutations have non-zero rates)
+    # Set up neutral rates tensor - need rates for ALL possible single mutations
     neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+
+    # Set neutral rates for all possible mutations from parent codons
+    set_neutral_rates_for_codon(
+        neutral_rates_tensor, 0, 0, atg_idx, 0.005
+    )  # ATG mutations
+    set_neutral_rates_for_codon(
+        neutral_rates_tensor, 0, 1, tgg_idx, 0.005
+    )  # TGG mutations
+
+    # Override specific mutation rates
     neutral_rates_tensor[0, 0, atg_idx, att_idx] = 0.01  # λ for ATG->ATT = 0.01
     neutral_rates_tensor[0, 1, tgg_idx, tgc_idx] = 0.02  # λ for TGG->TGC = 0.02
 
@@ -160,6 +181,27 @@ def test_compute_whichmut_loss_simple_case():
         total_log_likelihood = 0.0
 
         for seq_idx in range(N):
+            # First compute Z_n for the entire sequence (per-sequence normalization)
+            Z_n = 0.0
+            for pos in range(L_codon):
+                parent_idx = codon_parents_idxss[seq_idx, pos].item()
+                if parent_idx in FUNCTIONAL_CODON_SINGLE_MUTATIONS:
+                    for possible_child_idx, _, _ in FUNCTIONAL_CODON_SINGLE_MUTATIONS[
+                        parent_idx
+                    ]:
+                        lambda_val = neutral_rates_tensor[
+                            seq_idx, pos, parent_idx, possible_child_idx
+                        ].item()
+                        if lambda_val > 0:
+                            child_aa_idx_possible = aa_idx_of_flat_codon_idx(
+                                possible_child_idx
+                            )
+                            f_val = linear_selection_factors[
+                                seq_idx, pos, child_aa_idx_possible
+                            ].item()
+                            Z_n += lambda_val * f_val
+
+            # Now compute log likelihoods for observed mutations using the per-sequence Z_n
             for codon_pos in range(L_codon):
                 if (
                     codon_mutation_indicators[seq_idx, codon_pos]
@@ -179,23 +221,8 @@ def test_compute_whichmut_loss_simple_case():
                         seq_idx, codon_pos, child_aa_idx
                     ].item()
 
-                    # Compute Z_j manually
-                    Z_j = 0.0
-                    for possible_child_idx in range(64):
-                        lambda_val = neutral_rates_tensor[
-                            seq_idx, codon_pos, parent_codon_idx, possible_child_idx
-                        ].item()
-                        if lambda_val > 0:
-                            child_aa_idx_possible = aa_idx_of_flat_codon_idx(
-                                possible_child_idx
-                            )
-                            f_val = linear_selection_factors[
-                                seq_idx, codon_pos, child_aa_idx_possible
-                            ].item()
-                            Z_j += lambda_val * f_val
-
-                    # Compute probability and log likelihood
-                    prob = (lambda_obs * f_obs) / Z_j
+                    # Compute probability and log likelihood using per-sequence Z_n
+                    prob = (lambda_obs * f_obs) / Z_n
                     total_log_likelihood += np.log(prob)
 
         return -total_log_likelihood  # Return negative log likelihood
@@ -240,6 +267,10 @@ def test_whichmut_loss_no_mutations():
     selection_factors = torch.zeros(N, L_aa, 20)
     masks = torch.ones(N, L_codon, dtype=torch.bool)
 
+    # Set neutral rates for all possible mutations from parent codons even though no mutations occurred
+    set_neutral_rates_for_codon(neutral_rates_tensor, 0, 0, 0)  # AAA
+    set_neutral_rates_for_codon(neutral_rates_tensor, 0, 1, 0)  # AAA
+
     loss = compute_whichmut_loss_batch(
         selection_factors,
         neutral_rates_tensor,
@@ -262,19 +293,29 @@ def test_compute_normalization_constants():
     selection_factors = torch.ones(N, L_aa, 20)  # All selection factors = 1.0
     neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
 
-    # Add some non-zero neutral rates
-    neutral_rates_tensor[0, 0, 0, 1] = 0.1  # Some transition
-    neutral_rates_tensor[0, 0, 0, 2] = 0.2  # Another transition
-    neutral_rates_tensor[0, 1, 5, 6] = 0.3  # Yet another transition
+    # Set up parent codons
+    codon_parents_idxss = torch.zeros(N, L_codon, dtype=torch.long)
+    codon_parents_idxss[0, 0] = 0  # AAA
+    codon_parents_idxss[0, 1] = 5  # AAT
 
-    aa_parents_idxss = torch.zeros(N, L_aa, dtype=torch.long)
+    # Add neutral rates for all possible mutations from parent codons
+    set_neutral_rates_for_codon(neutral_rates_tensor, 0, 0, 0, 0.1)  # AAA with rate 0.1
+    set_neutral_rates_for_codon(neutral_rates_tensor, 0, 1, 5, 0.3)  # AAT with rate 0.3
 
     Z = compute_normalization_constants(
-        selection_factors, neutral_rates_tensor, aa_parents_idxss
+        selection_factors, neutral_rates_tensor, codon_parents_idxss
     )
 
-    assert Z.shape == (N, L_codon)
+    # Now expecting per-sequence normalization (shape should be (N,) not (N, L_codon))
+    assert Z.shape == (N,)
     assert torch.all(Z >= 0)  # Normalization constants should be non-negative
+
+    # The normalization constant should be the sum over all positions and all possible mutations
+    # With selection factors all = 1.0, this should equal sum of all neutral rates
+    # For AAA (codon 0): 8 functional single mutations * 0.1 = 0.8
+    # For AAT (codon 5): 9 functional single mutations * 0.3 = 2.7
+    # Total expected Z = 0.8 + 2.7 = 3.5
+    assert torch.abs(Z[0] - 3.5) < 0.01
 
 
 def test_codon_to_aa_index_mapping():
@@ -305,7 +346,7 @@ def test_whichmut_trainer_basic():
             super().__init__()
             self.linear = torch.nn.Linear(20, 20)
 
-        def forward(self, x):
+        def forward(self, x, masks=None):
             # Return log selection factors
             return torch.zeros(x.shape[0], x.shape[1], 20)
 
@@ -326,8 +367,20 @@ def test_whichmut_trainer_basic():
     nt_parents = pd.Series(["ATGAAACCC"])
     nt_children = pd.Series(["ATGAAACCG"])
 
-    # Mock dataset
-    neutral_model_outputs = {"neutral_rates": torch.zeros(1, 3, 65, 65)}
+    # Mock dataset with properly initialized neutral rates
+    neutral_rates = torch.zeros(1, 3, 65, 65)
+
+    # Parent sequence "ATGAAACCC" has codons: ATG (14), AAA (0), CCC (19)
+    atg_idx = CODONS.index("ATG")
+    aaa_idx = CODONS.index("AAA")
+    ccc_idx = CODONS.index("CCC")
+
+    # Set neutral rates for all possible mutations from parent codons
+    set_neutral_rates_for_codon(neutral_rates, 0, 0, atg_idx, 0.01)  # ATG
+    set_neutral_rates_for_codon(neutral_rates, 0, 1, aaa_idx, 0.01)  # AAA
+    set_neutral_rates_for_codon(neutral_rates, 0, 2, ccc_idx, 0.01)  # CCC
+
+    neutral_model_outputs = {"neutral_rates": neutral_rates}
     dataset = WhichmutCodonDataset.of_pcp_df(
         pd.DataFrame({"nt_parent": nt_parents, "nt_child": nt_children}),
         neutral_model_outputs,
@@ -340,11 +393,8 @@ def test_whichmut_trainer_basic():
     dataloader = DataLoader(dataset, batch_size=1)
 
     # Test evaluation (should not raise errors)
-    try:
-        eval_loss = trainer.evaluate(dataloader)
-        assert torch.isfinite(eval_loss)
-    except Exception as e:
-        pytest.skip(f"Evaluation test skipped due to: {e}")
+    eval_loss = trainer.evaluate(dataloader)
+    assert torch.isfinite(eval_loss)
 
 
 def test_neutral_rates_computation():
@@ -385,9 +435,14 @@ def test_loss_computation_edge_cases(has_mutations):
     selection_factors = torch.zeros(N, L_aa, 20)
     masks = torch.ones(N, L_codon, dtype=torch.bool)
 
+    # Always set neutral rates for all possible mutations from parent codons
+    # (the normalization constant computation requires these even when no mutations occurred)
+    set_neutral_rates_for_codon(neutral_rates_tensor, 0, 0, 0)  # AAA
+    set_neutral_rates_for_codon(neutral_rates_tensor, 0, 1, 0)  # AAA
+
     if has_mutations:
-        # Add some neutral rates for the mutation
-        neutral_rates_tensor[0, 0, 0, 1] = 0.1
+        # Set a specific mutation to have occurred
+        codon_children_idxss[0, 0] = 1  # AAA -> AAC
 
     loss = compute_whichmut_loss_batch(
         selection_factors,

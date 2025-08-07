@@ -18,6 +18,7 @@ from typing import Dict, Any, Optional
 from tqdm import tqdm
 
 from netam.codon_table import (
+    FUNCTIONAL_CODON_SINGLE_MUTATIONS,
     CODON_SINGLE_MUTATIONS,
     encode_codon_mutations,
     create_codon_masks,
@@ -26,6 +27,8 @@ from netam.sequences import (
     translate_sequences,
     aa_idx_tensor_of_str_ambig,
     CODONS,
+    # STOP_CODONS,
+    # AMBIGUOUS_CODON_IDX,
 )
 
 
@@ -193,10 +196,10 @@ def compute_whichmut_loss_batch(
     # Selection model outputs log(f_{j,a->a'})
     linear_selection_factors = torch.exp(selection_factors)  # (N, L_aa, 20)
 
-    # 1. Compute normalization constants Z_j for each codon position
+    # 1. Compute normalization constants Z_n for each sequence
     normalization_constants = compute_normalization_constants(
         linear_selection_factors, neutral_rates_tensor, codon_parents_idxss
-    )  # (N, L_codon)
+    )  # (N,)
 
     # 2. For each observed mutation, compute log probability
     # For now, keep explicit loops for clarity and correctness verification
@@ -228,9 +231,10 @@ def compute_whichmut_loss_batch(
                         seq_idx, aa_pos, child_aa_idx
                     ]
 
-                    # Compute probability p_{j,c->c'} = λ * f / Z_j
-                    Z_j = normalization_constants[seq_idx, codon_pos]
-                    prob = (neutral_rate * selection_factor) / Z_j
+                    # Compute probability p_{j,c->c'} = λ * f / Z_n
+                    # Z_n = normalization_constants[seq_idx] (per-sequence normalization)
+                    Z = normalization_constants[seq_idx]
+                    prob = (neutral_rate * selection_factor) / Z
 
                     # Add log probability to loss
                     log_probs.append(
@@ -267,33 +271,36 @@ def compute_normalization_constants(
     N, L_codon, _, _ = neutral_rates_tensor.shape
 
     # Initialize normalization constants
-    Z = torch.zeros(N, L_codon, device=selection_factors.device)
+    Z = torch.zeros(N, device=selection_factors.device)
 
-    # For each sequence and codon position, compute Z_j
+    # For each sequence, compute Z_n (normalization constant for the entire sequence)
     for seq_idx in range(N):
+        Z_n = 0.0
         for codon_pos in range(L_codon):
-            Z_j = 0.0
             parent_codon_idx = codon_parents_idxss[seq_idx, codon_pos].item()
-            for alt_codon_idx, _, _ in CODON_SINGLE_MUTATIONS[parent_codon_idx]:
+
+            for alt_codon_idx, _, _ in FUNCTIONAL_CODON_SINGLE_MUTATIONS[
+                parent_codon_idx
+            ]:
 
                 # Get λ_{j,parent->possible child codon-mutation}
                 neutral_rate = neutral_rates_tensor[
                     seq_idx, codon_pos, parent_codon_idx, alt_codon_idx
                 ]
 
-                if neutral_rate > 0:  # Only process non-zero rates
-                    # Get corresponding amino acid for child codon
-                    child_aa_idx = AA_IDX_FROM_CODON_IDX[alt_codon_idx]
+                assert (
+                    neutral_rate > 0
+                ), f"Neutral rate is non-positive for sequence {seq_idx}, codon position {codon_pos}, parent codon {parent_codon_idx}, child codon {alt_codon_idx}"
+                # Get corresponding amino acid for child codon
+                child_aa_idx = AA_IDX_FROM_CODON_IDX[alt_codon_idx]
 
-                    # Get selection factor f_{j,aa(child)}
-                    aa_pos = codon_pos  # Assuming 1:1 mapping
-                    if aa_pos < selection_factors.shape[1]:
-                        selection_factor = selection_factors[
-                            seq_idx, aa_pos, child_aa_idx
-                        ]
-                        Z_j += neutral_rate * selection_factor
+                # Get selection factor f_{j,aa(child)}
+                aa_pos = codon_pos  # Assuming 1:1 mapping
+                if aa_pos < selection_factors.shape[1]:
+                    selection_factor = selection_factors[seq_idx, aa_pos, child_aa_idx]
+                    Z_n += neutral_rate * selection_factor
 
-            Z[seq_idx, codon_pos] = Z_j
+        Z[seq_idx] = Z_n
 
     return Z
 
