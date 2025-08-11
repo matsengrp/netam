@@ -10,6 +10,9 @@ from netam.whichmut_trainer import (
     WhichmutTrainer,
     compute_whichmut_loss_batch,
     compute_normalization_constants,
+    compute_normalization_constants_dense,
+    compute_normalization_constants_sparse,
+    get_sparse_neutral_rate,
     compute_neutral_rates_for_sequences,
 )
 from netam.sequences import CODONS, AA_STR_SORTED
@@ -34,6 +37,88 @@ def set_neutral_rates_for_codon(
             neutral_rates_tensor[seq_idx, codon_pos, parent_codon_idx, child_idx] = (
                 default_rate
             )
+
+
+def create_equivalent_data(
+    batch_size: int = 2,
+    sequence_length: int = 5,
+    device: torch.device = torch.device("cpu"),
+):
+    """Create dense and sparse data that should be exactly equivalent."""
+
+    # Use AAA codon for simplicity (has 8 functional mutations)
+    aaa_idx = CODONS.index("AAA")
+
+    # Create codon data
+    codon_parents_idxss = torch.full(
+        (batch_size, sequence_length), aaa_idx, dtype=torch.long, device=device
+    )
+
+    # Create selection factors (20 amino acids)
+    torch.manual_seed(42)  # For reproducibility
+    selection_factors = (
+        torch.randn(batch_size, sequence_length, 20, device=device) * 0.1
+    )
+    linear_selection_factors = torch.exp(selection_factors)
+
+    # Create dense neutral rates
+    dense_rates = torch.zeros(batch_size, sequence_length, 65, 65, device=device)
+
+    # Create sparse data structures
+    functional_mutations = FUNCTIONAL_CODON_SINGLE_MUTATIONS[aaa_idx]
+    n_mutations = len(functional_mutations)
+
+    indices = torch.full(
+        (batch_size, sequence_length, n_mutations, 2),
+        -1,
+        dtype=torch.long,
+        device=device,
+    )
+    values = torch.zeros(batch_size, sequence_length, n_mutations, device=device)
+    n_mutations_tensor = torch.full(
+        (batch_size, sequence_length), n_mutations, dtype=torch.long, device=device
+    )
+
+    # Fill both dense and sparse with identical data
+    for seq_idx in range(batch_size):
+        for pos in range(sequence_length):
+            for mut_idx, (child_idx, _, _) in enumerate(functional_mutations):
+                # Only include mutations to valid amino acids (0-19)
+                child_aa_idx = AA_IDX_FROM_CODON_IDX[child_idx]
+                if child_aa_idx >= 20:  # Skip stop codons
+                    continue
+
+                # Use deterministic rate based on position and mutation
+                rate = 0.01 * (1 + 0.1 * seq_idx + 0.05 * pos + 0.02 * mut_idx)
+
+                # Dense format
+                dense_rates[seq_idx, pos, aaa_idx, child_idx] = rate
+
+                # Sparse format
+                indices[seq_idx, pos, mut_idx, 0] = aaa_idx
+                indices[seq_idx, pos, mut_idx, 1] = child_idx
+                values[seq_idx, pos, mut_idx] = rate
+
+    # Update n_mutations to reflect only valid mutations (non-stop codons)
+    actual_n_mutations = 0
+    for child_idx, _, _ in functional_mutations:
+        if AA_IDX_FROM_CODON_IDX[child_idx] < 20:
+            actual_n_mutations += 1
+
+    n_mutations_tensor.fill_(actual_n_mutations)
+
+    sparse_rates = {
+        "indices": indices,
+        "values": values,
+        "n_mutations": n_mutations_tensor,
+    }
+
+    return {
+        "linear_selection_factors": linear_selection_factors,
+        "dense_rates": dense_rates,
+        "sparse_rates": sparse_rates,
+        "codon_parents_idxss": codon_parents_idxss,
+    }
 
 
 def test_whichmut_codon_dataset_creation():
@@ -459,3 +544,186 @@ def test_loss_computation_edge_cases(has_mutations):
         assert loss >= 0  # Loss should be non-negative
     else:
         assert loss.item() == 0.0
+
+
+class TestSparseDenseEquivalence:
+    """Test exact numerical equivalence between sparse and dense implementations."""
+
+    def test_simple_normalization_equivalence(self):
+        """Test normalization constants with simple equivalent data."""
+        data = create_equivalent_data(batch_size=2, sequence_length=3)
+
+        dense_Z = compute_normalization_constants_dense(
+            data["linear_selection_factors"],
+            data["dense_rates"],
+            data["codon_parents_idxss"],
+        )
+
+        sparse_Z = compute_normalization_constants_sparse(
+            data["linear_selection_factors"],
+            data["sparse_rates"],
+            data["codon_parents_idxss"],
+        )
+
+        print(f"Dense Z: {dense_Z}")
+        print(f"Sparse Z: {sparse_Z}")
+        print(f"Difference: {dense_Z - sparse_Z}")
+        print(f"Relative difference: {(dense_Z - sparse_Z) / dense_Z}")
+
+        assert torch.allclose(
+            dense_Z, sparse_Z, rtol=1e-6, atol=1e-8
+        ), f"Normalization mismatch: Dense={dense_Z}, Sparse={sparse_Z}"
+
+    def test_sparse_lookup_correctness(self):
+        """Test that sparse lookup returns correct values."""
+        data = create_equivalent_data(batch_size=1, sequence_length=1)
+
+        aaa_idx = CODONS.index("AAA")
+        functional_mutations = FUNCTIONAL_CODON_SINGLE_MUTATIONS[aaa_idx]
+
+        # Test lookup for first valid mutation
+        for child_idx, _, _ in functional_mutations:
+            if AA_IDX_FROM_CODON_IDX[child_idx] < 20:  # Valid AA
+                # Get expected value from dense
+                expected_rate = data["dense_rates"][0, 0, aaa_idx, child_idx]
+
+                # Get value from sparse lookup
+                sparse_rate = get_sparse_neutral_rate(
+                    data["sparse_rates"], 0, 0, aaa_idx, child_idx
+                )
+
+                if expected_rate > 0:  # Only test non-zero rates
+                    assert torch.allclose(
+                        sparse_rate, expected_rate, rtol=1e-6
+                    ), f"Lookup mismatch for codon {child_idx}: sparse={sparse_rate}, dense={expected_rate}"
+                break
+
+    def test_different_batch_sizes(self):
+        """Test equivalence across different batch sizes."""
+        for batch_size in [1, 4, 8]:
+            data = create_equivalent_data(batch_size=batch_size, sequence_length=3)
+
+            dense_Z = compute_normalization_constants_dense(
+                data["linear_selection_factors"],
+                data["dense_rates"],
+                data["codon_parents_idxss"],
+            )
+
+            sparse_Z = compute_normalization_constants_sparse(
+                data["linear_selection_factors"],
+                data["sparse_rates"],
+                data["codon_parents_idxss"],
+            )
+
+            assert torch.allclose(
+                dense_Z, sparse_Z, rtol=1e-6, atol=1e-8
+            ), f"Batch size {batch_size} mismatch: Dense={dense_Z}, Sparse={sparse_Z}"
+
+    def test_zero_rates_handling(self):
+        """Test that zero rates are handled consistently."""
+        data = create_equivalent_data(batch_size=2, sequence_length=3)
+
+        # Set some rates to zero in both formats
+        aaa_idx = CODONS.index("AAA")
+        functional_mutations = FUNCTIONAL_CODON_SINGLE_MUTATIONS[aaa_idx]
+        first_child_idx = functional_mutations[0][0]
+
+        # Zero out first mutation in dense format
+        data["dense_rates"][0, 0, aaa_idx, first_child_idx] = 0.0
+
+        # Zero out first mutation in sparse format and adjust count
+        data["sparse_rates"]["values"][0, 0, 0] = 0.0
+
+        # Test that they still match
+        dense_Z = compute_normalization_constants_dense(
+            data["linear_selection_factors"],
+            data["dense_rates"],
+            data["codon_parents_idxss"],
+        )
+
+        sparse_Z = compute_normalization_constants_sparse(
+            data["linear_selection_factors"],
+            data["sparse_rates"],
+            data["codon_parents_idxss"],
+        )
+
+        assert torch.allclose(
+            dense_Z, sparse_Z, rtol=1e-6, atol=1e-8
+        ), f"Zero rate handling mismatch: Dense={dense_Z}, Sparse={sparse_Z}"
+
+    def test_loss_computation_sparse_dense_equivalence(self):
+        """Test that loss computation is identical for sparse and dense formats."""
+        # Create test data with multiple batch sizes and sequence lengths
+        for batch_size in [1, 2, 4]:
+            for sequence_length in [2, 3, 5]:
+                data = create_equivalent_data(batch_size, sequence_length)
+                
+                # Create child codons with some mutations
+                aaa_idx = CODONS.index("AAA")
+                aac_idx = CODONS.index("AAC")  # AAA -> AAC mutation
+                aag_idx = CODONS.index("AAG")  # AAA -> AAG mutation
+                
+                # Set up parent and child codon indices
+                codon_parents_idxss = data["codon_parents_idxss"]
+                codon_children_idxss = codon_parents_idxss.clone()
+                
+                # Create mutation indicators
+                codon_mutation_indicators = torch.zeros_like(codon_parents_idxss, dtype=torch.bool)
+                
+                # Add some mutations (different patterns for each sequence)
+                for seq_idx in range(batch_size):
+                    # Mutate first position for even sequences
+                    if seq_idx % 2 == 0 and sequence_length > 0:
+                        codon_children_idxss[seq_idx, 0] = aac_idx
+                        codon_mutation_indicators[seq_idx, 0] = True
+                    
+                    # Mutate last position for all sequences
+                    if sequence_length > 1:
+                        codon_children_idxss[seq_idx, -1] = aag_idx
+                        codon_mutation_indicators[seq_idx, -1] = True
+                
+                # Create AA indices (AAA -> K, AAC -> N, AAG -> K)
+                aa_parents_idxss = torch.full(
+                    (batch_size, sequence_length), 
+                    AA_STR_SORTED.index("K"),  # AAA codes for Lysine (K)
+                    dtype=torch.long
+                )
+                
+                # Create masks (all positions valid)
+                masks = torch.ones((batch_size, sequence_length), dtype=torch.bool)
+                
+                # Create selection factors (log space)
+                selection_factors = torch.randn(batch_size, sequence_length, 20) * 0.1
+                
+                # Compute loss with dense format
+                loss_dense = compute_whichmut_loss_batch(
+                    selection_factors,
+                    data["dense_rates"],
+                    codon_parents_idxss,
+                    codon_children_idxss,
+                    codon_mutation_indicators,
+                    aa_parents_idxss,
+                    masks,
+                )
+                
+                # Compute loss with sparse format
+                loss_sparse = compute_whichmut_loss_batch(
+                    selection_factors,
+                    data["sparse_rates"],
+                    codon_parents_idxss,
+                    codon_children_idxss,
+                    codon_mutation_indicators,
+                    aa_parents_idxss,
+                    masks,
+                )
+                
+                # Verify losses are identical
+                assert torch.allclose(
+                    loss_dense, loss_sparse, rtol=1e-6, atol=1e-8
+                ), f"Loss mismatch for batch_size={batch_size}, seq_len={sequence_length}: Dense={loss_dense.item():.8f}, Sparse={loss_sparse.item():.8f}"
+                
+                # Also verify both losses are valid
+                assert torch.isfinite(loss_dense), f"Dense loss is not finite: {loss_dense}"
+                assert torch.isfinite(loss_sparse), f"Sparse loss is not finite: {loss_sparse}"
+                assert loss_dense >= 0, f"Dense loss is negative: {loss_dense}"
+                assert loss_sparse >= 0, f"Sparse loss is negative: {loss_sparse}"
