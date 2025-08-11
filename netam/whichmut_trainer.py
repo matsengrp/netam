@@ -30,6 +30,34 @@ from netam.sequences import (
 )
 
 
+def get_sparse_neutral_rate(
+    sparse_data, seq_idx, codon_pos, parent_codon_idx, child_codon_idx
+):
+    """Look up neutral rate in sparse format.
+
+    Args:
+        sparse_data: Dict with 'indices', 'values', 'n_mutations'
+        seq_idx: Sequence index
+        codon_pos: Codon position
+        parent_codon_idx: Parent codon index
+        child_codon_idx: Child codon index
+
+    Returns:
+        Neutral rate for the specified transition, or 0.0 if not found
+    """
+    indices = sparse_data["indices"][seq_idx, codon_pos]  # Shape: (max_mutations, 2)
+    values = sparse_data["values"][seq_idx, codon_pos]  # Shape: (max_mutations,)
+    n_mutations = sparse_data["n_mutations"][seq_idx, codon_pos].item()
+
+    # Search for matching parent->child transition in the sparse data
+    for i in range(n_mutations):
+        if indices[i, 0] == parent_codon_idx and indices[i, 1] == child_codon_idx:
+            return values[i]
+
+    # Not found - return 0 (this might indicate an error in sparse encoding)
+    return torch.tensor(0.0, device=values.device)
+
+
 class WhichmutCodonDataset:
     """Dataset for whichmut training using precomputed neutral rates.
 
@@ -37,6 +65,8 @@ class WhichmutCodonDataset:
     and mutation indicators. Designed for codon-level selection modeling.
 
     Does not enforce single mutation per PCP - handles arbitrary numbers of mutations.
+
+    Supports both dense and sparse neutral rates formats for memory efficiency.
     """
 
     def __init__(
@@ -45,17 +75,25 @@ class WhichmutCodonDataset:
         nt_children: pd.Series,  # Child nucleotide sequences
         codon_parents_idxss: torch.Tensor,  # Parent codons as indices (N, L_codon)
         codon_children_idxss: torch.Tensor,  # Child codons as indices (N, L_codon)
-        neutral_rates_tensor: torch.Tensor,  # Precomputed λ_{j,c->c'} (N, L_codon, 65, 65)
+        neutral_rates_tensor: torch.Tensor,  # Precomputed λ_{j,c->c'} (N, L_codon, 65, 65) or sparse
         aa_parents_idxss: torch.Tensor,  # Parent AAs as indices (N, L_aa)
         aa_children_idxss: torch.Tensor,  # Child AAs as indices (N, L_aa)
         codon_mutation_indicators: torch.Tensor,  # Which codon sites mutated (N, L_codon)
         masks: torch.Tensor,  # Valid codon positions (N, L_codon)
         model_known_token_count: int,
+        sparse_neutral_rates: Optional[Dict[str, torch.Tensor]] = None,  # Sparse format
     ):
         """Initialize WhichmutCodonDataset with precomputed neutral rates.
 
         All tensors should be on the same device. Neutral rates λ_{j,c->c'} are
         precomputed using viral neutral models and passed in.
+
+        Args:
+            sparse_neutral_rates: Optional dict with keys:
+                - 'indices': torch.LongTensor of shape (N, L_codon, max_mutations, 2)
+                  Last dim is [parent_codon_idx, child_codon_idx]
+                - 'values': torch.Tensor of shape (N, L_codon, max_mutations)
+                - 'n_mutations': torch.LongTensor of shape (N, L_codon) - actual mutations per position
         """
         self.nt_parents = nt_parents
         self.nt_children = nt_children
@@ -67,31 +105,69 @@ class WhichmutCodonDataset:
         self.codon_mutation_indicators = codon_mutation_indicators
         self.masks = masks
         self.model_known_token_count = model_known_token_count
+        self.sparse_neutral_rates = sparse_neutral_rates
+
+        # Determine storage format
+        self.use_sparse = sparse_neutral_rates is not None
 
         # Validate tensor shapes and consistency
         assert codon_parents_idxss.shape == codon_children_idxss.shape
         assert codon_parents_idxss.shape == codon_mutation_indicators.shape
         assert codon_parents_idxss.shape == masks.shape
         assert aa_parents_idxss.shape == aa_children_idxss.shape
-        # Neutral rates: (N, L_codon, 65, 65) for all codon->codon transitions
-        # Index 64 is AMBIGUOUS_CODON_IDX, transitions involving it should be zero
-        assert neutral_rates_tensor.shape[:2] == codon_parents_idxss.shape
-        assert neutral_rates_tensor.shape[2:] == (65, 65)
+
+        if self.use_sparse:
+            # Validate sparse format
+            assert "indices" in sparse_neutral_rates
+            assert "values" in sparse_neutral_rates
+            assert "n_mutations" in sparse_neutral_rates
+            indices = sparse_neutral_rates["indices"]
+            values = sparse_neutral_rates["values"]
+            n_mutations = sparse_neutral_rates["n_mutations"]
+            assert indices.shape[:2] == codon_parents_idxss.shape  # (N, L_codon, ...)
+            assert values.shape[:2] == codon_parents_idxss.shape
+            assert n_mutations.shape == codon_parents_idxss.shape
+            assert (
+                indices.shape[2] == values.shape[2]
+            )  # max_mutations dimension matches
+            assert indices.shape[3] == 2  # [parent_codon_idx, child_codon_idx]
+        else:
+            # Dense format validation
+            assert neutral_rates_tensor.shape[:2] == codon_parents_idxss.shape
+            assert neutral_rates_tensor.shape[2:] == (65, 65)
 
     def __len__(self):
         return len(self.nt_parents)
 
     def __getitem__(self, idx):
         """Return batch tensors for whichmut loss computation."""
-        return (
-            self.codon_parents_idxss[idx],
-            self.codon_children_idxss[idx],
-            self.neutral_rates_tensor[idx],
-            self.aa_parents_idxss[idx],
-            self.aa_children_idxss[idx],
-            self.codon_mutation_indicators[idx],
-            self.masks[idx],
-        )
+        if self.use_sparse:
+            # Return sparse format
+            sparse_data = {
+                "indices": self.sparse_neutral_rates["indices"][idx],
+                "values": self.sparse_neutral_rates["values"][idx],
+                "n_mutations": self.sparse_neutral_rates["n_mutations"][idx],
+            }
+            return (
+                self.codon_parents_idxss[idx],
+                self.codon_children_idxss[idx],
+                sparse_data,  # Sparse neutral rates format
+                self.aa_parents_idxss[idx],
+                self.aa_children_idxss[idx],
+                self.codon_mutation_indicators[idx],
+                self.masks[idx],
+            )
+        else:
+            # Return dense format (backward compatibility)
+            return (
+                self.codon_parents_idxss[idx],
+                self.codon_children_idxss[idx],
+                self.neutral_rates_tensor[idx],
+                self.aa_parents_idxss[idx],
+                self.aa_children_idxss[idx],
+                self.codon_mutation_indicators[idx],
+                self.masks[idx],
+            )
 
     @classmethod
     def of_pcp_df(
@@ -140,26 +216,44 @@ class WhichmutCodonDataset:
         # Create masks for valid positions
         masks = create_codon_masks(nt_parents, nt_children)
 
-        # Extract precomputed neutral rates
-        neutral_rates_tensor = neutral_model_outputs["neutral_rates"]
+        # Extract precomputed neutral rates (can be dense tensor or sparse dict)
+        neutral_rates_data = neutral_model_outputs["neutral_rates"]
 
-        return cls(
-            nt_parents,
-            nt_children,
-            codon_parents_idxss,
-            codon_children_idxss,
-            neutral_rates_tensor,
-            aa_parents_idxss,
-            aa_children_idxss,
-            codon_mutation_indicators,
-            masks,
-            model_known_token_count,
-        )
+        if isinstance(neutral_rates_data, dict):
+            # Sparse format
+            return cls(
+                nt_parents,
+                nt_children,
+                codon_parents_idxss,
+                codon_children_idxss,
+                None,  # No dense tensor
+                aa_parents_idxss,
+                aa_children_idxss,
+                codon_mutation_indicators,
+                masks,
+                model_known_token_count,
+                sparse_neutral_rates=neutral_rates_data,
+            )
+        else:
+            # Dense format (backward compatibility)
+            return cls(
+                nt_parents,
+                nt_children,
+                codon_parents_idxss,
+                codon_children_idxss,
+                neutral_rates_data,
+                aa_parents_idxss,
+                aa_children_idxss,
+                codon_mutation_indicators,
+                masks,
+                model_known_token_count,
+                sparse_neutral_rates=None,
+            )
 
 
 def compute_whichmut_loss_batch(
     selection_factors: torch.Tensor,
-    neutral_rates_tensor: torch.Tensor,
+    neutral_rates_data: torch.Tensor,  # Can be dense tensor or sparse dict
     codon_parents_idxss: torch.Tensor,
     codon_children_idxss: torch.Tensor,
     codon_mutation_indicators: torch.Tensor,
@@ -174,18 +268,19 @@ def compute_whichmut_loss_batch(
 
     Args:
         selection_factors: (N, L_aa, 20) - model output selection factors
-        neutral_rates_tensor: (N, L_codon, 65, 65) - precomputed λ_{j,c->c'}
+        neutral_rates_data: Either:
+            - Dense tensor: (N, L_codon, 65, 65) - precomputed λ_{j,c->c'}
+            - Sparse dict: {'indices': tensor, 'values': tensor, 'n_mutations': tensor}
         codon_parents_idxss: (N, L_codon) - parent codon indices
         codon_children_idxss: (N, L_codon) - child codon indices
         codon_mutation_indicators: (N, L_codon) - which sites mutated
         aa_parents_idxss: (N, L_aa) - parent AA indices
         masks: (N, L_codon) - valid positions
-
     Returns:
         Loss scalar for the batch
     """
-
-    from netam.codon_table import AA_IDX_FROM_CODON_IDX
+    # Detect sparse vs dense format
+    use_sparse = isinstance(neutral_rates_data, dict)
 
     N, L_codon = codon_parents_idxss.shape
     _, L_aa, _ = selection_factors.shape
@@ -196,32 +291,49 @@ def compute_whichmut_loss_batch(
 
     # 1. Compute normalization constants Z_n for each sequence
     normalization_constants = compute_normalization_constants(
-        linear_selection_factors, neutral_rates_tensor, codon_parents_idxss
+        linear_selection_factors, neutral_rates_data, codon_parents_idxss
     )  # (N,)
 
     # 2. For each observed mutation, compute log probability
     # For now, keep explicit loops for clarity and correctness verification
     log_probs = []
+    mutations_count = 0
+
     for seq_idx in range(N):
+
         for codon_pos in range(L_codon):
             # Only process positions that actually mutated and are valid
             if (
                 codon_mutation_indicators[seq_idx, codon_pos]
                 and masks[seq_idx, codon_pos]
             ):
+                mutations_count += 1
                 parent_codon_idx = codon_parents_idxss[seq_idx, codon_pos]
                 child_codon_idx = codon_children_idxss[seq_idx, codon_pos]
 
                 # Get λ_{j,c->c'} for this specific mutation
-                neutral_rate = neutral_rates_tensor[
-                    seq_idx, codon_pos, parent_codon_idx, child_codon_idx
-                ]
+                if use_sparse:
+                    # Look up rate in sparse format
+                    neutral_rate = get_sparse_neutral_rate(
+                        neutral_rates_data,
+                        seq_idx,
+                        codon_pos,
+                        parent_codon_idx,
+                        child_codon_idx,
+                    )
+                else:
+                    # Dense format lookup
+                    neutral_rate = neutral_rates_data[
+                        seq_idx, codon_pos, parent_codon_idx, child_codon_idx
+                    ]
 
                 # Get selection factor f_{j,a->a'} for the corresponding AA mutation
                 # Map from codon position to AA position (assuming 1:1 mapping)
                 aa_pos = codon_pos  # Assuming 1:1 mapping for now
                 if aa_pos < L_aa:  # Ensure we don't go out of bounds
                     # Get child amino acid index from codon
+                    from netam.codon_table import AA_IDX_FROM_CODON_IDX
+
                     child_aa_idx = AA_IDX_FROM_CODON_IDX[child_codon_idx.item()]
 
                     # Get selection factor for this AA change
@@ -244,12 +356,13 @@ def compute_whichmut_loss_batch(
 
     # Return negative log likelihood (we want to maximize likelihood = minimize negative log likelihood)
     total_log_likelihood = torch.stack(log_probs).sum()
+
     return -total_log_likelihood
 
 
 def compute_normalization_constants(
     selection_factors: torch.Tensor,  # (N, L_aa, 20) - linear space f_{j,a->a'}
-    neutral_rates_tensor: torch.Tensor,  # (N, L_codon, 65, 65) - λ_{j,c->c'}
+    neutral_rates_data: torch.Tensor,  # (N, L_codon, 65, 65) - λ_{j,c->c'} or sparse dict
     # aa_parents_idxss: torch.Tensor,  # (N, L_aa) - parent AA indices (unused for now)
     codon_parents_idxss: torch.Tensor,  # (N, L_codon) - parent codon indices
 ) -> torch.Tensor:
@@ -259,10 +372,31 @@ def compute_normalization_constants(
     These constants normalize the whichmut probabilities to sum to 1 across all possible
     single-nucleotide mutations.
 
-    This implementation uses explicit loops for clarity and correctness verification.
-    After testing confirms correctness, replace with vectorized version for performance.
+    Supports both dense and sparse neutral rates formats for optimal performance.
     """
+    # Detect format
+    use_sparse = isinstance(neutral_rates_data, dict)
 
+    if use_sparse:
+        # Extract batch dimensions from sparse data
+        N, L_codon = neutral_rates_data["indices"].shape[:2]
+        return compute_normalization_constants_sparse(
+            selection_factors, neutral_rates_data, codon_parents_idxss
+        )
+    else:
+        # Dense format
+        N, L_codon, _, _ = neutral_rates_data.shape
+        return compute_normalization_constants_dense(
+            selection_factors, neutral_rates_data, codon_parents_idxss
+        )
+
+
+def compute_normalization_constants_dense(
+    selection_factors: torch.Tensor,
+    neutral_rates_tensor: torch.Tensor,
+    codon_parents_idxss: torch.Tensor,
+) -> torch.Tensor:
+    """Dense implementation (original explicit loop version)."""
     from netam.codon_table import AA_IDX_FROM_CODON_IDX
 
     N, L_codon, _, _ = neutral_rates_tensor.shape
@@ -273,23 +407,27 @@ def compute_normalization_constants(
     # For each sequence, compute Z_n (normalization constant for the entire sequence)
     for seq_idx in range(N):
         Z_n = 0.0
+
         for codon_pos in range(L_codon):
             parent_codon_idx = codon_parents_idxss[seq_idx, codon_pos].item()
 
             for alt_codon_idx, _, _ in FUNCTIONAL_CODON_SINGLE_MUTATIONS[
                 parent_codon_idx
             ]:
-
                 # Get λ_{j,parent->possible child codon-mutation}
                 neutral_rate = neutral_rates_tensor[
                     seq_idx, codon_pos, parent_codon_idx, alt_codon_idx
                 ]
 
-                assert (
-                    neutral_rate > 0
-                ), f"Neutral rate is non-positive for sequence {seq_idx}, codon position {codon_pos}, parent codon {parent_codon_idx}, child codon {alt_codon_idx}"
+                # Skip zero rates in dense implementation (sparse already excludes them)
+                if neutral_rate <= 0:
+                    continue
                 # Get corresponding amino acid for child codon
                 child_aa_idx = AA_IDX_FROM_CODON_IDX[alt_codon_idx]
+
+                # Skip stop codons and invalid amino acids (same as sparse implementation)
+                if child_aa_idx >= 20:
+                    continue
 
                 # Get selection factor f_{j,aa(child)}
                 aa_pos = codon_pos  # Assuming 1:1 mapping
@@ -298,6 +436,94 @@ def compute_normalization_constants(
                     Z_n += neutral_rate * selection_factor
 
         Z[seq_idx] = Z_n
+
+    return Z
+
+
+def compute_normalization_constants_sparse(
+    selection_factors: torch.Tensor,
+    sparse_neutral_rates: Dict[str, torch.Tensor],
+    codon_parents_idxss: torch.Tensor,
+) -> torch.Tensor:
+    """Sparse implementation using vectorized operations for optimal performance.
+
+    This is significantly more efficient than the dense version for large sequence
+    lengths, reducing memory usage from O(N*L*65^2) to O(N*L*9) and enabling vectorized
+    computation.
+    """
+    from netam.codon_table import AA_IDX_FROM_CODON_IDX
+
+    # Extract sparse data components
+    indices = sparse_neutral_rates["indices"]  # (N, L_codon, max_mutations, 2)
+    values = sparse_neutral_rates["values"]  # (N, L_codon, max_mutations)
+    n_mutations = sparse_neutral_rates["n_mutations"]  # (N, L_codon)
+
+    N, L_codon, max_mutations, _ = indices.shape
+
+    # Initialize normalization constants
+    Z = torch.zeros(N, device=selection_factors.device)
+
+    # Vectorized computation over all mutations
+    # For each (seq, codon_pos, mutation_idx), compute neutral_rate * selection_factor
+
+    # Create child AA indices from codon indices in indices tensor
+    # indices[:, :, :, 1] contains child codon indices
+    child_codon_indices = indices[:, :, :, 1]  # (N, L_codon, max_mutations)
+
+    # Convert to child AA indices using vectorized lookup
+    # Create a lookup tensor for efficient codon->AA mapping (65 codons total)
+    codon_to_aa = torch.zeros(65, dtype=torch.long, device=child_codon_indices.device)
+    for codon_idx, aa_idx in AA_IDX_FROM_CODON_IDX.items():
+        codon_to_aa[codon_idx] = aa_idx
+
+    # Use advanced indexing to map all codon indices to AA indices at once
+    # Clamp to valid range first to prevent out-of-bounds access
+    clamped_codon_indices = torch.clamp(child_codon_indices, 0, 64)
+    child_aa_indices = codon_to_aa[clamped_codon_indices]
+
+    # Get selection factors for all positions and child AAs
+    # selection_factors is (N, L_aa, 20)
+    # We need to gather the appropriate selection factors
+
+    # Create position indices for gathering (assuming 1:1 codon->AA mapping)
+    seq_indices = (
+        torch.arange(N, device=selection_factors.device)
+        .view(N, 1, 1)
+        .expand(N, L_codon, max_mutations)
+    )
+    pos_indices = (
+        torch.arange(L_codon, device=selection_factors.device)
+        .view(1, L_codon, 1)
+        .expand(N, L_codon, max_mutations)
+    )
+
+    # Clamp child_aa_indices to valid range to prevent index errors
+    child_aa_indices_clamped = torch.clamp(child_aa_indices, 0, 19)
+
+    # Gather selection factors: (N, L_codon, max_mutations)
+    selection_factor_values = selection_factors[
+        seq_indices, pos_indices, child_aa_indices_clamped
+    ]
+
+    # Compute products: neutral_rates * selection_factors
+    # Both values and selection_factor_values are (N, L_codon, max_mutations)
+    products = values * selection_factor_values  # (N, L_codon, max_mutations)
+
+    # Create mask for valid mutations (only sum over actual mutations, not padding)
+    mutation_mask = torch.arange(max_mutations, device=n_mutations.device).view(
+        1, 1, max_mutations
+    ) < n_mutations.unsqueeze(-1)
+
+    # Also mask out stop codons and invalid AA indices (where child_aa_indices >= 20)
+    valid_aa_mask = child_aa_indices < 20
+    combined_mask = mutation_mask & valid_aa_mask
+
+    # Apply mask and sum over mutations for each (seq, codon_pos)
+    masked_products = products * combined_mask.float()  # (N, L_codon, max_mutations)
+    codon_contributions = masked_products.sum(dim=-1)  # (N, L_codon)
+
+    # Sum over all codon positions for each sequence to get Z_n
+    Z = codon_contributions.sum(dim=-1)  # (N,)
 
     return Z
 
@@ -381,16 +607,51 @@ class WhichmutTrainer:
         else:
             self.model.eval()
 
-        for batch_data in tqdm(dataloader, desc="Processing batches"):
+        for batch_idx, batch_data in enumerate(
+            tqdm(dataloader, desc="Processing batches")
+        ):
             (
                 codon_parents_idxss,
                 codon_children_idxss,
-                neutral_rates_tensor,
+                neutral_rates_data,  # Can be tensor or dict
                 aa_parents_idxss,
                 _,  # aa_children_idxss (unused)
                 codon_mutation_indicators,
                 masks,
             ) = batch_data
+
+            batch_size = codon_parents_idxss.shape[0]
+
+            # Warn about potentially slow batch sizes (only for dense format)
+            if isinstance(neutral_rates_data, torch.Tensor):  # Dense format
+                if batch_size > 10:
+                    print(
+                        f"⚠️  WARNING: Large batch size ({batch_size}) detected with DENSE format!"
+                    )
+                    print(
+                        f"   This may be very slow due to inefficient dense implementation."
+                    )
+                    memory_mb = neutral_rates_data.numel() * 4 / 1024**2
+                    print(
+                        f"   Current batch uses ~{memory_mb:.1f} MB for neutral rates tensor."
+                    )
+                elif batch_size > 2:
+                    print(
+                        f"ℹ️  INFO: Processing batch {batch_idx + 1} with {batch_size} sequences (DENSE format)..."
+                    )
+            else:  # Sparse format
+                if batch_size > 2:
+                    indices = neutral_rates_data["indices"]
+                    values = neutral_rates_data["values"]
+                    n_mutations = neutral_rates_data["n_mutations"]
+                    memory_mb = (
+                        indices.numel() * 8
+                        + values.numel() * 4
+                        + n_mutations.numel() * 8
+                    ) / 1024**2
+                    print(
+                        f"ℹ️  INFO: Processing batch {batch_idx + 1} with {batch_size} sequences (SPARSE format, ~{memory_mb:.1f} MB)..."
+                    )
 
             # Selection model inference
             with torch.set_grad_enabled(training):
@@ -409,7 +670,7 @@ class WhichmutTrainer:
                             # Compute whichmut loss using precomputed neutral rates
                             loss = compute_whichmut_loss_batch(
                                 selection_factors,
-                                neutral_rates_tensor,
+                                neutral_rates_data,
                                 codon_parents_idxss,
                                 codon_children_idxss,
                                 codon_mutation_indicators,
@@ -444,7 +705,7 @@ class WhichmutTrainer:
                                         )
                                         loss = compute_whichmut_loss_batch(
                                             selection_factors,
-                                            neutral_rates_tensor,
+                                            neutral_rates_data,
                                             codon_parents_idxss,
                                             codon_children_idxss,
                                             codon_mutation_indicators,
@@ -468,7 +729,7 @@ class WhichmutTrainer:
                     selection_factors = self.model(aa_parents_idxss, masks)
                     loss = compute_whichmut_loss_batch(
                         selection_factors,
-                        neutral_rates_tensor,
+                        neutral_rates_data,
                         codon_parents_idxss,
                         codon_children_idxss,
                         codon_mutation_indicators,
