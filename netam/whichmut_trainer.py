@@ -680,7 +680,7 @@ class WhichmutTrainer:
 
                             if self.optimizer:
                                 loss.backward()
-                                # Check for invalid gradients (framework.py:731-736)
+                                # Check for invalid gradients
                                 valid_gradients = all(
                                     (
                                         torch.isfinite(p.grad).all()
@@ -699,7 +699,7 @@ class WhichmutTrainer:
                                         print(
                                             f"Retrying gradient calculation ({grad_retry_count}/{max_grad_retries}) with loss {loss.item()}"
                                         )
-                                        # Recompute loss exactly as in framework.py:722
+                                        # Recompute loss
                                         selection_factors = self.model(
                                             aa_parents_idxss, masks
                                         )
@@ -737,7 +737,7 @@ class WhichmutTrainer:
                         masks,
                     )
 
-                # Accumulate loss (framework.py:730-735 pattern)
+                # Accumulate loss
                 batch_samples = aa_parents_idxss.shape[0]
                 if total_loss is None:
                     total_loss = loss * batch_samples

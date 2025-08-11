@@ -657,44 +657,45 @@ class TestSparseDenseEquivalence:
         for batch_size in [1, 2, 4]:
             for sequence_length in [2, 3, 5]:
                 data = create_equivalent_data(batch_size, sequence_length)
-                
+
                 # Create child codons with some mutations
-                aaa_idx = CODONS.index("AAA")
                 aac_idx = CODONS.index("AAC")  # AAA -> AAC mutation
                 aag_idx = CODONS.index("AAG")  # AAA -> AAG mutation
-                
+
                 # Set up parent and child codon indices
                 codon_parents_idxss = data["codon_parents_idxss"]
                 codon_children_idxss = codon_parents_idxss.clone()
-                
+
                 # Create mutation indicators
-                codon_mutation_indicators = torch.zeros_like(codon_parents_idxss, dtype=torch.bool)
-                
+                codon_mutation_indicators = torch.zeros_like(
+                    codon_parents_idxss, dtype=torch.bool
+                )
+
                 # Add some mutations (different patterns for each sequence)
                 for seq_idx in range(batch_size):
                     # Mutate first position for even sequences
                     if seq_idx % 2 == 0 and sequence_length > 0:
                         codon_children_idxss[seq_idx, 0] = aac_idx
                         codon_mutation_indicators[seq_idx, 0] = True
-                    
+
                     # Mutate last position for all sequences
                     if sequence_length > 1:
                         codon_children_idxss[seq_idx, -1] = aag_idx
                         codon_mutation_indicators[seq_idx, -1] = True
-                
+
                 # Create AA indices (AAA -> K, AAC -> N, AAG -> K)
                 aa_parents_idxss = torch.full(
-                    (batch_size, sequence_length), 
+                    (batch_size, sequence_length),
                     AA_STR_SORTED.index("K"),  # AAA codes for Lysine (K)
-                    dtype=torch.long
+                    dtype=torch.long,
                 )
-                
+
                 # Create masks (all positions valid)
                 masks = torch.ones((batch_size, sequence_length), dtype=torch.bool)
-                
+
                 # Create selection factors (log space)
                 selection_factors = torch.randn(batch_size, sequence_length, 20) * 0.1
-                
+
                 # Compute loss with dense format
                 loss_dense = compute_whichmut_loss_batch(
                     selection_factors,
@@ -705,7 +706,7 @@ class TestSparseDenseEquivalence:
                     aa_parents_idxss,
                     masks,
                 )
-                
+
                 # Compute loss with sparse format
                 loss_sparse = compute_whichmut_loss_batch(
                     selection_factors,
@@ -716,14 +717,18 @@ class TestSparseDenseEquivalence:
                     aa_parents_idxss,
                     masks,
                 )
-                
+
                 # Verify losses are identical
                 assert torch.allclose(
                     loss_dense, loss_sparse, rtol=1e-6, atol=1e-8
                 ), f"Loss mismatch for batch_size={batch_size}, seq_len={sequence_length}: Dense={loss_dense.item():.8f}, Sparse={loss_sparse.item():.8f}"
-                
+
                 # Also verify both losses are valid
-                assert torch.isfinite(loss_dense), f"Dense loss is not finite: {loss_dense}"
-                assert torch.isfinite(loss_sparse), f"Sparse loss is not finite: {loss_sparse}"
+                assert torch.isfinite(
+                    loss_dense
+                ), f"Dense loss is not finite: {loss_dense}"
+                assert torch.isfinite(
+                    loss_sparse
+                ), f"Sparse loss is not finite: {loss_sparse}"
                 assert loss_dense >= 0, f"Dense loss is negative: {loss_dense}"
                 assert loss_sparse >= 0, f"Sparse loss is negative: {loss_sparse}"
