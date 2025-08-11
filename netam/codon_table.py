@@ -148,7 +148,6 @@ def generate_codon_neighbor_matrix():
         matrix[i, mutant_aa_indices] = True
 
     # Row 64 (AMBIGUOUS_CODON_IDX) remains all False
-
     return torch.tensor(matrix, dtype=torch.bool)
 
 
@@ -184,9 +183,9 @@ CODON_SINGLE_MUTATIONS = generate_codon_single_mutation_map()
 
 
 STOP_CODON_IDXS = [CODON_TO_INDEX[codon] for codon in STOP_CODONS]
-# CODON_FUNCTIONAL_SINGLE_MUTATIONS
 # is a mapping from parent codon index to a list of tuples
-# (child_codon_idx, nt_position, new_base) for all single mutations except stop codons.
+# (child_codon_idx, nt_position, new_base)
+# for all single mutations except those which result in stop codons.
 FUNCTIONAL_CODON_SINGLE_MUTATIONS = {
     parent_idx: [
         (child_idx, nt_pos, new_base)

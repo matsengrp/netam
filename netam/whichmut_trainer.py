@@ -27,8 +27,6 @@ from netam.sequences import (
     translate_sequences,
     aa_idx_tensor_of_str_ambig,
     CODONS,
-    # STOP_CODONS,
-    # AMBIGUOUS_CODON_IDX,
 )
 
 
@@ -232,7 +230,6 @@ def compute_whichmut_loss_batch(
                     ]
 
                     # Compute probability p_{j,c->c'} = λ * f / Z_n
-                    # Z_n = normalization_constants[seq_idx] (per-sequence normalization)
                     Z = normalization_constants[seq_idx]
                     prob = (neutral_rate * selection_factor) / Z
 
