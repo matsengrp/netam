@@ -55,7 +55,7 @@ def get_sparse_neutral_rate(
             return values[i]
 
     # Not found - return 0 (this might indicate an error in sparse encoding)
-    return torch.tensor(0.0, device=values.device)
+    return torch.tensor(0.0, device=values.device, dtype=values.dtype)
 
 
 class WhichmutCodonDataset:
@@ -288,6 +288,15 @@ def compute_whichmut_loss_batch(
     # Convert selection factors from log space to linear space
     # Selection model outputs log(f_{j,a->a'})
     linear_selection_factors = torch.exp(selection_factors)  # (N, L_aa, 20)
+    
+    # If using sparse format, ensure data is on the correct device
+    if use_sparse:
+        device = selection_factors.device
+        neutral_rates_data = {
+            "indices": neutral_rates_data["indices"].to(device),
+            "values": neutral_rates_data["values"].to(device),
+            "n_mutations": neutral_rates_data["n_mutations"].to(device),
+        }
 
     # 1. Compute normalization constants Z_n for each sequence
     normalization_constants = compute_normalization_constants(
@@ -453,7 +462,7 @@ def compute_normalization_constants_sparse(
     """
     from netam.codon_table import AA_IDX_FROM_CODON_IDX
 
-    # Extract sparse data components
+    # Extract sparse data components - they should already be on the correct device
     indices = sparse_neutral_rates["indices"]  # (N, L_codon, max_mutations, 2)
     values = sparse_neutral_rates["values"]  # (N, L_codon, max_mutations)
     n_mutations = sparse_neutral_rates["n_mutations"]  # (N, L_codon)
@@ -550,7 +559,7 @@ def compute_neutral_rates_for_sequences(
         # Convert to codon-level neutral rates
         # For each codon position, compute neutral rate for each possible mutation
         L_codon = len(seq) // 3
-        codon_neutral_rates = torch.zeros(L_codon, 65, 65)
+        codon_neutral_rates = torch.zeros(L_codon, 65, 65)  # This is CPU tensor, will be moved to device later
 
         for codon_pos in range(L_codon):
             nt_start = codon_pos * 3
@@ -601,6 +610,9 @@ class WhichmutTrainer:
         pattern."""
         total_loss = None
         total_samples = 0
+        
+        # Get device from model
+        device = next(self.model.parameters()).device
 
         if training:
             self.model.train()
@@ -619,6 +631,25 @@ class WhichmutTrainer:
                 codon_mutation_indicators,
                 masks,
             ) = batch_data
+            
+            # Move all tensors to device
+            codon_parents_idxss = codon_parents_idxss.to(device)
+            codon_children_idxss = codon_children_idxss.to(device)
+            aa_parents_idxss = aa_parents_idxss.to(device)
+            codon_mutation_indicators = codon_mutation_indicators.to(device)
+            masks = masks.to(device)
+            
+            # Move neutral rates data to device
+            if isinstance(neutral_rates_data, torch.Tensor):
+                # Dense format
+                neutral_rates_data = neutral_rates_data.to(device)
+            else:
+                # Sparse format - move all components
+                neutral_rates_data = {
+                    "indices": neutral_rates_data["indices"].to(device),
+                    "values": neutral_rates_data["values"].to(device),
+                    "n_mutations": neutral_rates_data["n_mutations"].to(device),
+                }
 
             batch_size = codon_parents_idxss.shape[0]
 
@@ -747,7 +778,7 @@ class WhichmutTrainer:
 
         # Return average loss
         if total_samples == 0:
-            return torch.tensor(0.0)
+            return torch.tensor(0.0, device=device)
         average_loss = total_loss / total_samples
         return average_loss
 
