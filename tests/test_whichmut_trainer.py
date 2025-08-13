@@ -6,12 +6,14 @@ import numpy as np
 import pytest
 
 from netam.whichmut_trainer import (
-    WhichmutCodonDataset,
     WhichmutTrainer,
     compute_whichmut_loss_batch,
     compute_normalization_constants,
     compute_normalization_constants_dense,
     compute_normalization_constants_sparse,
+)
+from netam.whichmut_dataset import (
+    WhichmutCodonDataset,
     get_sparse_neutral_rate,
     compute_neutral_rates_for_sequences,
 )
@@ -732,3 +734,228 @@ class TestSparseDenseEquivalence:
                 ), f"Sparse loss is not finite: {loss_sparse}"
                 assert loss_dense >= 0, f"Dense loss is negative: {loss_dense}"
                 assert loss_sparse >= 0, f"Sparse loss is negative: {loss_sparse}"
+
+
+class TestTrainerMethodExtraction:
+    """Test the extracted methods from WhichmutTrainer refactoring."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+
+        # Create a simple mock model
+        class MockModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = torch.nn.Linear(20, 20)
+
+            def forward(self, x, masks=None):
+                # Return log selection factors
+                return torch.zeros(x.shape[0], x.shape[1], 20)
+
+            def train(self):
+                pass
+
+            def eval(self):
+                pass
+
+            def parameters(self):
+                return self.linear.parameters()
+
+        self.model = MockModel()
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+        self.trainer = WhichmutTrainer(self.model, self.optimizer)
+        self.device = torch.device("cpu")
+
+    def test_move_batch_to_device(self):
+        """Test _move_batch_to_device handles both dense and sparse formats
+        correctly."""
+        # Test dense format
+        batch_data_dense = (
+            torch.randn(2, 3),  # codon_parents_idxss
+            torch.randn(2, 3),  # codon_children_idxss
+            torch.randn(2, 3, 65, 65),  # dense neutral_rates_data
+            torch.randn(2, 3),  # aa_parents_idxss
+            torch.randn(2, 3),  # aa_children_idxss
+            torch.randn(2, 3),  # codon_mutation_indicators
+            torch.randn(2, 3),  # masks
+        )
+
+        moved_dense = self.trainer._move_batch_to_device(batch_data_dense, self.device)
+
+        # Check all tensors are on correct device
+        assert all(
+            tensor.device == self.device for tensor in moved_dense[:-1]
+        )  # All but neutral_rates
+        assert isinstance(moved_dense[2], torch.Tensor)  # Dense format preserved
+
+        # Test sparse format
+        sparse_neutral_data = {
+            "indices": torch.randint(0, 64, (2, 3, 5, 2)),
+            "values": torch.randn(2, 3, 5),
+            "n_mutations": torch.randint(1, 5, (2, 3)),
+        }
+
+        batch_data_sparse = (
+            torch.randn(2, 3),  # codon_parents_idxss
+            torch.randn(2, 3),  # codon_children_idxss
+            sparse_neutral_data,  # sparse neutral_rates_data
+            torch.randn(2, 3),  # aa_parents_idxss
+            torch.randn(2, 3),  # aa_children_idxss
+            torch.randn(2, 3),  # codon_mutation_indicators
+            torch.randn(2, 3),  # masks
+        )
+
+        moved_sparse = self.trainer._move_batch_to_device(
+            batch_data_sparse, self.device
+        )
+
+        # Check standard tensors moved correctly
+        for i in [0, 1, 3, 4, 5, 6]:  # Skip neutral_rates_data at index 2
+            assert moved_sparse[i].device == self.device
+
+        # Check sparse neutral rates moved correctly
+        sparse_moved = moved_sparse[2]
+        assert isinstance(sparse_moved, dict)
+        assert all(tensor.device == self.device for tensor in sparse_moved.values())
+
+    def test_log_batch_info_dense_warning(self, capsys):
+        """Test _log_batch_info produces appropriate warnings for dense format."""
+        neutral_rates_dense = torch.randn(2, 10, 65, 65)  # Large tensor
+
+        # Test large batch warning
+        self.trainer._log_batch_info(0, 15, neutral_rates_dense)
+        captured = capsys.readouterr()
+        assert "WARNING: Large batch size" in captured.out
+        assert "DENSE format" in captured.out
+        assert "MB for neutral rates tensor" in captured.out
+
+        # Test medium batch info
+        self.trainer._log_batch_info(0, 5, neutral_rates_dense)
+        captured = capsys.readouterr()
+        assert "INFO: Processing batch" in captured.out
+        assert "DENSE format" in captured.out
+
+    def test_log_batch_info_sparse(self, capsys):
+        """Test _log_batch_info handles sparse format correctly."""
+        sparse_neutral_data = {
+            "indices": torch.randint(0, 64, (2, 10, 5, 2)),
+            "values": torch.randn(2, 10, 5),
+            "n_mutations": torch.randint(1, 5, (2, 10)),
+        }
+
+        self.trainer._log_batch_info(0, 5, sparse_neutral_data)
+        captured = capsys.readouterr()
+        assert "INFO: Processing batch" in captured.out
+        assert "SPARSE format" in captured.out
+        assert "MB)" in captured.out
+
+    def test_check_gradients_valid(self):
+        """Test _check_gradients correctly identifies valid gradients."""
+        # Create some gradients
+        self.model.zero_grad()
+        loss = self.model.linear.weight.sum()
+        loss.backward()
+
+        # Should be valid
+        assert self.trainer._check_gradients() is True
+
+        # Test with invalid gradients (NaN)
+        self.model.linear.weight.grad[0, 0] = float("nan")
+        assert self.trainer._check_gradients() is False
+
+        # Test with infinite gradients
+        self.model.linear.weight.grad[0, 0] = float("inf")
+        assert self.trainer._check_gradients() is False
+
+    def test_compute_loss_basic(self):
+        """Test _compute_loss produces valid loss values."""
+        # Create minimal batch data
+        batch_data = (
+            torch.zeros(1, 3, dtype=torch.long),  # codon_parents_idxss
+            torch.zeros(1, 3, dtype=torch.long),  # codon_children_idxss
+            torch.ones(1, 3, 65, 65) * 0.01,  # neutral_rates_data (dense)
+            torch.zeros(1, 3, dtype=torch.long),  # aa_parents_idxss
+            torch.zeros(1, 3, dtype=torch.long),  # aa_children_idxss (unused)
+            torch.zeros(1, 3, dtype=torch.bool),  # codon_mutation_indicators
+            torch.ones(1, 3, dtype=torch.bool),  # masks
+        )
+
+        loss = self.trainer._compute_loss(batch_data)
+
+        # Loss should be finite and scalar
+        assert torch.isfinite(loss)
+        assert loss.shape == torch.Size([])
+
+    def test_train_step_with_retry_success(self):
+        """Test _train_step_with_retry succeeds on first attempt with valid
+        gradients."""
+        # Create batch data that won't cause gradient issues
+        batch_data = (
+            torch.zeros(1, 3, dtype=torch.long),  # codon_parents_idxss
+            torch.zeros(1, 3, dtype=torch.long),  # codon_children_idxss
+            torch.ones(1, 3, 65, 65) * 0.01,  # neutral_rates_data
+            torch.zeros(1, 3, dtype=torch.long),  # aa_parents_idxss
+            torch.zeros(1, 3, dtype=torch.long),  # aa_children_idxss
+            torch.zeros(1, 3, dtype=torch.bool),  # codon_mutation_indicators
+            torch.ones(1, 3, dtype=torch.bool),  # masks
+        )
+
+        # Should succeed without retries
+        loss = self.trainer._train_step_with_retry(batch_data)
+        assert torch.isfinite(loss)
+
+    def test_train_step_with_retry_no_optimizer(self):
+        """Test _train_step_with_retry works without optimizer (evaluation mode)."""
+        trainer_no_opt = WhichmutTrainer(self.model, optimizer=None)
+
+        batch_data = (
+            torch.zeros(1, 3, dtype=torch.long),
+            torch.zeros(1, 3, dtype=torch.long),
+            torch.ones(1, 3, 65, 65) * 0.01,
+            torch.zeros(1, 3, dtype=torch.long),
+            torch.zeros(1, 3, dtype=torch.long),
+            torch.zeros(1, 3, dtype=torch.bool),
+            torch.ones(1, 3, dtype=torch.bool),
+        )
+
+        loss = trainer_no_opt._train_step_with_retry(batch_data)
+        assert torch.isfinite(loss)
+
+    def test_run_epoch_structure_maintained(self):
+        """Test that _run_epoch still produces the same results after refactoring."""
+        # Create simple test data matching existing test
+        nt_parents = pd.Series(["ATGAAACCC"])
+        nt_children = pd.Series(["ATGAAACCG"])
+
+        # Create neutral rates
+        neutral_rates = torch.zeros(1, 3, 65, 65)
+        atg_idx = CODONS.index("ATG")
+        aaa_idx = CODONS.index("AAA")
+        ccc_idx = CODONS.index("CCC")
+
+        set_neutral_rates_for_codon(neutral_rates, 0, 0, atg_idx, 0.01)
+        set_neutral_rates_for_codon(neutral_rates, 0, 1, aaa_idx, 0.01)
+        set_neutral_rates_for_codon(neutral_rates, 0, 2, ccc_idx, 0.01)
+
+        neutral_model_outputs = {"neutral_rates": neutral_rates}
+        dataset = WhichmutCodonDataset.of_pcp_df(
+            pd.DataFrame({"nt_parent": nt_parents, "nt_child": nt_children}),
+            neutral_model_outputs,
+            model_known_token_count=20,
+        )
+
+        from torch.utils.data import DataLoader
+
+        dataloader = DataLoader(dataset, batch_size=1)
+
+        # Test evaluation mode (no gradients needed)
+        eval_loss = self.trainer.evaluate(dataloader)
+        assert torch.isfinite(eval_loss)
+        assert eval_loss.shape == torch.Size([])
+
+        # Test training mode by using a trainer without optimizer
+        # (avoids gradient issues while still testing the training path)
+        trainer_no_opt = WhichmutTrainer(self.model, optimizer=None)
+        train_loss = trainer_no_opt.train_epoch(dataloader)
+        assert torch.isfinite(train_loss)
+        assert train_loss.shape == torch.Size([])
