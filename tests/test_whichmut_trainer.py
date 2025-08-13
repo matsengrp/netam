@@ -8,6 +8,7 @@ import pytest
 from netam.whichmut_trainer import (
     WhichmutTrainer,
     compute_whichmut_loss_batch,
+    compute_whichmut_loss_batch_iterative,
     compute_normalization_constants,
     compute_normalization_constants_dense,
     compute_normalization_constants_sparse,
@@ -734,6 +735,208 @@ class TestSparseDenseEquivalence:
                 ), f"Sparse loss is not finite: {loss_sparse}"
                 assert loss_dense >= 0, f"Dense loss is negative: {loss_dense}"
                 assert loss_sparse >= 0, f"Sparse loss is negative: {loss_sparse}"
+
+    def test_vectorized_vs_iterative_implementations(self):
+        """Test that vectorized and iterative loss implementations produce identical
+        results."""
+        # Test with multiple batch sizes and sequence lengths
+        test_configs = [
+            (1, 2),  # Small test case
+            (2, 3),  # Medium test case
+            (3, 4),  # Larger test case
+        ]
+
+        for batch_size, sequence_length in test_configs:
+            data = create_equivalent_data(batch_size, sequence_length)
+
+            # Create mutation data using the same pattern as other tests
+            aac_idx = CODONS.index("AAC")  # AAA -> AAC mutation
+            aag_idx = CODONS.index("AAG")  # AAA -> AAG mutation
+
+            # Set up parent and child codon indices
+            codon_parents_idxss = data["codon_parents_idxss"]
+            codon_children_idxss = codon_parents_idxss.clone()
+
+            # Create mutation indicators - add mutations to test
+            codon_mutation_indicators = torch.zeros_like(
+                codon_parents_idxss, dtype=torch.bool
+            )
+
+            # Add deterministic mutations for reproducible testing
+            for seq_idx in range(batch_size):
+                # Mutate first position for even sequences
+                if seq_idx % 2 == 0 and sequence_length > 0:
+                    codon_children_idxss[seq_idx, 0] = aac_idx
+                    codon_mutation_indicators[seq_idx, 0] = True
+
+                # Mutate second position for all sequences if length > 1
+                if sequence_length > 1:
+                    codon_children_idxss[seq_idx, 1] = aag_idx
+                    codon_mutation_indicators[seq_idx, 1] = True
+
+            # Create AA parents indices (AAA -> K)
+            aa_parents_idxss = torch.full(
+                (batch_size, sequence_length),
+                AA_STR_SORTED.index("K"),  # AAA codes for Lysine (K)
+                dtype=torch.long,
+            )
+
+            # All positions valid
+            masks = torch.ones((batch_size, sequence_length), dtype=torch.bool)
+
+            # Create selection factors (in log space)
+            torch.manual_seed(42)  # For reproducible results
+            selection_factors = (
+                torch.randn(batch_size, sequence_length, 20, requires_grad=True) * 0.1
+            )
+
+            # Test both sparse and dense formats
+            for format_name, neutral_rates_data in [
+                ("sparse", data["sparse_rates"]),
+                ("dense", data["dense_rates"]),
+            ]:
+                # Compute loss with vectorized implementation
+                loss_vectorized = compute_whichmut_loss_batch(
+                    selection_factors,
+                    neutral_rates_data,
+                    codon_parents_idxss,
+                    codon_children_idxss,
+                    codon_mutation_indicators,
+                    aa_parents_idxss,
+                    masks,
+                )
+
+                # Compute loss with iterative implementation
+                loss_iterative = compute_whichmut_loss_batch_iterative(
+                    selection_factors,
+                    neutral_rates_data,
+                    codon_parents_idxss,
+                    codon_children_idxss,
+                    codon_mutation_indicators,
+                    aa_parents_idxss,
+                    masks,
+                )
+
+                # Verify implementations produce identical results
+                assert torch.allclose(
+                    loss_vectorized, loss_iterative, rtol=1e-6, atol=1e-8
+                ), f"Implementation mismatch for {format_name} format, batch_size={batch_size}, seq_len={sequence_length}: Vectorized={loss_vectorized.item():.8f}, Iterative={loss_iterative.item():.8f}"
+
+                # Verify both losses are valid
+                assert torch.isfinite(
+                    loss_vectorized
+                ), f"Vectorized loss is not finite: {loss_vectorized}"
+                assert torch.isfinite(
+                    loss_iterative
+                ), f"Iterative loss is not finite: {loss_iterative}"
+                assert (
+                    loss_vectorized >= 0
+                ), f"Vectorized loss is negative: {loss_vectorized}"
+                assert (
+                    loss_iterative >= 0
+                ), f"Iterative loss is negative: {loss_iterative}"
+
+                # Verify both losses require gradients
+                assert (
+                    loss_vectorized.requires_grad
+                ), "Vectorized loss should require gradients"
+                assert (
+                    loss_iterative.requires_grad
+                ), "Iterative loss should require gradients"
+
+    def test_vectorized_vs_iterative_edge_cases(self):
+        """Test vectorized vs iterative implementations on edge cases."""
+        data = create_equivalent_data(batch_size=2, sequence_length=3)
+
+        # Test case 1: No mutations
+        codon_parents_idxss = data["codon_parents_idxss"]
+        codon_children_idxss = codon_parents_idxss.clone()  # Same as parents
+        codon_mutation_indicators = torch.zeros_like(
+            codon_parents_idxss, dtype=torch.bool
+        )  # No mutations
+
+        aa_parents_idxss = torch.full(
+            (2, 3), AA_STR_SORTED.index("K"), dtype=torch.long
+        )
+        masks = torch.ones((2, 3), dtype=torch.bool)
+        selection_factors = torch.randn(2, 3, 20) * 0.1
+
+        # Test both implementations with no mutations
+        for format_name, neutral_rates_data in [
+            ("sparse", data["sparse_rates"]),
+            ("dense", data["dense_rates"]),
+        ]:
+            loss_vec = compute_whichmut_loss_batch(
+                selection_factors,
+                neutral_rates_data,
+                codon_parents_idxss,
+                codon_children_idxss,
+                codon_mutation_indicators,
+                aa_parents_idxss,
+                masks,
+            )
+            loss_iter = compute_whichmut_loss_batch_iterative(
+                selection_factors,
+                neutral_rates_data,
+                codon_parents_idxss,
+                codon_children_idxss,
+                codon_mutation_indicators,
+                aa_parents_idxss,
+                masks,
+            )
+
+            assert (
+                loss_vec.item() == 0.0
+            ), f"Expected zero loss for no mutations ({format_name})"
+            assert (
+                loss_iter.item() == 0.0
+            ), f"Expected zero loss for no mutations ({format_name})"
+            assert torch.allclose(
+                loss_vec, loss_iter
+            ), f"No-mutation case should match ({format_name})"
+
+    def test_vectorized_gradient_compatibility(self):
+        """Test that vectorized implementation maintains gradient compatibility."""
+        data = create_equivalent_data(batch_size=2, sequence_length=3)
+
+        # Create test data with mutations
+        codon_parents_idxss = data["codon_parents_idxss"]
+        codon_children_idxss = codon_parents_idxss.clone()
+        codon_children_idxss[0, 0] = CODONS.index("AAC")  # Add one mutation
+        codon_mutation_indicators = torch.zeros_like(
+            codon_parents_idxss, dtype=torch.bool
+        )
+        codon_mutation_indicators[0, 0] = True
+
+        aa_parents_idxss = torch.full(
+            (2, 3), AA_STR_SORTED.index("K"), dtype=torch.long
+        )
+        masks = torch.ones((2, 3), dtype=torch.bool)
+
+        # Create selection factors that require gradients
+        selection_factors_base = torch.randn(2, 3, 20) * 0.1
+        selection_factors = selection_factors_base.requires_grad_(True)
+
+        # Test gradient computation with vectorized implementation
+        loss = compute_whichmut_loss_batch(
+            selection_factors,
+            data["sparse_rates"],
+            codon_parents_idxss,
+            codon_children_idxss,
+            codon_mutation_indicators,
+            aa_parents_idxss,
+            masks,
+        )
+
+        # Backward pass
+        loss.backward()
+
+        # Check that gradients were computed
+        assert selection_factors.grad is not None, "No gradients computed!"
+        assert torch.isfinite(selection_factors.grad).all(), "Invalid gradients!"
+        assert (
+            selection_factors.grad.shape == selection_factors.shape
+        ), "Gradient shape mismatch!"
 
 
 class TestTrainerMethodExtraction:

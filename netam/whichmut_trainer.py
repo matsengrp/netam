@@ -16,7 +16,10 @@ from typing import Dict, Optional
 from tqdm import tqdm
 
 from netam.codon_table import FUNCTIONAL_CODON_SINGLE_MUTATIONS
-from netam.whichmut_dataset import get_sparse_neutral_rate
+from netam.whichmut_dataset import (
+    get_sparse_neutral_rate,
+    get_sparse_neutral_rates_vectorized,
+)
 
 
 def compute_whichmut_loss_batch(
@@ -71,26 +74,144 @@ def compute_whichmut_loss_batch(
         linear_selection_factors, neutral_rates_data, codon_parents_idxss
     )  # (N,)
 
-    # 2. For each observed mutation, compute log probability
-    # For now, keep explicit loops for clarity and correctness verification
+    # 2. Vectorized computation of log probabilities for all mutations
+    # Create boolean mask for valid mutations (mutated AND masked positions)
+    mutation_mask = codon_mutation_indicators & masks  # (N, L_codon)
+
+    # Early exit if no mutations
+    if not mutation_mask.any():
+        return torch.tensor(0.0, device=selection_factors.device, requires_grad=True)
+
+    # Get indices of all mutations using nonzero()
+    mutation_indices = mutation_mask.nonzero(
+        as_tuple=False
+    )  # (num_mutations, 2) -> [seq_idx, codon_pos]
+
+    if mutation_indices.numel() == 0:
+        return torch.tensor(0.0, device=selection_factors.device, requires_grad=True)
+
+    # Extract sequence and position indices for all mutations
+    seq_indices = mutation_indices[:, 0]  # (num_mutations,)
+    pos_indices = mutation_indices[:, 1]  # (num_mutations,)
+
+    # Gather parent and child codon indices for all mutations
+    parent_codon_indices = codon_parents_idxss[
+        seq_indices, pos_indices
+    ]  # (num_mutations,)
+    child_codon_indices = codon_children_idxss[
+        seq_indices, pos_indices
+    ]  # (num_mutations,)
+
+    # Get neutral rates for all mutations
+    if use_sparse:
+        # Vectorized sparse lookup
+        neutral_rates = get_sparse_neutral_rates_vectorized(
+            neutral_rates_data,
+            seq_indices,
+            pos_indices,
+            parent_codon_indices,
+            child_codon_indices,
+        )
+    else:
+        # Dense format lookup using advanced indexing
+        neutral_rates = neutral_rates_data[
+            seq_indices, pos_indices, parent_codon_indices, child_codon_indices
+        ]  # (num_mutations,)
+
+    # Convert child codon indices to AA indices
+    from netam.codon_table import AA_IDX_FROM_CODON_IDX
+
+    # Create vectorized codon->AA lookup tensor
+    device = child_codon_indices.device
+    codon_to_aa = torch.zeros(65, dtype=torch.long, device=device)
+    for codon_idx, aa_idx in AA_IDX_FROM_CODON_IDX.items():
+        codon_to_aa[codon_idx] = aa_idx
+
+    # Convert all child codon indices to AA indices
+    child_aa_indices = codon_to_aa[child_codon_indices]  # (num_mutations,)
+
+    # Filter out mutations to stop codons (AA index >= 20)
+    valid_aa_mask = child_aa_indices < 20
+
+    if not valid_aa_mask.any():
+        return torch.tensor(0.0, device=selection_factors.device, requires_grad=True)
+
+    # Apply filter to keep only valid AA mutations
+    seq_indices = seq_indices[valid_aa_mask]
+    pos_indices = pos_indices[valid_aa_mask]
+    neutral_rates = neutral_rates[valid_aa_mask]
+    child_aa_indices = child_aa_indices[valid_aa_mask]
+
+    # Ensure AA positions are within bounds
+    aa_pos_mask = pos_indices < L_aa
+    if not aa_pos_mask.any():
+        return torch.tensor(0.0, device=selection_factors.device, requires_grad=True)
+
+    # Apply AA position filter
+    seq_indices = seq_indices[aa_pos_mask]
+    pos_indices = pos_indices[aa_pos_mask]
+    neutral_rates = neutral_rates[aa_pos_mask]
+    child_aa_indices = child_aa_indices[aa_pos_mask]
+
+    # Gather selection factors for all valid mutations
+    selection_factors_mut = linear_selection_factors[
+        seq_indices, pos_indices, child_aa_indices
+    ]  # (num_valid_mutations,)
+
+    # Gather normalization constants for all mutations
+    Z_values = normalization_constants[seq_indices]  # (num_valid_mutations,)
+
+    # Compute probabilities: p = (λ * f) / Z
+    probs = (neutral_rates * selection_factors_mut) / Z_values
+
+    # Compute log probabilities with numerical stability
+    log_probs = torch.log(probs + 1e-10)
+
+    # Return negative log likelihood
+    total_log_likelihood = log_probs.sum()
+    return -total_log_likelihood
+
+
+def compute_whichmut_loss_batch_iterative(
+    selection_factors: torch.Tensor,
+    neutral_rates_data: torch.Tensor,
+    codon_parents_idxss: torch.Tensor,
+    codon_children_idxss: torch.Tensor,
+    codon_mutation_indicators: torch.Tensor,
+    aa_parents_idxss: torch.Tensor,
+    masks: torch.Tensor,
+) -> torch.Tensor:
+    """Original iterative implementation for comparison/testing."""
+    use_sparse = isinstance(neutral_rates_data, dict)
+    N, L_codon = codon_parents_idxss.shape
+    _, L_aa, _ = selection_factors.shape
+
+    linear_selection_factors = torch.exp(selection_factors)
+
+    if use_sparse:
+        device = selection_factors.device
+        neutral_rates_data = {
+            "indices": neutral_rates_data["indices"].to(device),
+            "values": neutral_rates_data["values"].to(device),
+            "n_mutations": neutral_rates_data["n_mutations"].to(device),
+        }
+
+    normalization_constants = compute_normalization_constants(
+        linear_selection_factors, neutral_rates_data, codon_parents_idxss
+    )
+
+    # Original nested loop implementation
     log_probs = []
-    mutations_count = 0
-
     for seq_idx in range(N):
-
         for codon_pos in range(L_codon):
-            # Only process positions that actually mutated and are valid
             if (
                 codon_mutation_indicators[seq_idx, codon_pos]
                 and masks[seq_idx, codon_pos]
             ):
-                mutations_count += 1
                 parent_codon_idx = codon_parents_idxss[seq_idx, codon_pos]
                 child_codon_idx = codon_children_idxss[seq_idx, codon_pos]
 
-                # Get λ_{j,c->c'} for this specific mutation
                 if use_sparse:
-                    # Look up rate in sparse format
                     neutral_rate = get_sparse_neutral_rate(
                         neutral_rates_data,
                         seq_idx,
@@ -99,41 +220,26 @@ def compute_whichmut_loss_batch(
                         child_codon_idx,
                     )
                 else:
-                    # Dense format lookup
                     neutral_rate = neutral_rates_data[
                         seq_idx, codon_pos, parent_codon_idx, child_codon_idx
                     ]
 
-                # Get selection factor f_{j,a->a'} for the corresponding AA mutation
-                # Map from codon position to AA position (assuming 1:1 mapping)
-                aa_pos = codon_pos  # Assuming 1:1 mapping for now
-                if aa_pos < L_aa:  # Ensure we don't go out of bounds
-                    # Get child amino acid index from codon
+                aa_pos = codon_pos
+                if aa_pos < L_aa:
                     from netam.codon_table import AA_IDX_FROM_CODON_IDX
 
                     child_aa_idx = AA_IDX_FROM_CODON_IDX[child_codon_idx.item()]
-
-                    # Get selection factor for this AA change
                     selection_factor = linear_selection_factors[
                         seq_idx, aa_pos, child_aa_idx
                     ]
-
-                    # Compute probability p_{j,c->c'} = λ * f / Z_n
                     Z = normalization_constants[seq_idx]
                     prob = (neutral_rate * selection_factor) / Z
-
-                    # Add log probability to loss
-                    log_probs.append(
-                        torch.log(prob + 1e-10)
-                    )  # Small epsilon for numerical stability
+                    log_probs.append(torch.log(prob + 1e-10))
 
     if len(log_probs) == 0:
-        # No mutations observed, return zero loss
         return torch.tensor(0.0, device=selection_factors.device, requires_grad=True)
 
-    # Return negative log likelihood (we want to maximize likelihood = minimize negative log likelihood)
     total_log_likelihood = torch.stack(log_probs).sum()
-
     return -total_log_likelihood
 
 

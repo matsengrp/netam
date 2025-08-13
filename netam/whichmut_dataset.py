@@ -51,6 +51,50 @@ def get_sparse_neutral_rate(
     return torch.tensor(0.0, device=values.device, dtype=values.dtype)
 
 
+def get_sparse_neutral_rates_vectorized(
+    sparse_data, seq_indices, pos_indices, parent_codon_indices, child_codon_indices
+):
+    """Vectorized lookup of neutral rates in sparse format.
+
+    Args:
+        sparse_data: Dict with 'indices', 'values', 'n_mutations'
+        seq_indices: (num_mutations,) - sequence indices
+        pos_indices: (num_mutations,) - codon position indices
+        parent_codon_indices: (num_mutations,) - parent codon indices
+        child_codon_indices: (num_mutations,) - child codon indices
+
+    Returns:
+        (num_mutations,) tensor of neutral rates
+    """
+    num_mutations = seq_indices.shape[0]
+    device = seq_indices.device
+
+    # Initialize result tensor
+    neutral_rates = torch.zeros(
+        num_mutations, device=device, dtype=sparse_data["values"].dtype
+    )
+
+    # For each mutation, search in the sparse data
+    for i in range(num_mutations):
+        seq_idx = seq_indices[i]
+        pos_idx = pos_indices[i]
+        parent_idx = parent_codon_indices[i]
+        child_idx = child_codon_indices[i]
+
+        # Get sparse data for this (seq, pos) pair
+        indices = sparse_data["indices"][seq_idx, pos_idx]  # (max_mutations, 2)
+        values = sparse_data["values"][seq_idx, pos_idx]  # (max_mutations,)
+        n_muts = sparse_data["n_mutations"][seq_idx, pos_idx].item()
+
+        # Search for matching transition
+        for j in range(n_muts):
+            if indices[j, 0] == parent_idx and indices[j, 1] == child_idx:
+                neutral_rates[i] = values[j]
+                break
+
+    return neutral_rates
+
+
 class WhichmutCodonDataset:
     """Dataset for whichmut training using precomputed neutral rates.
 
