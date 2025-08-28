@@ -10,6 +10,17 @@ format:
 	docformatter --in-place --black --recursive netam tests || echo "Docformatter made changes"
 	black netam tests
 
+format-commit-push:
+	@make format || true
+	@if [ -n "$$(git status --porcelain)" ]; then \
+		git add -A && \
+		git commit -m "make format" && \
+		git push; \
+	else \
+		echo "No formatting changes to commit"; \
+		git push; \
+	fi
+
 checkformat:
 	docformatter --check --black --recursive netam tests
 	black --check netam tests

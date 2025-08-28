@@ -34,9 +34,9 @@ PACKAGE_LOCATIONS_AND_CONTENTS = (
         ],
     ],
     [
-        "dnsm-1.0.0.zip",
-        "https://github.com/matsengrp/dnsm-models/archive/refs/tags/v1.0.0.zip",
-        "dnsm-models-1.0.0/models",
+        "dnsm-1.0.1.zip",
+        "https://github.com/matsengrp/dnsm-models/archive/v1.0.1.zip",
+        "dnsm-models-1.0.1/models",
         [
             "DNSMHumV1.0-1M",
             "DNSMHumV1.0-4M",
