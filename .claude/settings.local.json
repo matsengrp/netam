@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mv:*)",
+      "Bash(ls:*)",
+      "Bash(python:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(git grep:*)",
+      "Bash(for file in issue-*.md)",
+      "Bash(do echo \"=== $file ===\")",
+      "Bash(done)",
+      "Bash(gh issue create:*)",
+      "Bash(gh issue close:*)",
+      "Bash(gh release:*)",
+      "WebSearch",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:github.com)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git init:*)",
+      "Bash(gh repo create:*)",
+      "Bash(git pull:*)",
+      "Bash(git push:*)",
+      "Bash(git checkout:*)",
+      "Bash(source:*)",
+      "Read(/private/tmp/**)",
+      "Bash(gh repo view:*)",
+      "Bash(gh repo edit:*)"
+    ],
+    "deny": [],
+    "additionalDirectories": [
+      "/Users/matsen/re/dnsm-experiments-mbe"
+    ]
+  }
+}
