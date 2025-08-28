@@ -25,10 +25,19 @@ The models are named according to the following convention:
 
 where:
 
-* `Modeltype` is the type of model, such as `Thrifty` for the "thrifty" SHM model
+* `Modeltype` is the type of model, such as `Thrifty` for the "thrifty" SHM model or `DNSM` for Deep Natural Selection Models
 * `Species` is the species, such as `Hum` for human
 * `XX` is the version of the model
 * `YY` is any model-specific information, such as the number of parameters
+
+### Available Models
+
+**Thrifty Models:**
+- `ThriftyHumV0.2-20`, `ThriftyHumV0.2-45`, `ThriftyHumV0.2-59`: SHM models trained on human data
+
+**DNSM Models:**
+- `DNSMHumV1.0-1M`: 1M parameter Deep Natural Selection Model trained on human data
+- `DNSMHumV1.0-4M`: 4M parameter Deep Natural Selection Model trained on human data
 
 If you need to clear out the cache of pretrained models, you can use the command-line call:
 
@@ -57,7 +66,7 @@ We target Python 3.9, but 3.11 is faster.
 If you are running one of the experiment repos, such as:
 
 * [thrifty-experiments-1](https://github.com/matsengrp/thrifty-experiments-1/)
-* [dnsm-experiments-1](https://github.com/matsengrp/dnsm-experiments-1/)
+* [dnsm-experiments-mbe](https://github.com/matsengrp/dnsm-experiments-mbe/)
 
 you will want to visit those repos and follow the installation instructions there.
 
