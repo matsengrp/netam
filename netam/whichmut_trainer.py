@@ -303,6 +303,8 @@ def compute_normalization_constants_dense(
                 ]
 
                 # Skip zero rates in dense implementation (sparse already excludes them)
+                # TODO this should probably never be zero but I tested this already.
+                # since this is the slow implimentation maybe it's worth keeping the assertion
                 if neutral_rate <= 0:
                     continue
                 # Get corresponding amino acid for child codon

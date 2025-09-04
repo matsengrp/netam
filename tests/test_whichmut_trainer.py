@@ -406,6 +406,302 @@ def test_compute_normalization_constants():
     assert torch.abs(Z[0] - 3.5) < 0.01
 
 
+def test_compute_normalization_constants_comprehensive():  # noqa: C901
+    """Comprehensive test for normalization constant computation covering various
+    scenarios."""
+
+    # Test 1: Basic functionality with uniform rates and selection factors
+    def test_uniform_case():
+        """Test with uniform neutral rates and selection factors."""
+        N, L_codon, L_aa = 2, 3, 3
+
+        # All selection factors = 1.0 (exp(0) = 1)
+        selection_factors = torch.ones(N, L_aa, 20)
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+
+        # Use same codon (AAA) everywhere for simplicity
+        aaa_idx = CODONS.index("AAA")
+        codon_parents_idxss = torch.full((N, L_codon), aaa_idx, dtype=torch.long)
+
+        # Set uniform rate for all mutations
+        uniform_rate = 0.05
+        for seq_idx in range(N):
+            for pos in range(L_codon):
+                set_neutral_rates_for_codon(
+                    neutral_rates_tensor, seq_idx, pos, aaa_idx, uniform_rate
+                )
+
+        Z = compute_normalization_constants(
+            selection_factors, neutral_rates_tensor, codon_parents_idxss
+        )
+
+        # Calculate expected value
+        # AAA has 8 functional mutations to non-stop codons
+        mutations_per_codon = len(
+            [
+                m
+                for m in FUNCTIONAL_CODON_SINGLE_MUTATIONS[aaa_idx]
+                if AA_IDX_FROM_CODON_IDX[m[0]] < 20
+            ]
+        )
+        expected_Z = mutations_per_codon * uniform_rate * L_codon  # per sequence
+
+        assert Z.shape == (N,)
+        assert torch.allclose(Z, torch.full((N,), expected_Z), rtol=1e-5)
+
+    # Test 2: Variable selection factors
+    def test_variable_selection():
+        """Test with different selection factors affecting normalization."""
+        N, L_codon, L_aa = 1, 2, 2
+
+        # Non-uniform selection factors (in linear space, not log)
+        selection_factors = torch.ones(N, L_aa, 20)
+        # Make specific amino acids have different selection
+        lys_idx = AA_STR_SORTED.index("K")  # AAA codes for K
+        asn_idx = AA_STR_SORTED.index("N")  # AAC codes for N
+        selection_factors[0, 0, lys_idx] = 2.0  # Double selection for K at position 0
+        selection_factors[0, 1, asn_idx] = 3.0  # Triple selection for N at position 1
+
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+
+        # Use AAA codons
+        aaa_idx = CODONS.index("AAA")
+        codon_parents_idxss = torch.full((N, L_codon), aaa_idx, dtype=torch.long)
+
+        # Set rates manually for specific mutations
+        for seq_idx in range(N):
+            for pos in range(L_codon):
+                for child_idx, _, _ in FUNCTIONAL_CODON_SINGLE_MUTATIONS[aaa_idx]:
+                    if AA_IDX_FROM_CODON_IDX[child_idx] < 20:  # Skip stop codons
+                        neutral_rates_tensor[seq_idx, pos, aaa_idx, child_idx] = 0.1
+
+        Z = compute_normalization_constants(
+            selection_factors, neutral_rates_tensor, codon_parents_idxss
+        )
+
+        # Manual calculation:
+        # Position 0: Sum of (rate * selection_factor) for all mutations
+        # Position 1: Sum of (rate * selection_factor) for all mutations
+        expected_Z = 0.0
+        for pos in range(L_codon):
+            for child_idx, _, _ in FUNCTIONAL_CODON_SINGLE_MUTATIONS[aaa_idx]:
+                child_aa = AA_IDX_FROM_CODON_IDX[child_idx]
+                if child_aa < 20:
+                    rate = 0.1
+                    selection = selection_factors[0, pos, child_aa].item()
+                    expected_Z += rate * selection
+
+        assert torch.abs(Z[0] - expected_Z) < 1e-5
+
+    # Test 3: Mixed codon types
+    def test_mixed_codons():
+        """Test with different codon types having different mutation patterns."""
+        N, L_codon, L_aa = 1, 3, 3
+
+        selection_factors = torch.ones(N, L_aa, 20)
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+
+        # Use different codons with known mutation counts
+        atg_idx = CODONS.index("ATG")  # Met, 8 mutations
+        tgg_idx = CODONS.index("TGG")  # Trp, 8 mutations
+        gcc_idx = CODONS.index("GCC")  # Ala, 8 mutations
+
+        codon_parents_idxss = torch.tensor([[atg_idx, tgg_idx, gcc_idx]])
+
+        # Set different rates for each codon
+        rates = [0.01, 0.02, 0.03]
+        for pos, (codon_idx, rate) in enumerate(
+            zip([atg_idx, tgg_idx, gcc_idx], rates)
+        ):
+            set_neutral_rates_for_codon(neutral_rates_tensor, 0, pos, codon_idx, rate)
+
+        Z = compute_normalization_constants(
+            selection_factors, neutral_rates_tensor, codon_parents_idxss
+        )
+
+        # Calculate expected Z
+        expected_Z = 0.0
+        for pos, (codon_idx, rate) in enumerate(
+            zip([atg_idx, tgg_idx, gcc_idx], rates)
+        ):
+            mutations = [
+                m
+                for m in FUNCTIONAL_CODON_SINGLE_MUTATIONS[codon_idx]
+                if AA_IDX_FROM_CODON_IDX[m[0]] < 20
+            ]
+            expected_Z += len(mutations) * rate
+
+        assert torch.abs(Z[0] - expected_Z) < 1e-5
+
+    # Test 4: Batch processing
+    def test_batch_processing():
+        """Test that batch processing works correctly."""
+        N, L_codon, L_aa = 4, 2, 2
+
+        selection_factors = torch.ones(N, L_aa, 20)
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+
+        aaa_idx = CODONS.index("AAA")
+        codon_parents_idxss = torch.full((N, L_codon), aaa_idx, dtype=torch.long)
+
+        # Different rates for each sequence
+        for seq_idx in range(N):
+            rate = 0.1 * (seq_idx + 1)  # 0.1, 0.2, 0.3, 0.4
+            for pos in range(L_codon):
+                set_neutral_rates_for_codon(
+                    neutral_rates_tensor, seq_idx, pos, aaa_idx, rate
+                )
+
+        Z = compute_normalization_constants(
+            selection_factors, neutral_rates_tensor, codon_parents_idxss
+        )
+
+        assert Z.shape == (N,)
+        # Each sequence should have proportionally different Z
+        mutations_per_codon = len(
+            [
+                m
+                for m in FUNCTIONAL_CODON_SINGLE_MUTATIONS[aaa_idx]
+                if AA_IDX_FROM_CODON_IDX[m[0]] < 20
+            ]
+        )
+        for seq_idx in range(N):
+            expected_Z = mutations_per_codon * 0.1 * (seq_idx + 1) * L_codon
+            assert torch.abs(Z[seq_idx] - expected_Z) < 1e-5
+
+    # Test 5: Zero rates handling
+    def test_zero_rates():
+        """Test handling of zero neutral rates."""
+        N, L_codon, L_aa = 1, 2, 2
+
+        selection_factors = torch.ones(N, L_aa, 20)
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+
+        aaa_idx = CODONS.index("AAA")
+        codon_parents_idxss = torch.full((N, L_codon), aaa_idx, dtype=torch.long)
+
+        # Set rates for only some mutations
+        aac_idx = CODONS.index("AAC")
+        aag_idx = CODONS.index("AAG")
+        neutral_rates_tensor[0, 0, aaa_idx, aac_idx] = 0.1
+        neutral_rates_tensor[0, 1, aaa_idx, aag_idx] = 0.2
+        # All other rates remain zero
+
+        Z = compute_normalization_constants(
+            selection_factors, neutral_rates_tensor, codon_parents_idxss
+        )
+
+        # Only two mutations contribute
+        expected_Z = 0.1 + 0.2
+        assert torch.abs(Z[0] - expected_Z) < 1e-7
+
+    # Test 6: Stop codon handling
+    def test_stop_codon_exclusion():
+        """Test that stop codons are properly excluded from normalization."""
+        N, L_codon, L_aa = 1, 1, 1
+
+        selection_factors = torch.ones(N, L_aa, 20) * 2.0  # All selection = 2
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+
+        # Use a codon that can mutate to stop codons
+        cag_idx = CODONS.index("CAG")  # Gln - can mutate to TAG (stop)
+        codon_parents_idxss = torch.tensor([[cag_idx]])
+
+        # Set rates for all mutations including stop
+        for child_idx, _, _ in FUNCTIONAL_CODON_SINGLE_MUTATIONS[cag_idx]:
+            neutral_rates_tensor[0, 0, cag_idx, child_idx] = 0.1
+
+        Z = compute_normalization_constants(
+            selection_factors, neutral_rates_tensor, codon_parents_idxss
+        )
+
+        # Count only non-stop mutations
+        non_stop_mutations = 0
+        for child_idx, _, _ in FUNCTIONAL_CODON_SINGLE_MUTATIONS[cag_idx]:
+            if AA_IDX_FROM_CODON_IDX[child_idx] < 20:
+                non_stop_mutations += 1
+
+        expected_Z = non_stop_mutations * 0.1 * 2.0  # rate * selection
+        assert torch.abs(Z[0] - expected_Z) < 1e-6
+
+    # Test 7: Numerical stability with extreme values
+    def test_numerical_stability():
+        """Test numerical stability with very small and large values."""
+        N, L_codon, L_aa = 2, 2, 2
+
+        # Test with very small rates
+        selection_factors = torch.ones(N, L_aa, 20)
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+
+        aaa_idx = CODONS.index("AAA")
+        codon_parents_idxss = torch.full((N, L_codon), aaa_idx, dtype=torch.long)
+
+        # Very small rates
+        tiny_rate = 1e-10
+        for seq_idx in range(1):  # First sequence with tiny rates
+            for pos in range(L_codon):
+                set_neutral_rates_for_codon(
+                    neutral_rates_tensor, seq_idx, pos, aaa_idx, tiny_rate
+                )
+
+        # Large rates for second sequence
+        large_rate = 1e3
+        for pos in range(L_codon):
+            set_neutral_rates_for_codon(
+                neutral_rates_tensor, 1, pos, aaa_idx, large_rate
+            )
+
+        Z = compute_normalization_constants(
+            selection_factors, neutral_rates_tensor, codon_parents_idxss
+        )
+
+        assert torch.all(torch.isfinite(Z))
+        assert torch.all(Z >= 0)
+        assert Z[0] < Z[1]  # Small rates should give smaller Z
+
+    # Test 8: GPU compatibility (if available)
+    def test_gpu_compatibility():
+        """Test that computation works on GPU if available."""
+        if not torch.cuda.is_available():
+            print("Skipping GPU test - GPU not available")
+            return
+
+        device = torch.device("cuda:0")
+        N, L_codon, L_aa = 2, 3, 3
+
+        selection_factors = torch.ones(N, L_aa, 20, device=device)
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65, device=device)
+
+        aaa_idx = CODONS.index("AAA")
+        codon_parents_idxss = torch.full(
+            (N, L_codon), aaa_idx, dtype=torch.long, device=device
+        )
+
+        # Set rates on GPU
+        for seq_idx in range(N):
+            for pos in range(L_codon):
+                for child_idx, _, _ in FUNCTIONAL_CODON_SINGLE_MUTATIONS[aaa_idx]:
+                    if AA_IDX_FROM_CODON_IDX[child_idx] < 20:
+                        neutral_rates_tensor[seq_idx, pos, aaa_idx, child_idx] = 0.1
+
+        Z = compute_normalization_constants(
+            selection_factors, neutral_rates_tensor, codon_parents_idxss
+        )
+
+        assert Z.device == device
+        assert torch.all(torch.isfinite(Z))
+
+    # Run all sub-tests
+    test_uniform_case()
+    test_variable_selection()
+    test_mixed_codons()
+    test_batch_processing()
+    test_zero_rates()
+    test_stop_codon_exclusion()
+    test_numerical_stability()
+    test_gpu_compatibility()
+
+
 def test_codon_to_aa_index_mapping():
     """Test the genetic code mapping using our helper function."""
     # Test a few known mappings
