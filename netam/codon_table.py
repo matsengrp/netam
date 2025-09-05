@@ -13,6 +13,7 @@ from netam.sequences import (
     idx_of_codon_allowing_ambiguous,
     iter_codons,
     translate_sequences,
+    CODON_TO_INDEX,
 )
 from netam.common import BIG
 
@@ -90,6 +91,7 @@ STOP_CODON_INDICATOR = build_stop_codon_indicator_tensor()
 
 STOP_CODON_ZAPPER = STOP_CODON_INDICATOR * -BIG
 
+
 # We build a table that will allow us to look up the amino acid index
 # from the codon indices. Argmax gets the aa index.
 AA_IDX_FROM_CODON = CODON_AA_INDICATOR_MATRIX.argmax(dim=1).view(4, 4, 4)
@@ -106,6 +108,27 @@ def aa_idxs_of_codon_idxs(codon_idx_tensor):
             codon_idx_tensor[:, 2],
         )
     ]
+
+
+# iterate through codons,
+# tranlate to amino acids, and build a mapping
+# from codon index to amino acid index.
+# This is used to convert codon indices to amino acid indices.
+def iter_codon_aa_indices():
+    """Yield tuples of (codon_index, amino_acid_index) for all codons."""
+
+    for codon, codon_idx in CODON_TO_INDEX.items():
+        try:
+            aa = translate_sequences([codon])[0]
+            aa_idx = AA_STR_SORTED.index(aa)
+            yield codon_idx, aa_idx
+        except ValueError:  # Handle STOP codon
+            continue
+
+
+AA_IDX_FROM_CODON_IDX = {
+    codon_idx: aa_idx for codon_idx, aa_idx in iter_codon_aa_indices()
+}
 
 
 def generate_codon_neighbor_matrix():
@@ -125,7 +148,6 @@ def generate_codon_neighbor_matrix():
         matrix[i, mutant_aa_indices] = True
 
     # Row 64 (AMBIGUOUS_CODON_IDX) remains all False
-
     return torch.tensor(matrix, dtype=torch.bool)
 
 
@@ -158,6 +180,21 @@ def generate_codon_single_mutation_map():
 # Global tensors/mappings for efficient lookups
 CODON_NEIGHBOR_MATRIX = generate_codon_neighbor_matrix()  # (65, 20)
 CODON_SINGLE_MUTATIONS = generate_codon_single_mutation_map()
+
+
+STOP_CODON_IDXS = [CODON_TO_INDEX[codon] for codon in STOP_CODONS]
+# is a mapping from parent codon index to a list of tuples
+# (child_codon_idx, nt_position, new_base)
+# for all single mutations except those which result in stop codons.
+FUNCTIONAL_CODON_SINGLE_MUTATIONS = {
+    parent_idx: [
+        (child_idx, nt_pos, new_base)
+        for child_idx, nt_pos, new_base in mutations
+        if child_idx not in STOP_CODON_IDXS  # Exclude stop codons
+    ]
+    for parent_idx, mutations in CODON_SINGLE_MUTATIONS.items()
+    if parent_idx not in STOP_CODON_IDXS  # Exclude stop codons
+}
 
 
 def encode_codon_mutations(
