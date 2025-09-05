@@ -37,9 +37,8 @@ def set_neutral_rates_for_codon(
     """Set neutral rates for all possible single mutations from a parent codon."""
     if parent_codon_idx in FUNCTIONAL_CODON_SINGLE_MUTATIONS:
         for child_idx, _, _ in FUNCTIONAL_CODON_SINGLE_MUTATIONS[parent_codon_idx]:
-            neutral_rates_tensor[seq_idx, codon_pos, parent_codon_idx, child_idx] = (
-                default_rate
-            )
+            # New dense format: store rate at child codon index
+            neutral_rates_tensor[seq_idx, codon_pos, child_idx] = default_rate
 
 
 def create_equivalent_data(
@@ -64,8 +63,8 @@ def create_equivalent_data(
     )
     linear_selection_factors = torch.exp(selection_factors)
 
-    # Create dense neutral rates
-    dense_rates = torch.zeros(batch_size, sequence_length, 65, 65, device=device)
+    # Create dense neutral rates (optimized format: one rate per child codon)
+    dense_rates = torch.zeros(batch_size, sequence_length, 65, device=device)
 
     # Create sparse data structures
     functional_mutations = FUNCTIONAL_CODON_SINGLE_MUTATIONS[aaa_idx]
@@ -94,8 +93,8 @@ def create_equivalent_data(
                 # Use deterministic rate based on position and mutation
                 rate = 0.01 * (1 + 0.1 * seq_idx + 0.05 * pos + 0.02 * mut_idx)
 
-                # Dense format
-                dense_rates[seq_idx, pos, aaa_idx, child_idx] = rate
+                # Dense format: store rate at child codon index
+                dense_rates[seq_idx, pos, child_idx] = rate
 
                 # Sparse format
                 indices[seq_idx, pos, mut_idx, 0] = aaa_idx
@@ -113,7 +112,7 @@ def create_equivalent_data(
     sparse_rates = {
         "indices": indices,
         "values": values,
-        "n_mutations": n_mutations_tensor,
+        "n_possible_mutations": n_mutations_tensor,
     }
 
     return {
@@ -132,8 +131,8 @@ def test_whichmut_codon_dataset_creation():
         ["ATGAAACCG", "TGGCCCGGG"]
     )  # CCC->CCG mutation in first seq
 
-    # Mock neutral rates tensor (2 sequences, 3 codon positions, 65x65 transitions)
-    neutral_rates_tensor = torch.zeros(2, 3, 65, 65)
+    # Mock neutral rates tensor (2 sequences, 3 codon positions, 65 child codons)
+    neutral_rates_tensor = torch.zeros(2, 3, 65)
 
     # Mock other required tensors
     codon_parents_idxss = torch.zeros(2, 3, dtype=torch.long)
@@ -220,7 +219,7 @@ def test_compute_whichmut_loss_simple_case():
     aa_parents_idxss = torch.tensor([[met_idx, trp_idx]])  # (1, 2)
 
     # Set up neutral rates tensor - need rates for ALL possible single mutations
-    neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+    neutral_rates_tensor = torch.zeros(N, L_codon, 65)
 
     # Set neutral rates for all possible mutations from parent codons
     set_neutral_rates_for_codon(
@@ -231,16 +230,16 @@ def test_compute_whichmut_loss_simple_case():
     )  # TGG mutations
 
     # Override specific mutation rates
-    neutral_rates_tensor[0, 0, atg_idx, att_idx] = 0.01  # λ for ATG->ATT = 0.01
-    neutral_rates_tensor[0, 1, tgg_idx, tgc_idx] = 0.02  # λ for TGG->TGC = 0.02
+    neutral_rates_tensor[0, 0, att_idx] = 0.01  # λ for ATG->ATT = 0.01
+    neutral_rates_tensor[0, 1, tgc_idx] = 0.02  # λ for TGG->TGC = 0.02
 
     # Add some background mutations for realistic partition function
     ata_idx = CODONS.index("ATA")  # ATG->ATA (synonymous Met)
     ctg_idx = CODONS.index("CTG")  # ATG->CTG (Leu)
     cgg_idx = CODONS.index("CGG")  # TGG->CGG (Arg)
-    neutral_rates_tensor[0, 0, atg_idx, ata_idx] = 0.005  # λ for ATG->ATA (synonymous)
-    neutral_rates_tensor[0, 0, atg_idx, ctg_idx] = 0.003  # λ for ATG->CTG
-    neutral_rates_tensor[0, 1, tgg_idx, cgg_idx] = 0.008  # λ for TGG->CGG
+    neutral_rates_tensor[0, 0, ata_idx] = 0.005  # λ for ATG->ATA (synonymous)
+    neutral_rates_tensor[0, 0, ctg_idx] = 0.003  # λ for ATG->CTG
+    neutral_rates_tensor[0, 1, cgg_idx] = 0.008  # λ for TGG->CGG
 
     # Set up selection factors (in log space, as output by model)
     # Position 0: Ile gets selection factor 2.0, others get 1.0
@@ -278,7 +277,7 @@ def test_compute_whichmut_loss_simple_case():
                         parent_idx
                     ]:
                         lambda_val = neutral_rates_tensor[
-                            seq_idx, pos, parent_idx, possible_child_idx
+                            seq_idx, pos, possible_child_idx
                         ].item()
                         if lambda_val > 0:
                             child_aa_idx_possible = aa_idx_of_flat_codon_idx(
@@ -295,12 +294,11 @@ def test_compute_whichmut_loss_simple_case():
                     codon_mutation_indicators[seq_idx, codon_pos]
                     and masks[seq_idx, codon_pos]
                 ):
-                    parent_codon_idx = codon_parents_idxss[seq_idx, codon_pos].item()
                     child_codon_idx = codon_children_idxss[seq_idx, codon_pos].item()
 
                     # Get λ_{j,c->c'} for observed mutation
                     lambda_obs = neutral_rates_tensor[
-                        seq_idx, codon_pos, parent_codon_idx, child_codon_idx
+                        seq_idx, codon_pos, child_codon_idx
                     ].item()
 
                     # Get selection factor for child AA
@@ -350,7 +348,7 @@ def test_whichmut_loss_no_mutations():
     codon_parents_idxss = torch.zeros(N, L_codon, dtype=torch.long)
     codon_children_idxss = torch.zeros(N, L_codon, dtype=torch.long)
     codon_mutation_indicators = torch.tensor([[False, False]])  # No mutations
-    neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+    neutral_rates_tensor = torch.zeros(N, L_codon, 65)
     aa_parents_idxss = torch.zeros(N, L_aa, dtype=torch.long)
     selection_factors = torch.zeros(N, L_aa, 20)
     masks = torch.ones(N, L_codon, dtype=torch.bool)
@@ -379,7 +377,7 @@ def test_compute_normalization_constants():
 
     # Simple test case
     selection_factors = torch.ones(N, L_aa, 20)  # All selection factors = 1.0
-    neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+    neutral_rates_tensor = torch.zeros(N, L_codon, 65)  # New dense format
 
     # Set up parent codons
     codon_parents_idxss = torch.zeros(N, L_codon, dtype=torch.long)
@@ -417,7 +415,7 @@ def test_compute_normalization_constants_comprehensive():  # noqa: C901
 
         # All selection factors = 1.0 (exp(0) = 1)
         selection_factors = torch.ones(N, L_aa, 20)
-        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65)
 
         # Use same codon (AAA) everywhere for simplicity
         aaa_idx = CODONS.index("AAA")
@@ -462,7 +460,7 @@ def test_compute_normalization_constants_comprehensive():  # noqa: C901
         selection_factors[0, 0, lys_idx] = 2.0  # Double selection for K at position 0
         selection_factors[0, 1, asn_idx] = 3.0  # Triple selection for N at position 1
 
-        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65)
 
         # Use AAA codons
         aaa_idx = CODONS.index("AAA")
@@ -473,7 +471,7 @@ def test_compute_normalization_constants_comprehensive():  # noqa: C901
             for pos in range(L_codon):
                 for child_idx, _, _ in FUNCTIONAL_CODON_SINGLE_MUTATIONS[aaa_idx]:
                     if AA_IDX_FROM_CODON_IDX[child_idx] < 20:  # Skip stop codons
-                        neutral_rates_tensor[seq_idx, pos, aaa_idx, child_idx] = 0.1
+                        neutral_rates_tensor[seq_idx, pos, child_idx] = 0.1
 
         Z = compute_normalization_constants(
             selection_factors, neutral_rates_tensor, codon_parents_idxss
@@ -499,7 +497,7 @@ def test_compute_normalization_constants_comprehensive():  # noqa: C901
         N, L_codon, L_aa = 1, 3, 3
 
         selection_factors = torch.ones(N, L_aa, 20)
-        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65)
 
         # Use different codons with known mutation counts
         atg_idx = CODONS.index("ATG")  # Met, 8 mutations
@@ -539,7 +537,7 @@ def test_compute_normalization_constants_comprehensive():  # noqa: C901
         N, L_codon, L_aa = 4, 2, 2
 
         selection_factors = torch.ones(N, L_aa, 20)
-        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65)
 
         aaa_idx = CODONS.index("AAA")
         codon_parents_idxss = torch.full((N, L_codon), aaa_idx, dtype=torch.long)
@@ -575,7 +573,7 @@ def test_compute_normalization_constants_comprehensive():  # noqa: C901
         N, L_codon, L_aa = 1, 2, 2
 
         selection_factors = torch.ones(N, L_aa, 20)
-        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65)
 
         aaa_idx = CODONS.index("AAA")
         codon_parents_idxss = torch.full((N, L_codon), aaa_idx, dtype=torch.long)
@@ -583,8 +581,8 @@ def test_compute_normalization_constants_comprehensive():  # noqa: C901
         # Set rates for only some mutations
         aac_idx = CODONS.index("AAC")
         aag_idx = CODONS.index("AAG")
-        neutral_rates_tensor[0, 0, aaa_idx, aac_idx] = 0.1
-        neutral_rates_tensor[0, 1, aaa_idx, aag_idx] = 0.2
+        neutral_rates_tensor[0, 0, aac_idx] = 0.1
+        neutral_rates_tensor[0, 1, aag_idx] = 0.2
         # All other rates remain zero
 
         Z = compute_normalization_constants(
@@ -601,7 +599,7 @@ def test_compute_normalization_constants_comprehensive():  # noqa: C901
         N, L_codon, L_aa = 1, 1, 1
 
         selection_factors = torch.ones(N, L_aa, 20) * 2.0  # All selection = 2
-        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65)
 
         # Use a codon that can mutate to stop codons
         cag_idx = CODONS.index("CAG")  # Gln - can mutate to TAG (stop)
@@ -609,7 +607,7 @@ def test_compute_normalization_constants_comprehensive():  # noqa: C901
 
         # Set rates for all mutations including stop
         for child_idx, _, _ in FUNCTIONAL_CODON_SINGLE_MUTATIONS[cag_idx]:
-            neutral_rates_tensor[0, 0, cag_idx, child_idx] = 0.1
+            neutral_rates_tensor[0, 0, child_idx] = 0.1
 
         Z = compute_normalization_constants(
             selection_factors, neutral_rates_tensor, codon_parents_idxss
@@ -631,7 +629,7 @@ def test_compute_normalization_constants_comprehensive():  # noqa: C901
 
         # Test with very small rates
         selection_factors = torch.ones(N, L_aa, 20)
-        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65)
 
         aaa_idx = CODONS.index("AAA")
         codon_parents_idxss = torch.full((N, L_codon), aaa_idx, dtype=torch.long)
@@ -670,7 +668,7 @@ def test_compute_normalization_constants_comprehensive():  # noqa: C901
         N, L_codon, L_aa = 2, 3, 3
 
         selection_factors = torch.ones(N, L_aa, 20, device=device)
-        neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65, device=device)
+        neutral_rates_tensor = torch.zeros(N, L_codon, 65, device=device)
 
         aaa_idx = CODONS.index("AAA")
         codon_parents_idxss = torch.full(
@@ -682,7 +680,7 @@ def test_compute_normalization_constants_comprehensive():  # noqa: C901
             for pos in range(L_codon):
                 for child_idx, _, _ in FUNCTIONAL_CODON_SINGLE_MUTATIONS[aaa_idx]:
                     if AA_IDX_FROM_CODON_IDX[child_idx] < 20:
-                        neutral_rates_tensor[seq_idx, pos, aaa_idx, child_idx] = 0.1
+                        neutral_rates_tensor[seq_idx, pos, child_idx] = 0.1
 
         Z = compute_normalization_constants(
             selection_factors, neutral_rates_tensor, codon_parents_idxss
@@ -752,7 +750,7 @@ def test_whichmut_trainer_basic():
     nt_children = pd.Series(["ATGAAACCG"])
 
     # Mock dataset with properly initialized neutral rates
-    neutral_rates = torch.zeros(1, 3, 65, 65)
+    neutral_rates = torch.zeros(1, 3, 65)
 
     # Parent sequence "ATGAAACCC" has codons: ATG (14), AAA (0), CCC (19)
     atg_idx = CODONS.index("ATG")
@@ -799,7 +797,7 @@ def test_neutral_rates_computation():
 
         assert neutral_rates.shape[0] == 2  # 2 sequences
         assert neutral_rates.shape[1] == 3  # 3 codons per sequence
-        assert neutral_rates.shape[2:] == (65, 65)  # 65x65 codon transition matrix
+        assert neutral_rates.shape[2] == 65  # 65 child codons per position
 
     except Exception as e:
         pytest.skip(f"Neutral rates computation test skipped due to: {e}")
@@ -814,7 +812,7 @@ def test_loss_computation_edge_cases(has_mutations):
     codon_parents_idxss = torch.zeros(N, L_codon, dtype=torch.long)
     codon_children_idxss = torch.zeros(N, L_codon, dtype=torch.long)
     codon_mutation_indicators = torch.tensor([[has_mutations, False]])
-    neutral_rates_tensor = torch.zeros(N, L_codon, 65, 65)
+    neutral_rates_tensor = torch.zeros(N, L_codon, 65)
     aa_parents_idxss = torch.zeros(N, L_aa, dtype=torch.long)
     selection_factors = torch.zeros(N, L_aa, 20)
     masks = torch.ones(N, L_codon, dtype=torch.bool)
@@ -884,7 +882,7 @@ class TestSparseDenseEquivalence:
         for child_idx, _, _ in functional_mutations:
             if AA_IDX_FROM_CODON_IDX[child_idx] < 20:  # Valid AA
                 # Get expected value from dense
-                expected_rate = data["dense_rates"][0, 0, aaa_idx, child_idx]
+                expected_rate = data["dense_rates"][0, 0, child_idx]
 
                 # Get value from sparse lookup
                 sparse_rate = get_sparse_neutral_rate(
@@ -928,7 +926,7 @@ class TestSparseDenseEquivalence:
         first_child_idx = functional_mutations[0][0]
 
         # Zero out first mutation in dense format
-        data["dense_rates"][0, 0, aaa_idx, first_child_idx] = 0.0
+        data["dense_rates"][0, 0, first_child_idx] = 0.0
 
         # Zero out first mutation in sparse format and adjust count
         data["sparse_rates"]["values"][0, 0, 0] = 0.0
@@ -1291,7 +1289,7 @@ class TestTrainerMethodExtraction:
         sparse_neutral_data = {
             "indices": torch.randint(0, 64, (2, 3, 5, 2)),
             "values": torch.randn(2, 3, 5),
-            "n_mutations": torch.randint(1, 5, (2, 3)),
+            "n_possible_mutations": torch.randint(1, 5, (2, 3)),
         }
 
         batch_data_sparse = (
@@ -1339,7 +1337,7 @@ class TestTrainerMethodExtraction:
         sparse_neutral_data = {
             "indices": torch.randint(0, 64, (2, 10, 5, 2)),
             "values": torch.randn(2, 10, 5),
-            "n_mutations": torch.randint(1, 5, (2, 10)),
+            "n_possible_mutations": torch.randint(1, 5, (2, 10)),
         }
 
         self.trainer._log_batch_info(0, 5, sparse_neutral_data)
@@ -1372,7 +1370,7 @@ class TestTrainerMethodExtraction:
         batch_data = (
             torch.zeros(1, 3, dtype=torch.long),  # codon_parents_idxss
             torch.zeros(1, 3, dtype=torch.long),  # codon_children_idxss
-            torch.ones(1, 3, 65, 65) * 0.01,  # neutral_rates_data (dense)
+            torch.ones(1, 3, 65) * 0.01,  # neutral_rates_data (dense)
             torch.zeros(1, 3, dtype=torch.long),  # aa_parents_idxss
             torch.zeros(1, 3, dtype=torch.long),  # aa_children_idxss (unused)
             torch.zeros(1, 3, dtype=torch.bool),  # codon_mutation_indicators
@@ -1392,7 +1390,7 @@ class TestTrainerMethodExtraction:
         batch_data = (
             torch.zeros(1, 3, dtype=torch.long),  # codon_parents_idxss
             torch.zeros(1, 3, dtype=torch.long),  # codon_children_idxss
-            torch.ones(1, 3, 65, 65) * 0.01,  # neutral_rates_data
+            torch.ones(1, 3, 65) * 0.01,  # neutral_rates_data
             torch.zeros(1, 3, dtype=torch.long),  # aa_parents_idxss
             torch.zeros(1, 3, dtype=torch.long),  # aa_children_idxss
             torch.zeros(1, 3, dtype=torch.bool),  # codon_mutation_indicators
@@ -1410,7 +1408,7 @@ class TestTrainerMethodExtraction:
         batch_data = (
             torch.zeros(1, 3, dtype=torch.long),
             torch.zeros(1, 3, dtype=torch.long),
-            torch.ones(1, 3, 65, 65) * 0.01,
+            torch.ones(1, 3, 65) * 0.01,
             torch.zeros(1, 3, dtype=torch.long),
             torch.zeros(1, 3, dtype=torch.long),
             torch.zeros(1, 3, dtype=torch.bool),
@@ -1427,7 +1425,7 @@ class TestTrainerMethodExtraction:
         nt_children = pd.Series(["ATGAAACCG"])
 
         # Create neutral rates
-        neutral_rates = torch.zeros(1, 3, 65, 65)
+        neutral_rates = torch.zeros(1, 3, 65)
         atg_idx = CODONS.index("ATG")
         aaa_idx = CODONS.index("AAA")
         ccc_idx = CODONS.index("CCC")

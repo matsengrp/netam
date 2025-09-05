@@ -3,6 +3,101 @@
 This module provides the WhichmutCodonDataset class for storing and managing codon-level
 parent/child sequences with precomputed neutral rates for codon-level selection
 modeling.
+
+## Sparse Data Structure Format
+
+The sparse neutral rates format is designed for memory efficiency when dealing with
+large-scale sequence datasets. Instead of storing full 65x65 transition matrices
+(most entries are zero), it stores only the non-zero single-nucleotide mutation rates.
+
+### Core Data Structure
+
+The sparse format uses a dictionary with three tensors:
+
+```python
+sparse_neutral_rates = {
+    'indices': torch.LongTensor,     # Shape: (N, L, max_mutations, 2)
+    'values': torch.Tensor,          # Shape: (N, L, max_mutations)
+    'n_possible_mutations': torch.LongTensor  # Shape: (N, L)
+}
+```
+
+### Components Explained
+
+1. **`indices` tensor (N, L, max_mutations, 2)**:
+   - Stores [parent_codon_idx, child_codon_idx] pairs for each possible mutation
+   - Uses full codon indices (0-64 range), not compressed indices
+   - `max_mutations` is always 9 (3 positions × 3 alternative bases per position)
+   - Only the first `n_possible_mutations[seq, pos]` entries are valid per position
+
+2. **`values` tensor (N, L, max_mutations)**:
+   - Contains the actual neutral rates λ_{j,c->c'} for each mutation
+   - Aligned with the `indices` tensor - same indexing scheme
+   - Only the first `n_possible_mutations[seq, pos]` entries are valid per position
+
+3. **`n_possible_mutations` tensor (N, L)**:
+   - Indicates how many valid single-nucleotide mutations are stored per position
+   - Typically 7-9 mutations per codon (after filtering stop codons)
+   - The name emphasizes these are *possible* mutations, not observed mutations
+
+### FUNCTIONAL_CODON_SINGLE_MUTATIONS Lookup Table
+
+The sparse data structure is built using `FUNCTIONAL_CODON_SINGLE_MUTATIONS` from
+`netam.codon_table`, which has the structure:
+
+```python
+FUNCTIONAL_CODON_SINGLE_MUTATIONS = {
+    parent_codon_idx: [
+        (child_codon_idx, nt_position, new_base),
+        ...
+    ]
+}
+```
+
+**Key properties**:
+- Excludes mutations to stop codons (only functional codons included)
+- Each parent codon maps to 7-9 possible single-nucleotide mutations
+- `nt_position` is 0, 1, or 2 (position within the codon)
+- `new_base` is the replacement nucleotide
+
+### Example Sparse Data
+
+For a codon AAA (index 0) at one sequence position:
+
+```python
+# AAA has 8 functional single mutations (excluding stop codons)
+indices[0, 0, :8, :] = [
+    [0, 1],   # AAA -> AAC (Lys -> Asn)
+    [0, 2],   # AAA -> AAG (Lys -> Lys, synonymous)
+    [0, 4],   # AAA -> ACA (Lys -> Thr)
+    [0, 8],   # AAA -> AGA (Lys -> Arg)
+    [0, 16],  # AAA -> CAA (Lys -> Gln)
+    [0, 32],  # AAA -> GAA (Lys -> Glu)
+    [0, 48],  # AAA -> TAA would be stop - excluded
+    [0, 56],  # AAA -> TCA (Lys -> Ser)
+    # ... (8th mutation)
+]
+
+values[0, 0, :8] = [0.01, 0.015, 0.012, ...]  # Corresponding neutral rates
+n_possible_mutations[0, 0] = 8  # 8 valid mutations stored
+```
+
+### Memory Efficiency
+
+- **Dense format**: O(N × L × 65²) = O(N × L × 4225) memory
+- **Sparse format**: O(N × L × 9) memory
+- **Compression ratio**: ~99% memory reduction for typical sequences
+- **Performance**: Enables vectorized operations on only relevant mutations
+
+### Usage in Loss Computation
+
+The sparse format integrates seamlessly with whichmut loss computation:
+
+1. **Normalization constants**: Sum over all possible mutations per position
+2. **Loss calculation**: Efficient lookup of observed mutation rates
+3. **Vectorization**: All mutations processed in parallel using advanced indexing
+
+See `netam.whichmut_trainer` for implementation details.
 """
 
 import torch
@@ -29,7 +124,7 @@ def get_sparse_neutral_rate(
     """Look up neutral rate in sparse format.
 
     Args:
-        sparse_data: Dict with 'indices', 'values', 'n_mutations'
+        sparse_data: Dict with 'indices', 'values', 'n_possible_mutations'
         seq_idx: Sequence index
         codon_pos: Codon position
         parent_codon_idx: Parent codon index
@@ -40,10 +135,12 @@ def get_sparse_neutral_rate(
     """
     indices = sparse_data["indices"][seq_idx, codon_pos]  # Shape: (max_mutations, 2)
     values = sparse_data["values"][seq_idx, codon_pos]  # Shape: (max_mutations,)
-    n_mutations = sparse_data["n_mutations"][seq_idx, codon_pos].item()
+    n_possible_mutations = sparse_data["n_possible_mutations"][
+        seq_idx, codon_pos
+    ].item()
 
     # Search for matching parent->child transition in the sparse data
-    for i in range(n_mutations):
+    for i in range(n_possible_mutations):
         if indices[i, 0] == parent_codon_idx and indices[i, 1] == child_codon_idx:
             return values[i]
 
@@ -57,7 +154,7 @@ def get_sparse_neutral_rates_vectorized(
     """Vectorized lookup of neutral rates in sparse format.
 
     Args:
-        sparse_data: Dict with 'indices', 'values', 'n_mutations'
+        sparse_data: Dict with 'indices', 'values', 'n_possible_mutations'
         seq_indices: (num_mutations,) - sequence indices
         pos_indices: (num_mutations,) - codon position indices
         parent_codon_indices: (num_mutations,) - parent codon indices
@@ -84,7 +181,7 @@ def get_sparse_neutral_rates_vectorized(
         # Get sparse data for this (seq, pos) pair
         indices = sparse_data["indices"][seq_idx, pos_idx]  # (max_mutations, 2)
         values = sparse_data["values"][seq_idx, pos_idx]  # (max_mutations,)
-        n_muts = sparse_data["n_mutations"][seq_idx, pos_idx].item()
+        n_muts = sparse_data["n_possible_mutations"][seq_idx, pos_idx].item()
 
         # Search for matching transition
         for j in range(n_muts):
@@ -130,7 +227,7 @@ class WhichmutCodonDataset:
                 - 'indices': torch.LongTensor of shape (N, L_codon, max_mutations, 2)
                   Last dim is [parent_codon_idx, child_codon_idx]
                 - 'values': torch.Tensor of shape (N, L_codon, max_mutations)
-                - 'n_mutations': torch.LongTensor of shape (N, L_codon) - actual mutations per position
+                - 'n_possible_mutations': torch.LongTensor of shape (N, L_codon) - number of possible mutations stored per position
         """
         self.nt_parents = nt_parents
         self.nt_children = nt_children
@@ -157,13 +254,13 @@ class WhichmutCodonDataset:
             # Validate sparse format
             assert "indices" in sparse_neutral_rates
             assert "values" in sparse_neutral_rates
-            assert "n_mutations" in sparse_neutral_rates
+            assert "n_possible_mutations" in sparse_neutral_rates
             indices = sparse_neutral_rates["indices"]
             values = sparse_neutral_rates["values"]
-            n_mutations = sparse_neutral_rates["n_mutations"]
+            n_possible_mutations = sparse_neutral_rates["n_possible_mutations"]
             assert indices.shape[:2] == codon_parents_idxss.shape  # (N, L_codon, ...)
             assert values.shape[:2] == codon_parents_idxss.shape
-            assert n_mutations.shape == codon_parents_idxss.shape
+            assert n_possible_mutations.shape == codon_parents_idxss.shape
             assert (
                 indices.shape[2] == values.shape[2]
             )  # max_mutations dimension matches
@@ -171,7 +268,9 @@ class WhichmutCodonDataset:
         else:
             # Dense format validation
             assert neutral_rates_tensor.shape[:2] == codon_parents_idxss.shape
-            assert neutral_rates_tensor.shape[2:] == (65, 65)
+            assert (
+                neutral_rates_tensor.shape[2] == 65
+            )  # One rate per possible child codon
 
     def __len__(self):
         return len(self.nt_parents)
@@ -183,7 +282,9 @@ class WhichmutCodonDataset:
             sparse_data = {
                 "indices": self.sparse_neutral_rates["indices"][idx],
                 "values": self.sparse_neutral_rates["values"][idx],
-                "n_mutations": self.sparse_neutral_rates["n_mutations"][idx],
+                "n_possible_mutations": self.sparse_neutral_rates[
+                    "n_possible_mutations"
+                ][idx],
             }
             return (
                 self.codon_parents_idxss[idx],
@@ -299,7 +400,9 @@ def compute_neutral_rates_for_sequences(
     then converts to neutral rates at the codon level.
 
     Returns:
-        Tensor of shape (N, L_codon, 65, 65) with neutral rates
+        Tensor of shape (N, L_codon, 65) with neutral rates for each possible child codon.
+        For each position, stores the rate to mutate TO each child codon from the
+        actual parent codon at that position.
     """
     neutral_rates_list = []
 
@@ -311,8 +414,8 @@ def compute_neutral_rates_for_sequences(
         # For each codon position, compute neutral rate for each possible mutation
         L_codon = len(seq) // 3
         codon_neutral_rates = torch.zeros(
-            L_codon, 65, 65
-        )  # This is CPU tensor, will be moved to device later
+            L_codon, 65
+        )  # One rate per possible child codon
 
         for codon_pos in range(L_codon):
             nt_start = codon_pos * 3
@@ -325,6 +428,7 @@ def compute_neutral_rates_for_sequences(
             parent_codon_idx = CODONS.index(parent_codon)
 
             # Use precomputed single mutation mapping
+            # Store the rate TO each reachable child codon
             for child_codon_idx, nt_pos, new_base in CODON_SINGLE_MUTATIONS[
                 parent_codon_idx
             ]:
@@ -332,9 +436,8 @@ def compute_neutral_rates_for_sequences(
                 global_nt_pos = nt_start + nt_pos
                 if global_nt_pos < len(nt_rates):
                     rate = nt_rates[global_nt_pos, BASES_AND_N_TO_INDEX[new_base]]
-                    codon_neutral_rates[
-                        codon_pos, parent_codon_idx, child_codon_idx
-                    ] = rate
+                    # Store rate at child codon index (not parent x child)
+                    codon_neutral_rates[codon_pos, child_codon_idx] = rate
 
         neutral_rates_list.append(codon_neutral_rates)
 

@@ -40,7 +40,7 @@ def compute_whichmut_loss_batch(
     Args:
         selection_factors: (N, L_aa, 20) - model output selection factors
         neutral_rates_data: Either:
-            - Dense tensor: (N, L_codon, 65, 65) - precomputed λ_{j,c->c'}
+            - Dense tensor: (N, L_codon, 65) - precomputed λ rates per child codon
             - Sparse dict: {'indices': tensor, 'values': tensor, 'n_mutations': tensor}
         codon_parents_idxss: (N, L_codon) - parent codon indices
         codon_children_idxss: (N, L_codon) - child codon indices
@@ -66,7 +66,9 @@ def compute_whichmut_loss_batch(
         neutral_rates_data = {
             "indices": neutral_rates_data["indices"].to(device),
             "values": neutral_rates_data["values"].to(device),
-            "n_mutations": neutral_rates_data["n_mutations"].to(device),
+            "n_possible_mutations": neutral_rates_data["n_possible_mutations"].to(
+                device
+            ),
         }
 
     # 1. Compute normalization constants Z_n for each sequence
@@ -113,9 +115,12 @@ def compute_whichmut_loss_batch(
             child_codon_indices,
         )
     else:
-        # Dense format lookup using advanced indexing
+        # Dense format: look up rate TO the child codon
+        # First verify child is reachable from parent via single mutation
+        # For efficiency in the vectorized case, we just look up the rate
+        # (it will be 0 if not reachable)
         neutral_rates = neutral_rates_data[
-            seq_indices, pos_indices, parent_codon_indices, child_codon_indices
+            seq_indices, pos_indices, child_codon_indices
         ]  # (num_mutations,)
 
     # Convert child codon indices to AA indices
@@ -193,7 +198,9 @@ def compute_whichmut_loss_batch_iterative(
         neutral_rates_data = {
             "indices": neutral_rates_data["indices"].to(device),
             "values": neutral_rates_data["values"].to(device),
-            "n_mutations": neutral_rates_data["n_mutations"].to(device),
+            "n_possible_mutations": neutral_rates_data["n_possible_mutations"].to(
+                device
+            ),
         }
 
     normalization_constants = compute_normalization_constants(
@@ -220,8 +227,9 @@ def compute_whichmut_loss_batch_iterative(
                         child_codon_idx,
                     )
                 else:
+                    # Dense format: look up rate TO the child codon
                     neutral_rate = neutral_rates_data[
-                        seq_idx, codon_pos, parent_codon_idx, child_codon_idx
+                        seq_idx, codon_pos, child_codon_idx
                     ]
 
                 aa_pos = codon_pos
@@ -267,8 +275,8 @@ def compute_normalization_constants(
             selection_factors, neutral_rates_data, codon_parents_idxss
         )
     else:
-        # Dense format
-        N, L_codon, _, _ = neutral_rates_data.shape
+        # Dense format - now (N, L_codon, 65) instead of (N, L_codon, 65, 65)
+        N, L_codon, _ = neutral_rates_data.shape
         return compute_normalization_constants_dense(
             selection_factors, neutral_rates_data, codon_parents_idxss
         )
@@ -279,10 +287,10 @@ def compute_normalization_constants_dense(
     neutral_rates_tensor: torch.Tensor,
     codon_parents_idxss: torch.Tensor,
 ) -> torch.Tensor:
-    """Dense implementation (original explicit loop version)."""
+    """Dense implementation with optimized storage (N, L, 65)."""
     from netam.codon_table import AA_IDX_FROM_CODON_IDX
 
-    N, L_codon, _, _ = neutral_rates_tensor.shape
+    N, L_codon, _ = neutral_rates_tensor.shape  # Now shape is (N, L_codon, 65)
 
     # Initialize normalization constants
     Z = torch.zeros(N, device=selection_factors.device)
@@ -294,23 +302,21 @@ def compute_normalization_constants_dense(
         for codon_pos in range(L_codon):
             parent_codon_idx = codon_parents_idxss[seq_idx, codon_pos].item()
 
+            # Iterate over possible single mutations from this parent codon
             for alt_codon_idx, _, _ in FUNCTIONAL_CODON_SINGLE_MUTATIONS[
                 parent_codon_idx
             ]:
-                # Get λ_{j,parent->possible child codon-mutation}
-                neutral_rate = neutral_rates_tensor[
-                    seq_idx, codon_pos, parent_codon_idx, alt_codon_idx
-                ]
+                # Get λ rate TO this child codon
+                neutral_rate = neutral_rates_tensor[seq_idx, codon_pos, alt_codon_idx]
 
-                # Skip zero rates in dense implementation (sparse already excludes them)
-                # TODO this should probably never be zero but I tested this already.
-                # since this is the slow implimentation maybe it's worth keeping the assertion
+                # Skip zero rates (child codon not reachable from parent)
                 if neutral_rate <= 0:
                     continue
+
                 # Get corresponding amino acid for child codon
                 child_aa_idx = AA_IDX_FROM_CODON_IDX[alt_codon_idx]
 
-                # Skip stop codons and invalid amino acids (same as sparse implementation)
+                # Skip stop codons and invalid amino acids
                 if child_aa_idx >= 20:
                     continue
 
@@ -341,7 +347,7 @@ def compute_normalization_constants_sparse(
     # Extract sparse data components - they should already be on the correct device
     indices = sparse_neutral_rates["indices"]  # (N, L_codon, max_mutations, 2)
     values = sparse_neutral_rates["values"]  # (N, L_codon, max_mutations)
-    n_mutations = sparse_neutral_rates["n_mutations"]  # (N, L_codon)
+    n_possible_mutations = sparse_neutral_rates["n_possible_mutations"]  # (N, L_codon)
 
     N, L_codon, max_mutations, _ = indices.shape
 
@@ -395,9 +401,9 @@ def compute_normalization_constants_sparse(
     products = values * selection_factor_values  # (N, L_codon, max_mutations)
 
     # Create mask for valid mutations (only sum over actual mutations, not padding)
-    mutation_mask = torch.arange(max_mutations, device=n_mutations.device).view(
-        1, 1, max_mutations
-    ) < n_mutations.unsqueeze(-1)
+    mutation_mask = torch.arange(
+        max_mutations, device=n_possible_mutations.device
+    ).view(1, 1, max_mutations) < n_possible_mutations.unsqueeze(-1)
 
     # Also mask out stop codons and invalid AA indices (where child_aa_indices >= 20)
     valid_aa_mask = child_aa_indices < 20
@@ -468,7 +474,9 @@ class WhichmutTrainer:
             neutral_rates_data = {
                 "indices": neutral_rates_data["indices"].to(device),
                 "values": neutral_rates_data["values"].to(device),
-                "n_mutations": neutral_rates_data["n_mutations"].to(device),
+                "n_possible_mutations": neutral_rates_data["n_possible_mutations"].to(
+                    device
+                ),
             }
 
         return (
@@ -512,9 +520,11 @@ class WhichmutTrainer:
             if batch_size > 2:
                 indices = neutral_rates_data["indices"]
                 values = neutral_rates_data["values"]
-                n_mutations = neutral_rates_data["n_mutations"]
+                n_possible_mutations = neutral_rates_data["n_possible_mutations"]
                 memory_mb = (
-                    indices.numel() * 8 + values.numel() * 4 + n_mutations.numel() * 8
+                    indices.numel() * 8
+                    + values.numel() * 4
+                    + n_possible_mutations.numel() * 8
                 ) / 1024**2
                 print(
                     f"ℹ️  INFO: Processing batch {batch_idx + 1} with {batch_size} sequences (SPARSE format, ~{memory_mb:.1f} MB)..."
