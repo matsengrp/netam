@@ -17,8 +17,7 @@ from tqdm import tqdm
 
 from netam.codon_table import FUNCTIONAL_CODON_SINGLE_MUTATIONS
 from netam.whichmut_dataset import (
-    get_sparse_neutral_rate,
-    get_sparse_neutral_rates_vectorized,
+    SparseWhichmutCodonDataset,
 )
 
 
@@ -107,7 +106,7 @@ def compute_whichmut_loss_batch(
     # Get neutral rates for all mutations
     if use_sparse:
         # Vectorized sparse lookup
-        neutral_rates = get_sparse_neutral_rates_vectorized(
+        neutral_rates = SparseWhichmutCodonDataset.get_neutral_rates_vectorized(
             neutral_rates_data,
             seq_indices,
             pos_indices,
@@ -219,7 +218,7 @@ def compute_whichmut_loss_batch_iterative(
                 child_codon_idx = codon_children_idxss[seq_idx, codon_pos]
 
                 if use_sparse:
-                    neutral_rate = get_sparse_neutral_rate(
+                    neutral_rate = SparseWhichmutCodonDataset.get_neutral_rate(
                         neutral_rates_data,
                         seq_idx,
                         codon_pos,

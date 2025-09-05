@@ -14,9 +14,8 @@ from netam.whichmut_trainer import (
     compute_normalization_constants_sparse,
 )
 from netam.whichmut_dataset import (
-    WhichmutCodonDataset,
-    get_sparse_neutral_rate,
-    compute_neutral_rates_for_sequences,
+    DenseWhichmutCodonDataset,
+    SparseWhichmutCodonDataset,
 )
 from netam.sequences import CODONS, AA_STR_SORTED
 from netam.codon_table import AA_IDX_FROM_CODON_IDX, FUNCTIONAL_CODON_SINGLE_MUTATIONS
@@ -144,17 +143,17 @@ def test_whichmut_codon_dataset_creation():
     )
     masks = torch.ones(2, 3, dtype=torch.bool)
 
-    dataset = WhichmutCodonDataset(
+    dataset = DenseWhichmutCodonDataset(
         nt_parents,
         nt_children,
         codon_parents_idxss,
         codon_children_idxss,
-        neutral_rates_tensor,
         aa_parents_idxss,
         aa_children_idxss,
         codon_mutation_indicators,
         masks,
         model_known_token_count=20,
+        neutral_rates_tensor=neutral_rates_tensor,
     )
 
     assert len(dataset) == 2
@@ -177,11 +176,11 @@ def test_whichmut_codon_dataset_of_pcp_df():
 
     # Mock neutral model outputs
     neutral_model_outputs = {
-        "neutral_rates": torch.zeros(2, 3, 65, 65)  # 2 sequences, 3 codons
+        "neutral_rates": torch.zeros(2, 3, 65)  # 2 sequences, 3 codons
     }
 
-    dataset = WhichmutCodonDataset.of_pcp_df(
-        pcp_df, neutral_model_outputs, model_known_token_count=20
+    dataset = DenseWhichmutCodonDataset.of_pcp_df(
+        pcp_df, neutral_model_outputs["neutral_rates"], model_known_token_count=20
     )
 
     assert len(dataset) == 2
@@ -763,9 +762,9 @@ def test_whichmut_trainer_basic():
     set_neutral_rates_for_codon(neutral_rates, 0, 2, ccc_idx, 0.01)  # CCC
 
     neutral_model_outputs = {"neutral_rates": neutral_rates}
-    dataset = WhichmutCodonDataset.of_pcp_df(
+    dataset = DenseWhichmutCodonDataset.of_pcp_df(
         pd.DataFrame({"nt_parent": nt_parents, "nt_child": nt_children}),
-        neutral_model_outputs,
+        neutral_model_outputs["neutral_rates"],
         model_known_token_count=20,
     )
 
@@ -791,13 +790,45 @@ def test_neutral_rates_computation():
 
     # Test the function
     try:
-        neutral_rates = compute_neutral_rates_for_sequences(
+        neutral_rates = DenseWhichmutCodonDataset.compute_neutral_rates_from_sequences(
             nt_sequences, mock_neutral_model_fn
         )
 
         assert neutral_rates.shape[0] == 2  # 2 sequences
         assert neutral_rates.shape[1] == 3  # 3 codons per sequence
         assert neutral_rates.shape[2] == 65  # 65 child codons per position
+
+        # Test sparse version
+        sparse_rates = SparseWhichmutCodonDataset.compute_neutral_rates_from_sequences(
+            nt_sequences, mock_neutral_model_fn
+        )
+
+        # Check sparse format structure
+        assert "indices" in sparse_rates
+        assert "values" in sparse_rates
+        assert "n_possible_mutations" in sparse_rates
+
+        # Check tensor shapes
+        assert (
+            sparse_rates["indices"].shape[1] == 4
+        )  # [seq_idx, pos, parent_idx, child_idx]
+        assert (
+            sparse_rates["values"].shape[0] == sparse_rates["indices"].shape[0]
+        )  # Same number of entries
+        assert sparse_rates["n_possible_mutations"].shape[0] == 2  # 2 sequences
+
+        # Check that sparse and dense are consistent for non-zero entries
+        # Convert sparse back to dense for comparison
+        indices = sparse_rates["indices"]
+        values = sparse_rates["values"]
+        sparse_as_dense = torch.zeros(2, 3, 65)
+
+        for i in range(indices.shape[0]):
+            seq_idx, pos, parent_idx, child_idx = indices[i]
+            sparse_as_dense[seq_idx, pos, child_idx] = values[i]
+
+        # Should match non-zero entries in dense version
+        torch.testing.assert_close(sparse_as_dense, neutral_rates, atol=1e-6, rtol=1e-6)
 
     except Exception as e:
         pytest.skip(f"Neutral rates computation test skipped due to: {e}")
@@ -885,7 +916,7 @@ class TestSparseDenseEquivalence:
                 expected_rate = data["dense_rates"][0, 0, child_idx]
 
                 # Get value from sparse lookup
-                sparse_rate = get_sparse_neutral_rate(
+                sparse_rate = SparseWhichmutCodonDataset.get_neutral_rate(
                     data["sparse_rates"], 0, 0, aaa_idx, child_idx
                 )
 
@@ -1435,9 +1466,9 @@ class TestTrainerMethodExtraction:
         set_neutral_rates_for_codon(neutral_rates, 0, 2, ccc_idx, 0.01)
 
         neutral_model_outputs = {"neutral_rates": neutral_rates}
-        dataset = WhichmutCodonDataset.of_pcp_df(
+        dataset = DenseWhichmutCodonDataset.of_pcp_df(
             pd.DataFrame({"nt_parent": nt_parents, "nt_child": nt_children}),
-            neutral_model_outputs,
+            neutral_model_outputs["neutral_rates"],
             model_known_token_count=20,
         )
 
