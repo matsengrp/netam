@@ -158,5 +158,5 @@ _ignore/
 _logs/
 _checkpoints
 _pretrained
-.claude
 
+.claude/
