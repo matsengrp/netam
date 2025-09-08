@@ -27,7 +27,7 @@ def randomize_with_ns(parent_seq, child_seq, avoid_masked_equality=True):
             for idx, (p, c) in enumerate(zip(parent_seq, child_seq))
             if p != c
         )
-    except:
+    except StopIteration:
         return parent_seq, child_seq
 
     # Decide which type of modification to apply

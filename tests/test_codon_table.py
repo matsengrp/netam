@@ -4,6 +4,7 @@ from netam.codon_table import (
     generate_codon_single_mutation_map,
     CODON_NEIGHBOR_MATRIX,
     CODON_SINGLE_MUTATIONS,
+    AA_IDX_FROM_CODON_IDX,
     encode_codon_mutations,
     create_codon_masks,
 )
@@ -101,6 +102,41 @@ def test_codon_matrices_consistency():
         assert (
             reachable_aas == neighbor_aas
         ), f"Mismatch for codon {CODONS[parent_idx]}: {reachable_aas} vs {neighbor_aas}"
+
+
+def test_aa_idx_from_codon_idx_mapping():
+    """Test AA_IDX_FROM_CODON_IDX mapping correctness."""
+    from netam.sequences import translate_sequences, STOP_CODONS
+
+    # Test that the mapping contains entries for non-stop codons
+    assert len(AA_IDX_FROM_CODON_IDX) > 0
+
+    # Test specific known mappings
+    atg_idx = CODONS.index("ATG")  # Methionine
+    assert AA_IDX_FROM_CODON_IDX[atg_idx] == AA_STR_SORTED.index("M")
+
+    tgg_idx = CODONS.index("TGG")  # Tryptophan
+    assert AA_IDX_FROM_CODON_IDX[tgg_idx] == AA_STR_SORTED.index("W")
+
+    # Test that stop codons are not in the mapping
+    for stop_codon in STOP_CODONS:
+        stop_codon_idx = CODONS.index(stop_codon)
+        assert stop_codon_idx not in AA_IDX_FROM_CODON_IDX
+
+    # Test that all non-stop codons are correctly mapped
+    for codon_idx, codon in enumerate(CODONS):
+        if codon not in STOP_CODONS:
+            # Should be in the mapping
+            assert codon_idx in AA_IDX_FROM_CODON_IDX
+            # Should map to correct AA index
+            expected_aa = translate_sequences([codon])[0]
+            expected_aa_idx = AA_STR_SORTED.index(expected_aa)
+            assert AA_IDX_FROM_CODON_IDX[codon_idx] == expected_aa_idx
+
+    # Test that all AA indices in the mapping are valid
+    for codon_idx, aa_idx in AA_IDX_FROM_CODON_IDX.items():
+        assert 0 <= aa_idx < len(AA_STR_SORTED)
+        assert 0 <= codon_idx < len(CODONS)
 
 
 def test_codon_utilities_imported():

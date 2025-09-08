@@ -1019,29 +1019,47 @@ class ParentIndependentBinarySelectionModel(AbstractBinarySelectionModel):
     multiplied by neutral rates, give observed mutation rates.
     """
 
-    def __init__(self, max_seq_len: int = 512, **kwargs):
+    def __init__(self, wildtype_sequence: str = None, **kwargs):
         super().__init__(**kwargs)
-        self.max_seq_len = max_seq_len
+
+        # Initialize wildtype sequence and derive max_seq_len from it if provided
+        if wildtype_sequence is not None:
+            self.wildtype_sequence = wildtype_sequence
+            self.max_seq_len = len(wildtype_sequence)
+            # Convert wildtype sequence to amino acid indices
+            self.wildtype_aa_idxs = aa_idx_tensor_of_str_ambig(wildtype_sequence)
+        else:
+            # Fallback to default max_seq_len if no wildtype sequence provided
+            self.wildtype_sequence = None
+            self.max_seq_len = 512
+            self.wildtype_aa_idxs = None
 
         # Initialize the log selection factors
         if self.output_dim == 1:
-            self.log_selection_factors = nn.Parameter(torch.zeros(max_seq_len))
+            self.log_selection_factors = nn.Parameter(torch.zeros(self.max_seq_len))
         else:
             self.log_selection_factors = nn.Parameter(
-                torch.zeros(max_seq_len, self.output_dim)
+                torch.zeros(self.max_seq_len, self.output_dim)
             )
 
     @property
     def hyperparameters(self):
-        return super().hyperparameters | {
+        hyperparams = super().hyperparameters | {
             "max_seq_len": self.max_seq_len,
         }
+        if self.wildtype_sequence is not None:
+            hyperparams["wildtype_sequence"] = self.wildtype_sequence
+        return hyperparams
 
     def forward(self, amino_acid_indices: Tensor, mask: Tensor) -> Tensor:
-        """Return position-specific log selection factors for the given sequences.
+        """Return position-specific log selection factors.
+
+        Since this is a parent-independent model, the amino_acid_indices parameter
+        is ignored - we only use it to determine batch size and sequence length.
+        The selection factors depend only on position, not on the parent sequence.
 
         Args:
-            amino_acid_indices: A tensor of shape (B, L) containing the indices of parent AA sequences.
+            amino_acid_indices: A tensor of shape (B, L) - used only for shape.
             mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.
 
         Returns:
@@ -1049,16 +1067,31 @@ class ParentIndependentBinarySelectionModel(AbstractBinarySelectionModel):
         """
         batch_size, seq_len = amino_acid_indices.shape
 
-        # Get the relevant slice of our fixed tensor
+        # Get the relevant slice of our position-specific parameters
         position_factors = self.log_selection_factors[:seq_len]
 
-        # Expand to match the required output shape
+        # Expand to match the required batch and output shape
         if self.output_dim == 1:
-            return position_factors.expand(amino_acid_indices.shape)
+            result = position_factors.expand(batch_size, seq_len)
         else:
-            return position_factors.expand(
-                amino_acid_indices.shape + (self.output_dim,)
+            # Create a proper copy instead of a view to avoid in-place operation issues
+            result = (
+                position_factors.unsqueeze(0)
+                .expand(batch_size, seq_len, self.output_dim)
+                .clone()
             )
+
+            # Apply zap_predictions_along_diagonal for multi-dimensional output
+            if self.output_dim >= 20 and self.wildtype_aa_idxs is not None:
+                # Use the wildtype sequence indices for all sequences in the batch
+                # Expand wildtype indices to match batch size
+                wt_idxs_batch = (
+                    self.wildtype_aa_idxs[:seq_len].unsqueeze(0).expand(batch_size, -1)
+                )
+                # Set wildtype aa selection factors to 0 (which becomes 1 after exp)
+                result = zap_predictions_along_diagonal(result, wt_idxs_batch, fill=0.0)
+
+        return result
 
 
 class HitClassModel(nn.Module):
