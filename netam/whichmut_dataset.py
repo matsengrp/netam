@@ -82,13 +82,6 @@ values[0, 0, :8] = [0.01, 0.015, 0.012, ...]  # Corresponding neutral rates
 n_possible_mutations[0, 0] = 8  # 8 valid mutations stored
 ```
 
-### Memory Efficiency
-
-- **Dense format**: O(N × L × 65²) = O(N × L × 4225) memory
-- **Sparse format**: O(N × L × 9) memory
-- **Compression ratio**: ~99% memory reduction for typical sequences
-- **Performance**: Enables vectorized operations on only relevant mutations
-
 ### Usage in Loss Computation
 
 The sparse format integrates seamlessly with whichmut loss computation:

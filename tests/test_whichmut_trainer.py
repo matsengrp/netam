@@ -67,17 +67,22 @@ def create_equivalent_data(
 
     # Create sparse data structures
     functional_mutations = FUNCTIONAL_CODON_SINGLE_MUTATIONS[aaa_idx]
-    n_mutations = len(functional_mutations)
+    n_possible_mutations = len(functional_mutations)
 
     indices = torch.full(
-        (batch_size, sequence_length, n_mutations, 2),
+        (batch_size, sequence_length, n_possible_mutations, 2),
         -1,
         dtype=torch.long,
         device=device,
     )
-    values = torch.zeros(batch_size, sequence_length, n_mutations, device=device)
+    values = torch.zeros(
+        batch_size, sequence_length, n_possible_mutations, device=device
+    )
     n_mutations_tensor = torch.full(
-        (batch_size, sequence_length), n_mutations, dtype=torch.long, device=device
+        (batch_size, sequence_length),
+        n_possible_mutations,
+        dtype=torch.long,
+        device=device,
     )
 
     # Fill both dense and sparse with identical data
