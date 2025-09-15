@@ -2,7 +2,6 @@
 
 import pytest
 import torch
-import numpy as np
 
 from netam.models import ParentIndependentBinarySelectionModel
 
@@ -14,18 +13,14 @@ class TestParentIndependentBinarySelectionModelMask:
     def model_1d(self):
         """Create a ParentIndependentBinarySelectionModel with output_dim=1."""
         return ParentIndependentBinarySelectionModel(
-            output_dim=1,
-            known_token_count=21,
-            model_type="test"
+            output_dim=1, known_token_count=21, model_type="test"
         )
 
     @pytest.fixture
     def model_multidim(self):
         """Create a ParentIndependentBinarySelectionModel with output_dim=20."""
         return ParentIndependentBinarySelectionModel(
-            output_dim=20,
-            known_token_count=21,
-            model_type="test"
+            output_dim=20, known_token_count=21, model_type="test"
         )
 
     @pytest.fixture
@@ -35,7 +30,7 @@ class TestParentIndependentBinarySelectionModelMask:
             output_dim=20,
             wildtype_sequence="ACDEFG",
             known_token_count=21,
-            model_type="test"
+            model_type="test",
         )
 
     @pytest.fixture
@@ -44,10 +39,13 @@ class TestParentIndependentBinarySelectionModelMask:
         batch_size, seq_len = 2, 6
         amino_acid_indices = torch.randint(0, 21, (batch_size, seq_len))
         # Create mask with some positions masked (False)
-        mask = torch.tensor([
-            [True, True, False, True, False, True],
-            [True, False, True, True, True, False]
-        ], dtype=torch.bool)
+        mask = torch.tensor(
+            [
+                [True, True, False, True, False, True],
+                [True, False, True, True, True, False],
+            ],
+            dtype=torch.bool,
+        )
         return amino_acid_indices, mask
 
     def test_mask_application_1d(self, model_1d, sample_inputs):
@@ -61,7 +59,7 @@ class TestParentIndependentBinarySelectionModelMask:
         assert result.shape == (2, 6)
 
         # Check that masked positions have value 0 (mask=False means multiply by 0)
-        assert torch.all(result[mask == False] == 0.0)
+        assert torch.all(result[~mask] == 0.0)
 
         # Check that unmasked positions retain their original values
         # Compare with result when mask is all True
@@ -82,7 +80,7 @@ class TestParentIndependentBinarySelectionModelMask:
         assert result.shape == (2, 6, 20)
 
         # Check that masked positions have value 0 across all output dimensions
-        masked_positions = mask == False
+        masked_positions = ~mask
         assert torch.all(result[masked_positions] == 0.0)
 
         # Check that unmasked positions retain their original values
@@ -90,15 +88,19 @@ class TestParentIndependentBinarySelectionModelMask:
         unmasked_result = model_multidim.forward(amino_acid_indices, all_true_mask)
 
         # Unmasked positions should match
-        unmasked_positions = mask == True
-        assert torch.allclose(result[unmasked_positions], unmasked_result[unmasked_positions])
+        unmasked_positions = mask
+        assert torch.allclose(
+            result[unmasked_positions], unmasked_result[unmasked_positions]
+        )
 
     def test_mask_with_wildtype_zapping(self, model_with_wildtype, sample_inputs):
         """Test that masking works correctly with wildtype zapping."""
         amino_acid_indices, mask = sample_inputs
 
         # Adjust input to match wildtype sequence length
-        amino_acid_indices = amino_acid_indices[:, :6]  # Model has wildtype sequence of length 6
+        amino_acid_indices = amino_acid_indices[
+            :, :6
+        ]  # Model has wildtype sequence of length 6
         mask = mask[:, :6]
 
         result = model_with_wildtype.forward(amino_acid_indices, mask)
@@ -107,7 +109,7 @@ class TestParentIndependentBinarySelectionModelMask:
         assert result.shape == (2, 6, 20)
 
         # Check that masked positions are 0
-        masked_positions = mask == False
+        masked_positions = ~mask
         assert torch.all(result[masked_positions] == 0.0)
 
     def test_all_masked(self, model_1d):
@@ -161,11 +163,14 @@ class TestParentIndependentBinarySelectionModelMask:
         amino_acid_indices = torch.randint(0, 21, (batch_size, seq_len))
 
         # Create mask where same positions are masked across all batches
-        mask = torch.tensor([
-            [True, False, True, False, True],
-            [True, False, True, False, True],
-            [True, False, True, False, True]
-        ], dtype=torch.bool)
+        mask = torch.tensor(
+            [
+                [True, False, True, False, True],
+                [True, False, True, False, True],
+                [True, False, True, False, True],
+            ],
+            dtype=torch.bool,
+        )
 
         result = model_1d.forward(amino_acid_indices, mask)
 
@@ -180,15 +185,19 @@ class TestParentIndependentBinarySelectionModelMask:
             assert torch.allclose(result[1, pos], result[2, pos])
 
     def test_different_masks_per_batch(self, model_1d):
-        """Test that different masks can be applied to different sequences in the batch."""
+        """Test that different masks can be applied to different sequences in the
+        batch."""
         batch_size, seq_len = 2, 4
         amino_acid_indices = torch.randint(0, 21, (batch_size, seq_len))
 
         # Different masks for each sequence in batch
-        mask = torch.tensor([
-            [True, False, True, True],   # Second position masked
-            [True, True, False, True]    # Third position masked
-        ], dtype=torch.bool)
+        mask = torch.tensor(
+            [
+                [True, False, True, True],  # Second position masked
+                [True, True, False, True],  # Third position masked
+            ],
+            dtype=torch.bool,
+        )
 
         result = model_1d.forward(amino_acid_indices, mask)
 
@@ -209,13 +218,13 @@ class TestParentIndependentBinarySelectionModelMask:
         mask = torch.ones((batch_size, seq_len), dtype=torch.bool)
 
         # Move model to CPU (it should already be there, but make sure)
-        model_1d.to('cpu')
-        amino_acid_indices = amino_acid_indices.to('cpu')
-        mask = mask.to('cpu')
+        model_1d.to("cpu")
+        amino_acid_indices = amino_acid_indices.to("cpu")
+        mask = mask.to("cpu")
 
         # Should work without errors
         result = model_1d.forward(amino_acid_indices, mask)
-        assert result.device.type == 'cpu'
+        assert result.device.type == "cpu"
 
     def test_mask_dtype_handling(self, model_1d):
         """Test that different mask dtypes are handled correctly."""
@@ -223,18 +232,16 @@ class TestParentIndependentBinarySelectionModelMask:
         amino_acid_indices = torch.randint(0, 21, (batch_size, seq_len))
 
         # Test with float mask (0.0 and 1.0)
-        float_mask = torch.tensor([
-            [1.0, 0.0, 1.0, 1.0],
-            [1.0, 1.0, 0.0, 1.0]
-        ], dtype=torch.float32)
+        float_mask = torch.tensor(
+            [[1.0, 0.0, 1.0, 1.0], [1.0, 1.0, 0.0, 1.0]], dtype=torch.float32
+        )
 
         result_float = model_1d.forward(amino_acid_indices, float_mask)
 
         # Test with bool mask
-        bool_mask = torch.tensor([
-            [True, False, True, True],
-            [True, True, False, True]
-        ], dtype=torch.bool)
+        bool_mask = torch.tensor(
+            [[True, False, True, True], [True, True, False, True]], dtype=torch.bool
+        )
 
         result_bool = model_1d.forward(amino_acid_indices, bool_mask)
 
