@@ -14,6 +14,25 @@ This will allow you to use the models.
 
 However, if you wish to interact with the models on a more detailed level, you will want to do a developer installation (see below).
 
+## Models
+
+### Thrifty model of somatic hypermutation
+
+This model is described in:
+
+Sung, Johnson, Dumm, Simon, Haddox, Fukuyama, Matsen IV. [Thrifty wide-context models of B cell receptor somatic hypermutation](https://elifesciences.org/reviewed-preprints/105471). *eLife*. 2025 Mar. doi: 10.7554/elife.105471.1
+
+The corresponding reproducible experiments are at [matsengrp/thrifty-experiments-1](https://github.com/matsengrp/thrifty-experiments-1/); see that repo's README for additional dependencies.
+
+
+### Deep Natural Selection Model (DNSM)
+
+This model is described in:
+
+Matsen IV, Sung, Johnson, Dumm, Rich, Starr, Song, Bradley, Fukuyama, Haddox. [A sitewise model of natural selection on individual antibodies via a transformer-encoder](https://academic.oup.com/mbe/advance-article/doi/10.1093/molbev/msaf186/8222712). *Mol Biol Evol*. 2025 Jul;42(8):msaf186. doi: 10.1093/molbev/msaf186
+
+The corresponding reproducible experiments are at [matsengrp/dnsm-experiments-mbe](https://github.com/matsengrp/dnsm-experiments-mbe/); see that repo's README for additional dependencies.
+
 
 ## Pretrained models
 
@@ -34,6 +53,7 @@ If you need to clear out the cache of pretrained models, you can use the command
 
     netam clear_model_cache
 
+_Note that the DNSM model is not yet available via the pretrained interface, but that will be done by the end of September. Model weights are available in the experiments repository above._
 
 ## Usage
 
@@ -51,15 +71,6 @@ From a clone of this repository, install using:
 Note that you should be fine with an earlier version of Python.
 We target Python 3.9, but 3.11 is faster.
 
-
-## Experiments
-
-If you are running one of the experiment repos, such as:
-
-* [thrifty-experiments-1](https://github.com/matsengrp/thrifty-experiments-1/)
-* [dnsm-experiments-1](https://github.com/matsengrp/dnsm-experiments-1/)
-
-you will want to visit those repos and follow the installation instructions there.
 
 
 ## Troubleshooting
