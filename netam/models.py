@@ -1057,10 +1057,13 @@ class ParentIndependentBinarySelectionModel(AbstractBinarySelectionModel):
         Since this is a parent-independent model, the amino_acid_indices parameter
         is ignored - we only use it to determine batch size and sequence length.
         The selection factors depend only on position, not on the parent sequence.
+        Masked positions (where mask is False) will have their log selection factors
+        set to 0, which becomes a selection factor of 1 after exponentiation.
 
         Args:
             amino_acid_indices: A tensor of shape (B, L) - used only for shape.
             mask: A tensor of shape (B, L) representing the mask of valid amino acid sites.
+                  True for valid positions, False for positions to be masked.
 
         Returns:
             A tensor of shape (B, L) or (B, L, output_dim) with log selection factors.
@@ -1073,6 +1076,8 @@ class ParentIndependentBinarySelectionModel(AbstractBinarySelectionModel):
         # Expand to match the required batch and output shape
         if self.output_dim == 1:
             result = position_factors.expand(batch_size, seq_len)
+            # Apply masking: multiplicative masking in log space (consistent with other models)
+            result = result * mask
         else:
             # Create a proper copy instead of a view to avoid in-place operation issues
             result = (
@@ -1090,6 +1095,9 @@ class ParentIndependentBinarySelectionModel(AbstractBinarySelectionModel):
                 )
                 # Set wildtype aa selection factors to 0 (which becomes 1 after exp)
                 result = zap_predictions_along_diagonal(result, wt_idxs_batch, fill=0.0)
+
+            # Apply masking: expand mask to match output dimensions
+            result = result * mask.unsqueeze(-1)
 
         return result
 
