@@ -62,7 +62,6 @@ If you need to clear out the cache of pretrained models, you can use the command
 
     netam clear_model_cache
 
-_Note that the DNSM model is not yet available via the pretrained interface, but that will be done by the end of September. Model weights are available in the experiments repository above._
 
 ## Usage
 
