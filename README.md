@@ -44,16 +44,24 @@ The models are named according to the following convention:
 
 where:
 
-* `Modeltype` is the type of model, such as `Thrifty` for the "thrifty" SHM model
+* `Modeltype` is the type of model, such as `Thrifty` for the "thrifty" SHM model or `DNSM` for Deep Natural Selection Models
 * `Species` is the species, such as `Hum` for human
 * `XX` is the version of the model
 * `YY` is any model-specific information, such as the number of parameters
+
+### Available Models
+
+**Thrifty Models:**
+- `ThriftyHumV0.2-20`, `ThriftyHumV0.2-45`, `ThriftyHumV0.2-59`: SHM models trained on human data
+
+**DNSM Models:**
+- `DNSMHumV1.0-1M`: 1M parameter Deep Natural Selection Model trained on human data
+- `DNSMHumV1.0-4M`: 4M parameter Deep Natural Selection Model trained on human data
 
 If you need to clear out the cache of pretrained models, you can use the command-line call:
 
     netam clear_model_cache
 
-_Note that the DNSM model is not yet available via the pretrained interface, but that will be done by the end of September. Model weights are available in the experiments repository above._
 
 ## Usage
 
