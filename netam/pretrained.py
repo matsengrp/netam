@@ -42,6 +42,14 @@ PACKAGE_LOCATIONS_AND_CONTENTS = (
             "DNSMHumV1.0-4M",
         ],
     ],
+    [
+        "dasm-1.0.0.zip",
+        "https://github.com/matsengrp/dasm-models/archive/v1.0.0.zip",
+        "dasm-models-1.0.0/models",
+        [
+            "DASMHumV1.0-4M",
+        ],
+    ],
 )
 
 LOCAL_TO_REMOTE = {}
