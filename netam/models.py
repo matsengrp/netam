@@ -836,6 +836,75 @@ class TransformerBinarySelectionModelTrainableWiggleAct(
         return wiggle(super().predict(representation), beta)
 
 
+class TransformerBinarySelectionModelDeepHead(TransformerBinarySelectionModelLinAct):
+    """Transformer-based selection model with ESM2-style deep prediction head.
+
+    This model extends the base transformer architecture with a deeper, more expressive
+    prediction head to capture mutation-specific patterns beyond simple sitewise
+    effects.
+
+    The prediction head uses a two-layer architecture with layer normalization, GELU
+    activation, and dropout:     LayerNorm -> Linear(d_model, d_model) -> GELU ->
+    Dropout ->     LayerNorm -> Linear(d_model, output_dim)
+
+    This architecture is inspired by ESM2 and provides more capacity for learning
+    complex mutation-specific patterns compared to the simple linear head.
+    """
+
+    def __init__(
+        self,
+        nhead: int,
+        d_model_per_head: int,
+        dim_feedforward: int,
+        layer_count: int,
+        dropout_prob: float = 0.5,
+        **kwargs,
+    ):
+        super().__init__(
+            nhead=nhead,
+            d_model_per_head=d_model_per_head,
+            dim_feedforward=dim_feedforward,
+            layer_count=layer_count,
+            dropout_prob=dropout_prob,
+            **kwargs,
+        )
+
+        # Replace simple linear head with ESM2-style prediction head
+        del self.linear  # Remove the inherited linear layer
+
+        self.prediction_head = nn.Sequential(
+            nn.LayerNorm(self.d_model),
+            nn.Linear(self.d_model, self.d_model),
+            nn.GELU(),
+            nn.Dropout(dropout_prob),
+            nn.LayerNorm(self.d_model),
+            nn.Linear(self.d_model, self.output_dim),
+        )
+
+        # Initialize weights for the prediction head
+        self._init_prediction_head_weights()
+
+    def _init_prediction_head_weights(self) -> None:
+        """Initialize weights for the prediction head layers."""
+        initrange = 0.1
+        for module in self.prediction_head.modules():
+            if isinstance(module, nn.Linear):
+                module.bias.data.zero_()
+                module.weight.data.uniform_(-initrange, initrange)
+
+    def predict(self, representation: Tensor) -> Tensor:
+        """Predict selection from the model embedding using deep head.
+
+        Args:
+            representation: A tensor of shape (B, L, E) representing the
+                embedded parent sequences.
+        Returns:
+            A tensor of shape (B, L, out_features) representing the log level
+            of selection for each amino acid site.
+        """
+        return self.prediction_head(representation).squeeze(-1)
+
+
 def reverse_padded_tensors(padded_tensors, padding_mask, padding_value, reversed_dim=1):
     """Reverse the valid values in provided padded_tensors along the specified
     dimension, keeping padding in the same place. For example, if the input is left-

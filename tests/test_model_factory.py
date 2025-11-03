@@ -106,6 +106,41 @@ def test_create_selection_model_from_dict_transformer_lin_act():
     assert model.d_model_per_head == 8
 
 
+def test_create_selection_model_from_dict_transformer_deep_head():
+    """Test TransformerBinarySelectionModelDeepHead creation."""
+    config = {
+        "model_class": "TransformerBinarySelectionModelDeepHead",
+        "hparams": {
+            "model_type": "dasm",
+            "known_token_count": 21,
+            "output_dim": 20,
+            "nhead": 4,
+            "d_model_per_head": 8,
+            "dim_feedforward": 1024,
+            "layer_count": 3,
+            "dropout_prob": 0.1,
+        },
+    }
+
+    device = torch.device("cpu")
+    model = create_selection_model_from_dict(config, device)
+
+    assert model.__class__.__name__ == "TransformerBinarySelectionModelDeepHead"
+    assert model.model_type == "dasm"
+    assert model.nhead == 4
+    assert model.d_model_per_head == 8
+    assert model.dim_feedforward == 1024
+    assert model.encoder.num_layers == 3
+    assert model.pos_encoder.dropout.p == 0.1
+
+    # Verify deep head architecture exists
+    assert hasattr(model, "prediction_head")
+    assert isinstance(model.prediction_head, torch.nn.Sequential)
+
+    # Verify the linear layer was deleted
+    assert not hasattr(model, "linear")
+
+
 def test_create_selection_model_from_dict_bidirectional():
     """Test BidirectionalTransformerBinarySelectionModel creation."""
     config = {
@@ -508,3 +543,150 @@ def test_preset_configs_validity():
         # Description should work
         description = describe_model(model)
         assert description["model_class"] == preset_config["model_class"]
+
+
+# Tests for TransformerBinarySelectionModelDeepHead
+
+
+def test_deep_head_forward_pass():
+    """Test forward pass with DeepHead model."""
+    config = {
+        "model_class": "TransformerBinarySelectionModelDeepHead",
+        "hparams": {
+            "model_type": "dasm",
+            "known_token_count": 21,
+            "output_dim": 20,
+            "nhead": 2,
+            "d_model_per_head": 4,
+            "dim_feedforward": 256,
+            "layer_count": 2,
+            "dropout_prob": 0.1,
+        },
+    }
+
+    device = torch.device("cpu")
+    model = create_selection_model_from_dict(config, device)
+
+    # Create dummy input
+    batch_size = 4
+    seq_len = 50
+    amino_acid_indices = torch.randint(0, 21, (batch_size, seq_len))
+    mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+    # Forward pass
+    with torch.no_grad():
+        output = model(amino_acid_indices, mask)
+
+    # Check output shape
+    assert output.shape == (batch_size, seq_len, 20)
+
+
+def test_deep_head_gradient_flow():
+    """Test that gradients flow through DeepHead model."""
+    config = {
+        "model_class": "TransformerBinarySelectionModelDeepHead",
+        "hparams": {
+            "model_type": "dasm",
+            "known_token_count": 21,
+            "output_dim": 1,
+            "nhead": 2,
+            "d_model_per_head": 4,
+            "dim_feedforward": 256,
+            "layer_count": 2,
+            "dropout_prob": 0.0,  # No dropout for deterministic gradient flow
+        },
+    }
+
+    device = torch.device("cpu")
+    model = create_selection_model_from_dict(config, device)
+    model.train()
+
+    # Create dummy input
+    batch_size = 2
+    seq_len = 20
+    amino_acid_indices = torch.randint(0, 21, (batch_size, seq_len))
+    mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+    # Forward pass
+    output = model(amino_acid_indices, mask)
+    loss = output.sum()
+
+    # Backward pass
+    loss.backward()
+
+    # Check that gradients exist for prediction_head parameters specifically
+    # (this is what we care about for testing the deep head)
+    for name, param in model.named_parameters():
+        if "prediction_head" in name and param.requires_grad:
+            assert param.grad is not None, f"No gradient for {name}"
+            assert not torch.all(param.grad == 0), f"Zero gradient for {name}"
+
+
+def test_deep_head_vs_linear_head_parameter_count():
+    """Test that DeepHead has more parameters than linear head."""
+    base_config = {
+        "model_type": "dasm",
+        "known_token_count": 21,
+        "output_dim": 20,
+        "nhead": 4,
+        "d_model_per_head": 8,
+        "dim_feedforward": 512,
+        "layer_count": 2,
+        "dropout_prob": 0.1,
+    }
+
+    device = torch.device("cpu")
+
+    # Create linear head model
+    linear_config = {
+        "model_class": "TransformerBinarySelectionModelLinAct",
+        "hparams": base_config,
+    }
+    linear_model = create_selection_model_from_dict(linear_config, device)
+
+    # Create deep head model
+    deep_config = {
+        "model_class": "TransformerBinarySelectionModelDeepHead",
+        "hparams": base_config,
+    }
+    deep_model = create_selection_model_from_dict(deep_config, device)
+
+    # Get parameter counts
+    linear_params = sum(p.numel() for p in linear_model.parameters())
+    deep_params = sum(p.numel() for p in deep_model.parameters())
+
+    # DeepHead should have more parameters due to the additional layer
+    assert deep_params > linear_params
+
+
+def test_deep_head_output_dim_1():
+    """Test DeepHead with output_dim=1."""
+    config = {
+        "model_class": "TransformerBinarySelectionModelDeepHead",
+        "hparams": {
+            "model_type": "dnsm",
+            "known_token_count": 21,
+            "output_dim": 1,
+            "nhead": 2,
+            "d_model_per_head": 4,
+            "dim_feedforward": 256,
+            "layer_count": 2,
+            "dropout_prob": 0.1,
+        },
+    }
+
+    device = torch.device("cpu")
+    model = create_selection_model_from_dict(config, device)
+
+    # Create dummy input
+    batch_size = 3
+    seq_len = 30
+    amino_acid_indices = torch.randint(0, 21, (batch_size, seq_len))
+    mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+    # Forward pass
+    with torch.no_grad():
+        output = model(amino_acid_indices, mask)
+
+    # Check output shape for output_dim=1
+    assert output.shape == (batch_size, seq_len)
