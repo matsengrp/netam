@@ -1286,12 +1286,13 @@ def get_numbering_dict(anarci_path, pcp_df=None, verbose=False, checks="imgt"):
                         continue
 
                 elif checks == "chothia":
-                    # TODO: Implement Chothia-specific validation checks.
+                    # Chothia-specific validation checks not yet implemented.
                     # Chothia CDR boundaries differ between heavy and light chains:
                     # - Heavy: CDR1 (26-32), CDR2 (52-56), CDR3 (95-102)
                     # - Light: CDR1 (24-34), CDR2 (50-56), CDR3 (89-97)
                     # Will need chain-specific is_chothia_cdr() function or
                     # pass chain type to validation logic.
+                    # See issue #185 for implementation plan.
                     pass
 
         numbering_dict[(sample_id, family)] = numbering
