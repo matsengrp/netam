@@ -281,12 +281,16 @@ def compute_normalization_constants(
         )
 
 
-def compute_normalization_constants_dense(
+def compute_normalization_constants_dense_iterative(
     selection_factors: torch.Tensor,
     neutral_rates_tensor: torch.Tensor,
     codon_parents_idxss: torch.Tensor,
 ) -> torch.Tensor:
-    """Dense implementation with optimized storage (N, L, 65)."""
+    """Dense implementation with optimized storage (N, L, 65) - ITERATIVE (SLOW).
+
+    This is the old iterative implementation kept for reference.
+    Use compute_normalization_constants_dense() for the fast vectorized version.
+    """
     from netam.codon_table import AA_IDX_FROM_CODON_IDX
 
     N, L_codon, _ = neutral_rates_tensor.shape  # Now shape is (N, L_codon, 65)
@@ -326,6 +330,125 @@ def compute_normalization_constants_dense(
                     Z_n += neutral_rate * selection_factor
 
         Z[seq_idx] = Z_n
+
+    return Z
+
+
+def compute_normalization_constants_dense(
+    selection_factors: torch.Tensor,
+    neutral_rates_tensor: torch.Tensor,
+    codon_parents_idxss: torch.Tensor,
+) -> torch.Tensor:
+    """Dense implementation with optimized storage (N, L, 65) - VECTORIZED (FAST).
+
+    This is the vectorized implementation that achieves comparable performance to sparse
+    by avoiding Python loops and using batched tensor operations.
+
+    Args:
+        selection_factors: (N, L_aa, 20) - linear space selection factors
+        neutral_rates_tensor: (N, L_codon, 65) - neutral rates TO each child codon
+        codon_parents_idxss: (N, L_codon) - parent codon indices
+
+    Returns:
+        Z: (N,) - normalization constants per sequence
+    """
+    from netam.codon_table import AA_IDX_FROM_CODON_IDX
+
+    N, L_codon, _ = neutral_rates_tensor.shape
+    device = selection_factors.device
+
+    # Build vectorized lookup tensor: parent_codon_idx -> child_codon_indices
+    # Shape: (65, max_children) where max_children is ~9
+    # Initialize with -1 (invalid index)
+    max_children = max(
+        len(mutations) for mutations in FUNCTIONAL_CODON_SINGLE_MUTATIONS.values()
+    )
+    parent_to_children = torch.full(
+        (65, max_children), -1, dtype=torch.long, device=device
+    )
+    n_children_per_parent = torch.zeros(65, dtype=torch.long, device=device)
+
+    # Fill in the lookup table
+    for parent_idx, mutations in FUNCTIONAL_CODON_SINGLE_MUTATIONS.items():
+        for i, (child_idx, _, _) in enumerate(mutations):
+            parent_to_children[parent_idx, i] = child_idx
+        n_children_per_parent[parent_idx] = len(mutations)
+
+    # Get child codon indices for all positions: (N, L_codon, max_children)
+    # Use advanced indexing to map parent codons to their possible children
+    child_codon_indices = parent_to_children[
+        codon_parents_idxss
+    ]  # (N, L_codon, max_children)
+
+    # Create batch and position index tensors for advanced indexing
+    batch_indices = (
+        torch.arange(N, device=device).view(N, 1, 1).expand(N, L_codon, max_children)
+    )
+    pos_indices = (
+        torch.arange(L_codon, device=device)
+        .view(1, L_codon, 1)
+        .expand(N, L_codon, max_children)
+    )
+
+    # Clamp child indices to valid range [0, 64] for safe indexing
+    # Invalid indices (-1) will be clamped to 0, but masked out later
+    child_codon_indices_clamped = torch.clamp(child_codon_indices, 0, 64)
+
+    # Gather neutral rates for all possible mutations: (N, L_codon, max_children)
+    neutral_rates_gathered = neutral_rates_tensor[
+        batch_indices, pos_indices, child_codon_indices_clamped
+    ]
+
+    # Convert child codon indices to AA indices using vectorized lookup
+    codon_to_aa = torch.full(
+        (65,), 20, dtype=torch.long, device=device
+    )  # 20 = invalid/stop
+    for codon_idx, aa_idx in AA_IDX_FROM_CODON_IDX.items():
+        codon_to_aa[codon_idx] = aa_idx
+
+    child_aa_indices = codon_to_aa[
+        child_codon_indices_clamped
+    ]  # (N, L_codon, max_children)
+
+    # Clamp AA indices for safe indexing into selection_factors
+    child_aa_indices_clamped = torch.clamp(child_aa_indices, 0, 19)
+
+    # Gather selection factors: (N, L_codon, max_children)
+    # selection_factors is (N, L_aa, 20), we need to gather the appropriate factors
+    # Assuming 1:1 mapping between codon_pos and aa_pos
+    selection_factors_gathered = selection_factors[
+        batch_indices, pos_indices, child_aa_indices_clamped
+    ]
+
+    # Compute products: neutral_rates * selection_factors
+    products = (
+        neutral_rates_gathered * selection_factors_gathered
+    )  # (N, L_codon, max_children)
+
+    # Create masks for valid mutations
+    # 1. Mask out padding (where child_codon_indices == -1)
+    valid_child_mask = child_codon_indices >= 0
+
+    # 2. Mask out stop codons (where child_aa_indices >= 20)
+    valid_aa_mask = child_aa_indices < 20
+
+    # 3. Mask out positions beyond n_children_per_parent for each parent
+    # Get n_children for each position's parent codon
+    n_children_per_position = n_children_per_parent[codon_parents_idxss]  # (N, L_codon)
+    mutation_range = torch.arange(max_children, device=device).view(1, 1, max_children)
+    within_range_mask = mutation_range < n_children_per_position.unsqueeze(-1)
+
+    # 4. Mask out zero rates
+    nonzero_rate_mask = neutral_rates_gathered > 0
+
+    # Combine all masks
+    combined_mask = (
+        valid_child_mask & valid_aa_mask & within_range_mask & nonzero_rate_mask
+    )
+
+    # Apply mask and sum over positions and mutations
+    masked_products = products * combined_mask.float()
+    Z = masked_products.sum(dim=(1, 2))  # Sum over (L_codon, max_children) -> (N,)
 
     return Z
 
