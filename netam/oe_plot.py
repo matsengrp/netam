@@ -1195,7 +1195,10 @@ def get_numbering_dict(anarci_path, pcp_df=None, verbose=False, checks="imgt"):
     pcp_df (pd.Dataframe): PCP file to filter for relevant clonal families and check ANARCI sequence lengths.
     verbose (bool): whether to print (sample ID, family ID) info when clonal family is excluded.
     checks (str): perform checks and updates for a specified numbering scheme.
-                  Currently, 'imgt' is the only input that has an effect.
+                  Options:
+                  - 'imgt': Validates IMGT-specific insertions and CDR annotations
+                  - 'chothia': Skips validation (can add Chothia-specific checks later)
+                  - None or empty string: Skips all validation
 
     Returns:
     Two dictionaries where the keys are 2-tuples of (sample_id, family).
@@ -1281,6 +1284,16 @@ def get_numbering_dict(anarci_path, pcp_df=None, verbose=False, checks="imgt"):
                             break
                     if exclude:
                         continue
+
+                elif checks == "chothia":
+                    # Chothia-specific validation checks not yet implemented.
+                    # Chothia CDR boundaries differ between heavy and light chains:
+                    # - Heavy: CDR1 (26-32), CDR2 (52-56), CDR3 (95-102)
+                    # - Light: CDR1 (24-34), CDR2 (50-56), CDR3 (89-97)
+                    # Will need chain-specific is_chothia_cdr() function or
+                    # pass chain type to validation logic.
+                    # See issue #185 for implementation plan.
+                    pass
 
         numbering_dict[(sample_id, family)] = numbering
 
