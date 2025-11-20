@@ -790,13 +790,7 @@ class WhichmutTrainer:
             # Move batch to device
             batch_data = self._move_batch_to_device(batch_data, device)
 
-            # Extract batch size for logging
             batch_size = batch_data[0].shape[0]  # codon_parents_idxss
-
-            # Log batch information
-            self._log_batch_info(
-                batch_idx, batch_size, batch_data[2]
-            )  # neutral_rates_data
 
             # Compute loss (with gradient updates if training)
             with torch.set_grad_enabled(training):
