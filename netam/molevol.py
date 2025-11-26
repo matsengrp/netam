@@ -173,10 +173,6 @@ def aaprobs_of_codon_probs(codon_probs: Tensor) -> Tensor:
     # Perform matrix multiplication to get unnormalized amino acid probabilities.
     aaprobs = torch.matmul(reshaped_probs, CODON_AA_INDICATOR_MATRIX)
 
-    # Normalize probabilities along the amino acid dimension.
-    row_sums = aaprobs.sum(dim=1, keepdim=True)
-    aaprobs /= row_sums
-
     return aaprobs
 
 
