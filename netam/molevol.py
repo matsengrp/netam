@@ -13,6 +13,7 @@ from warnings import warn
 
 from netam.codon_table import (
     CODON_AA_INDICATOR_MATRIX,
+    STOP_CODON_INDICATOR,
     STOP_CODON_ZAPPER,
     aa_idxs_of_codon_idxs,
 )
@@ -155,10 +156,16 @@ def aaprobs_of_codon_probs(codon_probs: Tensor) -> Tensor:
     """Compute the probability of each amino acid from the probability of each codon,
     for each parent codon along the sequence.
 
+    Note: The output amino acid probabilities will sum to (1 - P(stop codons)).
+    If inputs are valid probability distributions with small stop codon probability,
+    outputs will be approximately normalized.
+
     Args:
     codon_probs (torch.Tensor): A 4D tensor representing the probability of mutating
                                 to each codon for each parent codon along the sequence.
                                 Shape should be (codon_count, 4, 4, 4).
+                                Must be a valid probability distribution (non-negative,
+                                sums to 1 for each site).
 
     Returns:
     torch.Tensor: A 2D tensor with shape (codon_count, 20) where the ij-th entry is the probability
@@ -170,7 +177,33 @@ def aaprobs_of_codon_probs(codon_probs: Tensor) -> Tensor:
     # the `codon_count` dimension intact. This prepares the tensor for matrix multiplication.
     reshaped_probs = codon_probs.reshape(codon_count, -1)
 
-    # Perform matrix multiplication to get unnormalized amino acid probabilities.
+    # Check that inputs are valid probability distributions
+    if not torch.all(reshaped_probs >= -1e-6):
+        raise ValueError(
+            f"Codon probabilities must be non-negative. "
+            f"Min value: {reshaped_probs.min().item()}"
+        )
+    if not torch.all(reshaped_probs <= 1 + 1e-6):
+        raise ValueError(
+            f"Codon probabilities must be <= 1. "
+            f"Max value: {reshaped_probs.max().item()}"
+        )
+    row_sums = reshaped_probs.sum(dim=1)
+    if not torch.allclose(row_sums, torch.ones_like(row_sums), atol=1e-4):
+        raise ValueError(
+            f"Codon probabilities must sum to 1 for each site. "
+            f"Row sums range: [{row_sums.min().item():.6f}, {row_sums.max().item():.6f}]"
+        )
+    # Check that stop codon probabilities are zero
+    stop_mask = STOP_CODON_INDICATOR.bool()
+    stop_probs = reshaped_probs[:, stop_mask]
+    if not torch.allclose(stop_probs, torch.zeros_like(stop_probs), atol=1e-6):
+        raise ValueError(
+            f"Stop codon probabilities must be zero. "
+            f"Max stop codon prob: {stop_probs.max().item():.6e}"
+        )
+
+    # Perform matrix multiplication to get amino acid probabilities.
     aaprobs = torch.matmul(reshaped_probs, CODON_AA_INDICATOR_MATRIX)
 
     return aaprobs
@@ -186,7 +219,8 @@ def aaprob_of_mut_and_sub(
     This function actually isn't used anymore, but there is a good test for it, which
     tests other functions, so we keep it.
 
-    Stop codons don't appear as part of this calculation.
+    Stop codons don't appear as part of this calculation. Stop codon probabilities are
+    zeroed and the remaining probabilities are renormalized before computing AA probs.
 
     Args:
     parent_codon_idxs (torch.Tensor): A 2D tensor where each row contains indices representing
@@ -206,6 +240,11 @@ def aaprob_of_mut_and_sub(
         parent_codon_idxs, codon_mut_probs, codon_csps
     )
     codon_probs = codon_probs_of_mutation_matrices(mut_matrices)
+    # Zero out stop codon probabilities and renormalize
+    flat_codon_probs = flatten_codons(codon_probs)
+    flat_codon_probs = zero_stop_codon_probs(flat_codon_probs)
+    flat_codon_probs = flat_codon_probs / flat_codon_probs.sum(dim=-1, keepdim=True)
+    codon_probs = unflatten_codons(flat_codon_probs)
     return aaprobs_of_codon_probs(codon_probs)
 
 
@@ -275,6 +314,9 @@ def aaprobs_of_parent_scaled_rates_and_csps(
     """Calculate per-site amino acid probabilities from per-site nucleotide rates and
     substitution probabilities.
 
+    Stop codon probabilities are zeroed and the remaining probabilities are
+    renormalized before computing AA probs.
+
     Args:
         parent_idxs (torch.Tensor): Parent nucleotide indices. Shape should be (site_count,).
         scaled_nt_rates (torch.Tensor): Poisson rates of mutation per site, scaled by branch length.
@@ -286,11 +328,15 @@ def aaprobs_of_parent_scaled_rates_and_csps(
         torch.Tensor: A 2D tensor with rows corresponding to sites and columns
                       corresponding to amino acids.
     """
-    return aaprobs_of_codon_probs(
-        codon_probs_of_parent_scaled_nt_rates_and_csps(
-            parent_idxs, scaled_nt_rates, nt_csps
-        )
+    codon_probs = codon_probs_of_parent_scaled_nt_rates_and_csps(
+        parent_idxs, scaled_nt_rates, nt_csps
     )
+    # Zero out stop codon probabilities and renormalize
+    flat_codon_probs = flatten_codons(codon_probs)
+    flat_codon_probs = zero_stop_codon_probs(flat_codon_probs)
+    flat_codon_probs = flat_codon_probs / flat_codon_probs.sum(dim=-1, keepdim=True)
+    codon_probs = unflatten_codons(flat_codon_probs)
+    return aaprobs_of_codon_probs(codon_probs)
 
 
 def build_codon_mutsel(
