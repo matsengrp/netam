@@ -160,7 +160,9 @@ def iterative_aaprob_of_mut_and_sub(parent_codon, mut_probs, csps):
 
 def test_aaprob_of_mut_and_sub():
     crepe = pretrained.load("ThriftyHumV0.2-45")
-    [rates], [subs] = crepe([parent_nt_seq])
+    [rates], [subs_logits] = crepe([parent_nt_seq])
+    # Apply softmax to convert logits to valid CSPs (probability distributions)
+    subs = torch.softmax(subs_logits, dim=-1)
     mut_probs = 1.0 - torch.exp(-rates.squeeze().clone().detach())
     parent_codon = parent_nt_seq[0:3]
     parent_codon_idxs = nt_idx_tensor_of_str(parent_codon)
