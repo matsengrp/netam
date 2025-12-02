@@ -151,11 +151,13 @@ def iterative_aaprob_of_mut_and_sub(parent_codon, mut_probs, csps):
 
         aa_probs[aa] += child_prob
 
-    # need renormalization factor so that amino acid probabilities sum to 1,
-    # since probabilities to STOP codon are dropped
+    # Instead of renormalizing, add the "missing" probability (from stop codons)
+    # to the parent AA probability. This matches the behavior of set_parent_codon_prob.
     psum = sum(aa_probs.values())
+    parent_aa = translate_sequence(parent_codon)
+    aa_probs[parent_aa] += 1.0 - psum
 
-    return torch.tensor([aa_probs[aa] / psum for aa in AA_STR_SORTED])
+    return torch.tensor([aa_probs[aa] for aa in AA_STR_SORTED])
 
 
 def test_aaprob_of_mut_and_sub():
