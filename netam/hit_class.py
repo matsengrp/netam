@@ -1,7 +1,6 @@
 import torch
 import numpy as np
 
-
 # Define the number of bases (e.g., 4 for DNA/RNA)
 _num_bases = 4
 

@@ -37,7 +37,7 @@ dependencies = [
 dev = [
     "black",
     "flake8",
-    "docformatter",
+    "docformatter<1.7.8",
     "nbconvert",
     "ipython",
     "ipykernel",
@@ -58,3 +58,5 @@ packages = ["netam"]
 
 [tool.setuptools.package-data]
 netam = ["py.typed", "model_configs/*.yaml"]
+
+[tool.setuptools_scm]
