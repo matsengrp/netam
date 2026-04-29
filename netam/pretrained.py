@@ -13,7 +13,6 @@ import requests
 from netam.framework import load_crepe
 from netam.models import HitClassModel
 
-
 pretrained_path = files(__package__).joinpath("_pretrained")
 PRETRAINED_DIR = str(pretrained_path)
 
