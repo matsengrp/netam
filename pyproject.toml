@@ -58,3 +58,5 @@ packages = ["netam"]
 
 [tool.setuptools.package-data]
 netam = ["py.typed", "model_configs/*.yaml"]
+
+[tool.setuptools_scm]
