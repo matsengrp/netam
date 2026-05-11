@@ -3,6 +3,7 @@ import shutil
 
 import fire
 import pandas as pd
+import pypdf
 
 from netam.pretrained import PRETRAINED_DIR
 
@@ -40,6 +41,30 @@ def concatenate_csvs(
     result_df = pd.concat(dfs, ignore_index=True)
 
     result_df.to_csv(output_csv, index=False)
+
+
+def concatenate_pdfs(
+    input_pdfs_str: str,
+    output_pdf: str,
+):
+    """This function concatenates multiple PDF files into one PDF file.
+
+    Args:
+        input_pdfs_str: A string of paths to the input PDF files separated by commas.
+        output_pdf: Path to the output PDF file.
+    """
+    input_pdfs = input_pdfs_str.split(",")
+    writer = pypdf.PdfWriter()
+
+    for pdf in input_pdfs:
+        if not os.path.isfile(pdf):
+            raise FileNotFoundError(f"Input PDF not found: {pdf}")
+        reader = pypdf.PdfReader(pdf)
+        for page in reader.pages:
+            writer.add_page(page)
+
+    with open(output_pdf, "wb") as f:
+        writer.write(f)
 
 
 def main():
